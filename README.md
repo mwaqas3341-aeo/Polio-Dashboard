@@ -62,6 +62,8 @@ pages/
   logistics.html                ★ auto-generated logistics needs (read-only)
   area-summary.html             ★ area-level grand totals + missed-children + field performance
   daily-reports.html            2A-form field actuals entry
+  supervision.html              Tour plan / field validation / desk review entry
+  ddm-cards.html                 ★ auto-generated DDM cards (placeholder layout — real template pending)
   audit-log.html                Read-only view of the DB-level audit trail
 assets/
   css/style.css                 Shared design tokens/styles
@@ -84,6 +86,7 @@ applied in order:
 - `0003_audit_log_triggers.sql` — DB-level triggers that write to `audit_log` on every insert/update/delete to the operational tables (not app code — can't be bypassed)
 - `0004_role_and_uc_scoped_rls.sql` — replaces the "any authenticated user" baseline policies with real scoping (see below)
 - `0005_fix_helper_function_search_path.sql` — security-lint fix for the new helper functions
+- `0006_ddm_cards_unique_constraint.sql` — one DDM card per team/day/campaign, enforced at the DB level
 
 Key tables: `districts` → `tehsils` → `union_councils` (geography),
 `staff`/`teams`/`team_members` (HR), `campaigns`, `schools` +
@@ -146,8 +149,7 @@ This is a static site — enable GitHub Pages on this repo (Settings → Pages
 
 ## Not built yet (next steps)
 
-- DDM card generation/printing (needs the actual card template — not supplied yet)
+- DDM card's *real* layout — `pages/ddm-cards.html` generates and assigns one card per team/day already, but the visual design is a placeholder until you share the actual template
 - Excel/PDF export matching the original report formats
-- Supervision visit forms (Desk Review / Field Validation / Tour Plan) — table exists, no entry form yet
 - Confirm the Logistic Plan assumptions above and correct the migration if needed
 - An admin UI for editing other users' profiles/roles (currently only doable directly in Supabase, or by the user themselves on first login)

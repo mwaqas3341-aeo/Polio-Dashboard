@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Supervision — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Supervision</h1></div>
+      <p class="muted">Covers the three supervision registers: the AIC's own tour plan, an independent field validation check, and a desk review comparing this round's plan to the last one.</p>
+
+      <div class="card">
+        <h2>Record a visit</h2>
+        <form id="visitForm">
+          <div class="form-grid">
+            <div><label>Campaign</label><select id="v_campaign" required></select></div>
+            <div><label>Form type</label>
+              <select id="v_type">
+                <option value="tour_plan">AIC tour plan</option>
+                <option value="field_validation">Field validation</option>
+                <option value="desk_review">Desk review</option>
+              </select>
+            </div>
+            <div><label>Team no.</label><input type="number" id="v_team" required></div>
+            <div><label>Visit date</label><input type="date" id="v_date" required></div>
+            <div><label>Visit time</label><input type="time" id="v_time"></div>
+            <div><label>Reviewer name</label><input id="v_reviewer"></div>
+          </div>
+          <div style="margin-top:0.75rem;">
+            <label>Purpose</label><input id="v_purpose" placeholder="e.g. verify house-to-house coverage">
+          </div>
+          <div style="margin-top:0.75rem;">
+            <label>Feedback / findings</label><textarea id="v_feedback" rows="3"></textarea>
+          </div>
+          <div class="error-text" id="visitError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Save visit</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Visits for a campaign</h2>
+        <div class="form-grid" style="margin-bottom:0.75rem;">
+          <div><label>Campaign</label><select id="filterCampaign"></select></div>
+          <div><label>Form type</label>
+            <select id="filterType">
+              <option value="">All types</option>
+              <option value="tour_plan">AIC tour plan</option>
+              <option value="field_validation">Field validation</option>
+              <option value="desk_review">Desk review</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="table">
+            <thead><tr><th>Date</th><th>Team</th><th>Type</th><th>Reviewer</th><th>Purpose</th><th>Feedback</th></tr></thead>
+            <tbody><tr><td colspan="6" class="empty-state">Select a campaign above.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("supervision.html");
+      await Promise.all([
+        populateCampaignSelect(document.getElementById("v_campaign"), { includeBlank: false }),
+        populateCampaignSelect(document.getElementById("filterCampaign")),
+      ]);
+    })();
+
+    document.getElementById("visitForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("visitError");
+      clearFormError(err);
+      const campaignId = document.getElementById("v_campaign").value;
+      const { error } = await supabaseClient.from("supervision_visits").insert({
+        campaign_id: campaignId,
+        form_type: document.getElementById("v_type").value,
+        team_no: Number(document.getElementById("v_team").value),
+        visit_date: document.getElementById("v_date").value,
+        visit_time: document.getElementById("v_time").value || null,
+        reviewer_name: document.getElementById("v_reviewer").value.trim() || null,
+        purpose: document.getElementById("v_purpose").value.trim() || null,
+        feedback: document.getElementById("v_feedback").value.trim() || null,
+      });
+      if (error) return showFormError(err, error);
+      document.getElementById("visitForm").reset();
+      if (document.getElementById("filterCampaign").value === campaignId) await loadTable();
+    });
+
+    document.getElementById("filterCampaign").addEventListener("change", loadTable);
+    document.getElementById("filterType").addEventListener("change", loadTable);
+
+    async function loadTable() {
+      const tbody = document.querySelector("#table tbody");
+      const campaignId = document.getElementById("filterCampaign").value;
+      if (!campaignId) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Select a campaign above.</td></tr>`;
+        return;
+      }
+      let query = supabaseClient
+        .from("supervision_visits")
+        .select("visit_date, visit_time, team_no, form_type, reviewer_name, purpose, feedback")
+        .eq("campaign_id", campaignId)
+        .order("visit_date", { ascending: false });
+      const typeFilter = document.getElementById("filterType").value;
+      if (typeFilter) query = query.eq("form_type", typeFilter);
+
+      const { data, error } = await query;
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No visits recorded yet.</td></tr>`;
+        return;
+      }
+      const typeLabel = { tour_plan: "AIC tour plan", field_validation: "Field validation", desk_review: "Desk review" };
+      tbody.innerHTML = data.map(r => `
+        <tr>
+          <td>${r.visit_date}${r.visit_time ? " " + r.visit_time : ""}</td>
+          <td>${r.team_no}</td>
+          <td>${typeLabel[r.form_type] || r.form_type}</td>
+          <td>${r.reviewer_name ?? "—"}</td>
+          <td>${r.purpose ?? "—"}</td>
+          <td class="muted">${r.feedback ?? "—"}</td>
+        </tr>
+      `).join("");
+    }
+  </script>
+</body>
+</html>

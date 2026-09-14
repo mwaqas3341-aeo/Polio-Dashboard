@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DDM cards — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<style>
+  @media print {
+    .app-shell > .sidebar, .no-print { display: none !important; }
+    .ddm-card { break-inside: avoid; }
+  }
+  .ddm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+  .ddm-card {
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem;
+    background: #fff;
+  }
+  .ddm-card h3 { margin-bottom: 0.4rem; }
+  .ddm-card dl { margin: 0; font-size: 0.85rem; }
+  .ddm-card dt { color: var(--ink-soft); display: inline-block; width: 90px; }
+  .ddm-card dd { display: inline; margin: 0; }
+  .ddm-card .row { margin-bottom: 0.2rem; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>DDM cards</h1></div>
+      <p class="muted no-print">
+        <strong>Layout note:</strong> the actual DDM card template (its exact fields,
+        layout, and signature blocks) hasn't been provided yet, so this is a
+        placeholder card with the fields we know are needed from the Logistic
+        Plan. Swap the markup below once you can share the real template — the
+        generation logic (one card per team/day, unique per campaign) won't
+        need to change.
+      </p>
+
+      <div class="card no-print">
+        <div class="form-grid">
+          <div><label>Campaign</label><select id="filterCampaign"></select></div>
+        </div>
+        <button class="btn" id="generateBtn" style="margin-top:1rem;">Generate cards for this campaign</button>
+        <button class="btn secondary" id="printBtn" style="margin-top:1rem; margin-left:0.5rem;">Print</button>
+        <div class="error-text" id="genError" style="display:none;"></div>
+      </div>
+
+      <div class="ddm-grid" id="cardsGrid"></div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    let currentCampaignName = "";
+
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("ddm-cards.html");
+      await populateCampaignSelect(document.getElementById("filterCampaign"));
+    })();
+
+    document.getElementById("filterCampaign").addEventListener("change", (e) => {
+      const opt = e.target.selectedOptions[0];
+      currentCampaignName = opt ? opt.textContent : "";
+      loadCards(e.target.value);
+    });
+
+    document.getElementById("printBtn").addEventListener("click", () => window.print());
+
+    document.getElementById("generateBtn").addEventListener("click", async () => {
+      const err = document.getElementById("genError");
+      clearFormError(err);
+      const campaignId = document.getElementById("filterCampaign").value;
+      if (!campaignId) return showFormError(err, { message: "Select a campaign first." });
+
+      const { data: plan, error: planError } = await supabaseClient
+        .from("team_day_plan").select("team_no, campaign_day").eq("campaign_id", campaignId);
+      if (planError) return showFormError(err, planError);
+      if (!plan.length) return showFormError(err, { message: "No team/day plan yet for this campaign — add schools or households first." });
+
+      const rows = plan.map(p => ({
+        campaign_id: campaignId, team_no: p.team_no, campaign_day: p.campaign_day,
+        card_number: `T${p.team_no}-D${p.campaign_day}`,
+      }));
+      const { error } = await supabaseClient
+        .from("ddm_cards")
+        .upsert(rows, { onConflict: "campaign_id,team_no,campaign_day", ignoreDuplicates: true });
+      if (error) return showFormError(err, error);
+      await loadCards(campaignId);
+    });
+
+    async function loadCards(campaignId) {
+      const grid = document.getElementById("cardsGrid");
+      if (!campaignId) { grid.innerHTML = ""; return; }
+
+      const { data, error } = await supabaseClient
+        .from("ddm_cards")
+        .select("id, team_no, campaign_day, card_number, staff(full_name, cnic)")
+        .eq("campaign_id", campaignId)
+        .order("team_no").order("campaign_day");
+      if (error) {
+        grid.innerHTML = `<div class="empty-state">${error.message}</div>`;
+        return;
+      }
+      if (!data.length) {
+        grid.innerHTML = `<div class="empty-state">No cards generated yet — click "Generate cards for this campaign" above.</div>`;
+        return;
+      }
+      grid.innerHTML = data.map(c => `
+        <div class="ddm-card">
+          <h3>${currentCampaignName}</h3>
+          <div class="row"><dt>Card no.</dt><dd>${c.card_number}</dd></div>
+          <div class="row"><dt>Team</dt><dd>${c.team_no}</dd></div>
+          <div class="row"><dt>Day</dt><dd>${c.campaign_day}</dd></div>
+          <div class="row"><dt>Worker</dt><dd>${c.staff?.full_name ?? "— unassigned —"}</dd></div>
+          <div class="row"><dt>CNIC</dt><dd>${c.staff?.cnic ?? "—"}</dd></div>
+        </div>
+      `).join("");
+    }
+  </script>
+</body>
+</html>

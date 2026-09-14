@@ -10,6 +10,8 @@ const NAV_LINKS = [
   { href: "pages/logistics.html", label: "Logistic plan (auto)" },
   { href: "pages/area-summary.html", label: "Area Incharge summary" },
   { href: "pages/daily-reports.html", label: "Daily reports (2A form)" },
+  { href: "pages/supervision.html", label: "Supervision visits" },
+  { href: "pages/ddm-cards.html", label: "DDM cards" },
   { href: "pages/audit-log.html", label: "Audit log" },
 ];
 
