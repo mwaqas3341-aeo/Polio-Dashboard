@@ -17,12 +17,18 @@
           <div class="form-grid">
             <div><label>Full name</label><input id="s_name" required></div>
             <div><label>CNIC</label><input id="s_cnic" placeholder="32202-XXXXXXX-X"></div>
-            <div><label>Phone</label><input id="s_phone"></div>
+            <div><label>Cell no.</label><input id="s_phone"></div>
             <div><label>Designation</label><input id="s_designation" placeholder="Vaccinator / Mobilizer"></div>
             <div><label>Category</label><input id="s_category" placeholder="e.g. team leader"></div>
+            <div><label>CNIC picture — front</label><input type="file" id="s_cnic_front" accept="image/*"></div>
+            <div><label>CNIC picture — back</label><input type="file" id="s_cnic_back" accept="image/*"></div>
+            <div><label>District</label><input id="s_district" value="Layyah" required></div>
+            <div><label>Tehsil</label><input id="s_tehsil" value="Karor" required></div>
+            <div><label>Union council</label><input id="s_uc" value="Fateh Pur Urban" required></div>
           </div>
+          <p class="muted" style="margin-top:0.5rem;">CNIC photos are stored privately — only people scoped to this union council can view them.</p>
           <div class="error-text" id="staffError" style="display:none;"></div>
-          <button class="btn" style="margin-top:1rem;">Add staff</button>
+          <button class="btn" style="margin-top:0.5rem;" id="staffSubmitBtn">Add staff</button>
         </form>
       </div>
 
@@ -48,6 +54,7 @@
         <form id="assignForm">
           <div class="form-grid">
             <div><label>Team</label><select id="a_team"></select></div>
+            <div><label>Member no.</label><input type="number" id="a_memberno" min="1" placeholder="1, 2, 3…" required></div>
             <div><label>Staff</label><select id="a_staff"></select></div>
             <div><label>Role on team</label>
               <select id="a_role"><option value="member">Member</option><option value="leader">Leader</option></select>
@@ -59,11 +66,11 @@
       </div>
 
       <div class="card">
-        <h2>Teams &amp; their members</h2>
+        <h2>Teams &amp; their rosters</h2>
         <div class="table-wrap">
           <table id="teamsTable">
-            <thead><tr><th>Team no.</th><th>Type</th><th>UC</th><th>Members</th></tr></thead>
-            <tbody><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+            <thead><tr><th>Team no.</th><th>Type</th><th>UC</th><th>#</th><th>Name</th><th>CNIC</th><th>Cell no.</th><th>Role</th><th>CNIC photos</th></tr></thead>
+            <tbody><tr><td colspan="9" class="empty-state">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -83,20 +90,62 @@
       await Promise.all([loadTeamsTable(), populateAssignDropdowns()]);
     })();
 
+    /** Uploads a CNIC photo (if provided) to the private staff-documents
+     *  bucket under {uc_id}/{staff_id}/front|back.<ext>, returns the object path or null. */
+    async function uploadCnicPhoto(file, ucId, staffId, side) {
+      if (!file) return null;
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `${ucId}/${staffId}/${side}.${ext}`;
+      const { error } = await supabaseClient.storage.from("staff-documents").upload(path, file, { upsert: true });
+      if (error) throw error;
+      return path;
+    }
+
     document.getElementById("staffForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const err = document.getElementById("staffError");
       clearFormError(err);
-      const { error } = await supabaseClient.from("staff").insert({
-        full_name: document.getElementById("s_name").value.trim(),
-        cnic: document.getElementById("s_cnic").value.trim() || null,
-        phone: document.getElementById("s_phone").value.trim() || null,
-        designation: document.getElementById("s_designation").value.trim() || null,
-        category: document.getElementById("s_category").value.trim() || null,
-      });
-      if (error) return showFormError(err, error);
-      document.getElementById("staffForm").reset();
-      await populateAssignDropdowns();
+      const btn = document.getElementById("staffSubmitBtn");
+      btn.disabled = true;
+      try {
+        const uc_id = await ensureUnionCouncil(
+          document.getElementById("s_district").value,
+          document.getElementById("s_tehsil").value,
+          document.getElementById("s_uc").value
+        );
+        const { data: staffRow, error } = await supabaseClient.from("staff").insert({
+          full_name: document.getElementById("s_name").value.trim(),
+          cnic: document.getElementById("s_cnic").value.trim() || null,
+          phone: document.getElementById("s_phone").value.trim() || null,
+          designation: document.getElementById("s_designation").value.trim() || null,
+          category: document.getElementById("s_category").value.trim() || null,
+          uc_id,
+        }).select().single();
+        if (error) throw error;
+
+        const frontFile = document.getElementById("s_cnic_front").files[0];
+        const backFile = document.getElementById("s_cnic_back").files[0];
+        const [frontPath, backPath] = await Promise.all([
+          uploadCnicPhoto(frontFile, uc_id, staffRow.id, "front"),
+          uploadCnicPhoto(backFile, uc_id, staffRow.id, "back"),
+        ]);
+        if (frontPath || backPath) {
+          const { error: updateError } = await supabaseClient.from("staff").update({
+            cnic_pic_front_path: frontPath, cnic_pic_back_path: backPath,
+          }).eq("id", staffRow.id);
+          if (updateError) throw updateError;
+        }
+
+        document.getElementById("staffForm").reset();
+        document.getElementById("s_district").value = "Layyah";
+        document.getElementById("s_tehsil").value = "Karor";
+        document.getElementById("s_uc").value = "Fateh Pur Urban";
+        await populateAssignDropdowns();
+      } catch (error) {
+        showFormError(err, error);
+      } finally {
+        btn.disabled = false;
+      }
     });
 
     document.getElementById("teamForm").addEventListener("submit", async (e) => {
@@ -133,8 +182,10 @@
         team_id: document.getElementById("a_team").value,
         staff_id: document.getElementById("a_staff").value,
         member_role: document.getElementById("a_role").value,
+        member_no: Number(document.getElementById("a_memberno").value),
       }, { onConflict: "team_id,staff_id" });
       if (error) return showFormError(err, error);
+      document.getElementById("assignForm").reset();
       await loadTeamsTable();
     });
 
@@ -149,28 +200,61 @@
         (staffList || []).map(s => `<option value="${s.id}">${s.full_name}</option>`).join("");
     }
 
+    async function signedUrl(path) {
+      if (!path) return null;
+      const { data, error } = await supabaseClient.storage.from("staff-documents").createSignedUrl(path, 300);
+      if (error) return null;
+      return data.signedUrl;
+    }
+
     async function loadTeamsTable() {
       const { data, error } = await supabaseClient
         .from("teams")
-        .select("id, team_no, team_type, union_councils(name), team_members(member_role, staff(full_name))")
+        .select(`id, team_no, team_type, union_councils(name),
+          team_members(member_no, member_role, staff(id, full_name, cnic, phone, cnic_pic_front_path, cnic_pic_back_path))`)
         .order("team_no");
       const tbody = document.querySelector("#teamsTable tbody");
       if (error) {
-        tbody.innerHTML = `<tr><td colspan="4" class="empty-state">${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${error.message}</td></tr>`;
         return;
       }
       if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No teams yet — add one above.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="empty-state">No teams yet — add one above.</td></tr>`;
         return;
       }
-      tbody.innerHTML = data.map(t => `
-        <tr>
-          <td>${t.team_no}</td>
-          <td>${t.team_type.replace("_"," / ")}</td>
-          <td>${t.union_councils?.name ?? "—"}</td>
-          <td>${(t.team_members || []).map(m => `${m.staff?.full_name ?? "?"}${m.member_role === "leader" ? " (leader)" : ""}`).join(", ") || "—"}</td>
-        </tr>
-      `).join("");
+
+      const rowsHtml = [];
+      for (const t of data) {
+        const members = (t.team_members || []).slice().sort((a, b) => (a.member_no ?? 99) - (b.member_no ?? 99));
+        if (!members.length) {
+          rowsHtml.push(`
+            <tr>
+              <td>${t.team_no}</td><td>${t.team_type.replace("_"," / ")}</td><td>${t.union_councils?.name ?? "—"}</td>
+              <td colspan="6" class="muted">No members assigned yet</td>
+            </tr>`);
+          continue;
+        }
+        for (let i = 0; i < members.length; i++) {
+          const m = members[i];
+          const s = m.staff || {};
+          const [frontUrl, backUrl] = await Promise.all([signedUrl(s.cnic_pic_front_path), signedUrl(s.cnic_pic_back_path)]);
+          const photoLinks = [
+            frontUrl ? `<a href="${frontUrl}" target="_blank" rel="noopener">Front</a>` : null,
+            backUrl ? `<a href="${backUrl}" target="_blank" rel="noopener">Back</a>` : null,
+          ].filter(Boolean).join(" · ") || "—";
+          rowsHtml.push(`
+            <tr>
+              ${i === 0 ? `<td rowspan="${members.length}">${t.team_no}</td><td rowspan="${members.length}">${t.team_type.replace("_"," / ")}</td><td rowspan="${members.length}">${t.union_councils?.name ?? "—"}</td>` : ""}
+              <td>${m.member_no ?? "—"}</td>
+              <td>${s.full_name ?? "?"}</td>
+              <td>${s.cnic ?? "—"}</td>
+              <td>${s.phone ?? "—"}</td>
+              <td>${m.member_role === "leader" ? `<span class="badge ok">Leader</span>` : "Member"}</td>
+              <td>${photoLinks}</td>
+            </tr>`);
+        }
+      }
+      tbody.innerHTML = rowsHtml.join("");
     }
   </script>
 </body>

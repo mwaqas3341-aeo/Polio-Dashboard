@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2A form — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<style>
+  @media print {
+    .app-shell > .sidebar, .no-print { display: none !important; }
+    .main { padding: 0; max-width: none; }
+  }
+  .form-doc { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 1.5rem; max-width: 820px; }
+  .form-doc h2 { border-bottom: 2px solid var(--slate); padding-bottom: 0.4rem; }
+  .form-doc .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem 1rem; font-size: 0.88rem; margin-bottom: 1rem; }
+  .form-doc .meta-grid div span { color: var(--ink-soft); display: block; font-size: 0.72rem; }
+  .form-doc table { margin-bottom: 1.25rem; }
+  .form-doc .section-title { font-weight: 600; color: var(--slate-dark); margin: 1rem 0 0.4rem; font-size: 0.95rem; }
+  .actuals-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem 1rem; }
+  .actuals-grid label { font-size: 0.78rem; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar no-print"><h1>2A form</h1></div>
+      <p class="muted no-print">Pick a campaign, team, and day — the header, roster, and planning targets fill in automatically from what you've already entered. Fill in the field-actuals section, save, and print.</p>
+
+      <div class="card no-print">
+        <div class="form-grid">
+          <div><label>Campaign</label><select id="f_campaign"></select></div>
+          <div><label>Team no.</label><select id="f_team"></select></div>
+          <div><label>Campaign day</label><select id="f_day"></select></div>
+          <div><label>Catch-up day?</label><select id="f_catchup"><option value="false">No</option><option value="true">Yes</option></select></div>
+        </div>
+        <button class="btn" id="loadBtn" style="margin-top:1rem;">Load form</button>
+        <button class="btn secondary" id="printBtn" style="margin-top:1rem; margin-left:0.5rem;">Print</button>
+        <div class="error-text" id="formError" style="display:none;"></div>
+      </div>
+
+      <div class="form-doc" id="formDoc" style="display:none;">
+        <h2>2A Form — Daily Reporting</h2>
+        <div class="meta-grid">
+          <div><span>Campaign</span><strong id="d_campaign">—</strong></div>
+          <div><span>Union council</span><strong id="d_uc">—</strong></div>
+          <div><span>Team no.</span><strong id="d_team">—</strong></div>
+          <div><span>Day</span><strong id="d_day">—</strong></div>
+        </div>
+
+        <div class="section-title">Team roster</div>
+        <table>
+          <thead><tr><th>#</th><th>Name</th><th>CNIC</th><th>Cell no.</th><th>Role</th></tr></thead>
+          <tbody id="rosterBody"><tr><td colspan="5" class="empty-state">—</td></tr></tbody>
+        </table>
+
+        <div class="section-title">Planning targets (auto-generated)</div>
+        <div class="kpi-row" id="planRow"></div>
+
+        <div class="section-title">Field actuals — fill in and save</div>
+        <form id="actualsForm">
+          <div class="actuals-grid">
+            <div><label>Households visited</label><input type="number" id="r_visited" min="0" value="0"></div>
+            <div><label>Children vaccinated (1st visit)</label><input type="number" id="r_vacc" min="0" value="0"></div>
+            <div><label>Missed &lt;12 months</label><input type="number" id="r_missed_u1" min="0" value="0"></div>
+            <div><label>Missed 12–59 months</label><input type="number" id="r_missed_1_5" min="0" value="0"></div>
+            <div><label>Refusal &lt;12 months</label><input type="number" id="r_refusal_u1" min="0" value="0"></div>
+            <div><label>Refusal 12–59 months</label><input type="number" id="r_refusal_1_5" min="0" value="0"></div>
+            <div><label>Catch-up covered</label><input type="number" id="r_catchcov" min="0" value="0"></div>
+            <div><label>Still missed</label><input type="number" id="r_stillmissed" min="0" value="0"></div>
+            <div><label>Guest children vaccinated</label><input type="number" id="r_guest" min="0" value="0"></div>
+            <div><label>Street children vaccinated</label><input type="number" id="r_street" min="0" value="0"></div>
+            <div><label>HRMP children vaccinated</label><input type="number" id="r_hrmp" min="0" value="0"></div>
+            <div><label>Vaccine doses used</label><input type="number" id="r_doses_used" min="0" step="0.1" value="0"></div>
+            <div><label>Vitamin A — red capsules used</label><input type="number" id="r_vita_red" min="0" value="0"></div>
+            <div><label>Vitamin A — blue capsules used</label><input type="number" id="r_vita_blue" min="0" value="0"></div>
+            <div><label>AFP cases notified</label><input type="number" id="r_afp" min="0" value="0"></div>
+            <div><label>Zero-dose RI recorded</label><input type="number" id="r_zerodose" min="0" value="0"></div>
+            <div><label>0/0 houses (no child, no reason)</label><input type="number" id="r_zerozero" min="0" value="0"></div>
+            <div><label>Lock houses</label><input type="number" id="r_lock" min="0" value="0"></div>
+          </div>
+          <div class="error-text no-print" id="saveError" style="display:none;"></div>
+          <button class="btn no-print" style="margin-top:1rem;">Save report</button>
+          <span class="muted no-print" id="saveStatus" style="margin-left:0.75rem;"></span>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    let currentCampaignId = null, currentTeamNo = null, currentDay = null, currentIsCatchup = false, currentTeamId = null;
+
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("two-a-form.html");
+      await populateCampaignSelect(document.getElementById("f_campaign"), { includeBlank: false });
+      await populateTeamAndDay();
+    })();
+
+    document.getElementById("f_campaign").addEventListener("change", populateTeamAndDay);
+    document.getElementById("printBtn").addEventListener("click", () => window.print());
+
+    async function populateTeamAndDay() {
+      const campaignId = document.getElementById("f_campaign").value;
+      if (!campaignId) return;
+      const { data } = await supabaseClient
+        .from("team_day_plan").select("team_no, campaign_day").eq("campaign_id", campaignId);
+      const teams = [...new Set((data || []).map(r => r.team_no))].sort((a, b) => a - b);
+      const days = [...new Set((data || []).map(r => r.campaign_day))].sort((a, b) => a - b);
+      document.getElementById("f_team").innerHTML = teams.map(t => `<option value="${t}">Team ${t}</option>`).join("") || `<option value="">—</option>`;
+      document.getElementById("f_day").innerHTML = days.map(d => `<option value="${d}">Day ${d}</option>`).join("") || `<option value="">—</option>`;
+    }
+
+    document.getElementById("loadBtn").addEventListener("click", async () => {
+      const err = document.getElementById("formError");
+      clearFormError(err);
+      currentCampaignId = document.getElementById("f_campaign").value;
+      currentTeamNo = Number(document.getElementById("f_team").value);
+      currentDay = Number(document.getElementById("f_day").value);
+      currentIsCatchup = document.getElementById("f_catchup").value === "true";
+      if (!currentCampaignId || !currentTeamNo || !currentDay) {
+        return showFormError(err, { message: "Choose a campaign, team, and day first." });
+      }
+
+      const campaignOpt = document.getElementById("f_campaign").selectedOptions[0];
+      document.getElementById("d_campaign").textContent = campaignOpt ? campaignOpt.textContent : "—";
+      document.getElementById("d_team").textContent = currentTeamNo;
+      document.getElementById("d_day").textContent = currentDay + (currentIsCatchup ? " (catch-up)" : "");
+
+      const [{ data: team }, { data: plan }, { data: existingReport }] = await Promise.all([
+        supabaseClient.from("teams").select("id, union_councils(name)").eq("team_no", currentTeamNo).limit(1).maybeSingle(),
+        supabaseClient.from("team_day_plan").select("*").eq("campaign_id", currentCampaignId).eq("team_no", currentTeamNo).eq("campaign_day", currentDay).maybeSingle(),
+        supabaseClient.from("daily_reports").select("*").eq("campaign_id", currentCampaignId).eq("team_no", currentTeamNo).eq("campaign_day", currentDay).eq("is_catchup", currentIsCatchup).maybeSingle(),
+      ]);
+      currentTeamId = team?.id ?? null;
+      document.getElementById("d_uc").textContent = team?.union_councils?.name ?? "—";
+
+      if (currentTeamId) {
+        const { data: roster } = await supabaseClient
+          .from("team_members")
+          .select("member_no, member_role, staff(full_name, cnic, phone)")
+          .eq("team_id", currentTeamId)
+          .order("member_no");
+        const rosterBody = document.getElementById("rosterBody");
+        if (!roster || !roster.length) {
+          rosterBody.innerHTML = `<tr><td colspan="5" class="empty-state">No roster set — add members on the Teams &amp; staff page.</td></tr>`;
+        } else {
+          rosterBody.innerHTML = roster.map(m => `
+            <tr>
+              <td>${m.member_no ?? "—"}</td><td>${m.staff?.full_name ?? "?"}</td>
+              <td>${m.staff?.cnic ?? "—"}</td><td>${m.staff?.phone ?? "—"}</td>
+              <td>${m.member_role === "leader" ? "Leader" : "Member"}</td>
+            </tr>`).join("");
+        }
+      }
+
+      document.getElementById("planRow").innerHTML = plan ? `
+        <div class="kpi"><div class="value">${plan.target_households}</div><div class="label">Target households</div></div>
+        <div class="kpi"><div class="value">${plan.total_children}</div><div class="label">Total children</div></div>
+        <div class="kpi"><div class="value">${plan.vaccine_needed}</div><div class="label">Vaccine doses needed</div></div>
+      ` : `<div class="muted">No plan computed yet for this team/day — add schools or households for this campaign first.</div>`;
+
+      const fields = {
+        r_visited: "households_visited", r_vacc: "children_vaccinated_first_visit",
+        r_missed_u1: "missed_children_under_12m", r_missed_1_5: "missed_children_12_59m",
+        r_refusal_u1: "refusal_under_12m", r_refusal_1_5: "refusal_12_59m",
+        r_catchcov: "catchup_covered", r_stillmissed: "still_missed",
+        r_guest: "guest_vaccinated", r_street: "street_vaccinated", r_hrmp: "hrmp_vaccinated",
+        r_doses_used: "vaccine_doses_used", r_vita_red: "vitamin_a_red", r_vita_blue: "vitamin_a_blue",
+        r_afp: "afp_cases_notified", r_zerodose: "zero_dose_ri_recorded",
+        r_zerozero: "zero_zero_houses", r_lock: "lock_houses",
+      };
+      for (const [elId, col] of Object.entries(fields)) {
+        document.getElementById(elId).value = existingReport ? (existingReport[col] ?? 0) : 0;
+      }
+
+      document.getElementById("saveStatus").textContent = existingReport ? "Editing an existing report." : "No report saved yet for this team/day.";
+      document.getElementById("formDoc").style.display = "block";
+    });
+
+    document.getElementById("actualsForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("saveError");
+      clearFormError(err);
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      const { error } = await supabaseClient.from("daily_reports").upsert({
+        campaign_id: currentCampaignId, team_no: currentTeamNo, campaign_day: currentDay, is_catchup: currentIsCatchup,
+        households_visited: Number(document.getElementById("r_visited").value),
+        children_vaccinated_first_visit: Number(document.getElementById("r_vacc").value),
+        missed_children_under_12m: Number(document.getElementById("r_missed_u1").value),
+        missed_children_12_59m: Number(document.getElementById("r_missed_1_5").value),
+        refusal_under_12m: Number(document.getElementById("r_refusal_u1").value),
+        refusal_12_59m: Number(document.getElementById("r_refusal_1_5").value),
+        catchup_covered: Number(document.getElementById("r_catchcov").value),
+        still_missed: Number(document.getElementById("r_stillmissed").value),
+        guest_vaccinated: Number(document.getElementById("r_guest").value),
+        street_vaccinated: Number(document.getElementById("r_street").value),
+        hrmp_vaccinated: Number(document.getElementById("r_hrmp").value),
+        vaccine_doses_used: Number(document.getElementById("r_doses_used").value),
+        vitamin_a_red: Number(document.getElementById("r_vita_red").value),
+        vitamin_a_blue: Number(document.getElementById("r_vita_blue").value),
+        afp_cases_notified: Number(document.getElementById("r_afp").value),
+        zero_dose_ri_recorded: Number(document.getElementById("r_zerodose").value),
+        zero_zero_houses: Number(document.getElementById("r_zerozero").value),
+        lock_houses: Number(document.getElementById("r_lock").value),
+        reported_by: user.id,
+      }, { onConflict: "campaign_id,team_no,campaign_day,is_catchup" });
+      if (error) return showFormError(err, error);
+      document.getElementById("saveStatus").textContent = "Saved.";
+    });
+  </script>
+</body>
+</html>

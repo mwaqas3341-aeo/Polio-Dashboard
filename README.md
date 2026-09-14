@@ -61,7 +61,8 @@ pages/
   team-plan.html               ★ auto-generated plan (read-only)
   logistics.html                ★ auto-generated logistics needs (read-only)
   area-summary.html             ★ area-level grand totals + missed-children + field performance
-  daily-reports.html            2A-form field actuals entry
+  daily-reports.html            Quick data-entry table for field actuals, no roster/plan context
+  two-a-form.html               ★ the actual 2A form: auto-fills header/roster/plan targets, then save + print
   supervision.html              Tour plan / field validation / desk review entry
   ddm-cards.html                 ★ auto-generated DDM cards (placeholder layout — real template pending)
   audit-log.html                Read-only view of the DB-level audit trail
@@ -88,12 +89,22 @@ applied in order:
 - `0004_role_and_uc_scoped_rls.sql` — replaces the "any authenticated user" baseline policies with real scoping (see below)
 - `0005_fix_helper_function_search_path.sql` — security-lint fix for the new helper functions
 - `0006_ddm_cards_unique_constraint.sql` — one DDM card per team/day/campaign, enforced at the DB level
+- `0007_team_member_cnic_photos_and_numbering.sql` — adds `team_members.member_no` and `staff.cnic_pic_front_path`/`cnic_pic_back_path`
+- `0008_staff_documents_storage_bucket.sql` — private Storage bucket for CNIC photos, scoped by UC via the object path
 
 Key tables: `districts` → `tehsils` → `union_councils` (geography),
-`staff`/`teams`/`team_members` (HR), `campaigns`, `schools` +
-`school_assignments`, `mmp_contacts` + `mmp_assignments`, `households`,
-`missed_children`, `daily_reports`, `supervision_visits`, `ddm_cards`,
-`audit_log`.
+`staff` (now includes `cnic_pic_front_path`/`cnic_pic_back_path`) /`teams`/
+`team_members` (now includes `member_no`, the roster position) (HR),
+`campaigns`, `schools` + `school_assignments`, `mmp_contacts` +
+`mmp_assignments`, `households`, `missed_children`, `daily_reports`,
+`supervision_visits`, `ddm_cards`, `audit_log`.
+
+**Storage:** a private `staff-documents` bucket holds CNIC front/back
+photos, one object per staff member at `{uc_id}/{staff_id}/front.<ext>` /
+`back.<ext>`. Storage policies mirror the same UC-scoping as the tables —
+only someone whose `user_scope_uc_ids()` includes that UC can upload,
+view, update, or delete a given photo. The app fetches images via short-
+lived signed URLs (5 minutes), never a public link.
 
 ### Access model
 
