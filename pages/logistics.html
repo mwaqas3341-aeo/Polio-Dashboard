@@ -23,6 +23,7 @@
       <div class="card">
         <label>Campaign</label>
         <select id="filterCampaign" style="max-width:320px;"></select>
+        <button class="btn secondary" id="exportBtn" style="margin-left:0.75rem;">Export to Excel</button>
         <div class="kpi-row" id="totalsRow" style="margin-top:1rem;"></div>
       </div>
 
@@ -44,11 +45,16 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="../assets/js/config.js"></script>
   <script src="../assets/js/supabaseClient.js"></script>
   <script src="../assets/js/nav.js"></script>
   <script src="../assets/js/crud.js"></script>
+  <script src="../assets/js/export.js"></script>
   <script>
+    let currentLogisticsRows = [];
+    let currentCampaignName = "";
+
     (async () => {
       const session = await requireAuth();
       if (!session) return;
@@ -56,7 +62,23 @@
       await populateCampaignSelect(document.getElementById("filterCampaign"));
     })();
 
-    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+    document.getElementById("filterCampaign").addEventListener("change", (e) => {
+      const opt = e.target.selectedOptions[0];
+      currentCampaignName = opt ? opt.textContent : "";
+      loadTable(e.target.value);
+    });
+
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      if (!currentLogisticsRows.length) return;
+      const headers = ["SR NO.", "TEAM NO.", "DAY", "TOTAL HOUSES", "TOTAL CHILDREN", "VACCINE NEEDED",
+        "BLUE CAPSULES NEEDED", "RED CAPSULES NEEDED", "VACCINE CARRIER", "ICE PACKS", "DDM CARDS", "TALLY SHEETS"];
+      const rows = currentLogisticsRows.map((r, i) => [
+        i + 1, r.team_no, r.campaign_day, r.target_households, r.total_children, r.vaccine_needed,
+        r.blue_capsules_needed, r.red_capsules_needed, r.vaccine_carriers_needed, r.ice_packs_needed,
+        r.ddm_cards_needed, r.tally_sheets_needed,
+      ]);
+      exportSheetToExcel(`Logistic_Plan_${currentCampaignName.replace(/\s+/g, "_")}.xlsx`, "Logistic Plan", headers, rows);
+    });
 
     async function loadTable(campaignId) {
       const tbody = document.querySelector("#table tbody");
@@ -78,8 +100,10 @@
       if (!data.length) {
         tbody.innerHTML = `<tr><td colspan="11" class="empty-state">Nothing to compute yet — add planning inputs for this campaign first.</td></tr>`;
         totalsRow.innerHTML = "";
+        currentLogisticsRows = [];
         return;
       }
+      currentLogisticsRows = data;
       tbody.innerHTML = data.map(r => `
         <tr>
           <td>${r.team_no}</td><td>${r.campaign_day}</td><td>${r.target_households}</td>

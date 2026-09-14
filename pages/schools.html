@@ -47,6 +47,7 @@
         <h2>Assignments for a campaign</h2>
         <label>Show campaign</label>
         <select id="filterCampaign" style="max-width:320px;"></select>
+        <button class="btn secondary" id="exportBtn" style="margin-left:0.75rem;">Export to Excel</button>
         <div class="table-wrap" style="margin-top:0.75rem;">
           <table id="table">
             <thead><tr><th>Team</th><th>Day</th><th>School</th><th>Head teacher</th><th>Target children</th></tr></thead>
@@ -58,11 +59,16 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="../assets/js/config.js"></script>
   <script src="../assets/js/supabaseClient.js"></script>
   <script src="../assets/js/nav.js"></script>
   <script src="../assets/js/crud.js"></script>
+  <script src="../assets/js/export.js"></script>
   <script>
+    let currentSchoolRows = [];
+    let currentCampaignName = "";
+
     (async () => {
       const session = await requireAuth();
       if (!session) return;
@@ -124,7 +130,20 @@
       }
     });
 
-    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+    document.getElementById("filterCampaign").addEventListener("change", (e) => {
+      const opt = e.target.selectedOptions[0];
+      currentCampaignName = opt ? opt.textContent : "";
+      loadTable(e.target.value);
+    });
+
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      if (!currentSchoolRows.length) return;
+      const headers = ["SR NO.", "TEAM NO.", "DAY", "SCHOOL NAME", "HEAD TEACHER", "TARGET CHILDREN"];
+      const rows = currentSchoolRows.map((r, i) => [
+        i + 1, r.team_no, r.campaign_day, r.schools.name, r.schools.head_teacher_name ?? "", r.target_children,
+      ]);
+      exportSheetToExcel(`School_List_${currentCampaignName.replace(/\s+/g, "_")}.xlsx`, "School List", headers, rows);
+    });
 
     async function loadTable(campaignId) {
       const tbody = document.querySelector("#table tbody");
@@ -143,8 +162,10 @@
       }
       if (!data.length) {
         tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No schools assigned to this campaign yet.</td></tr>`;
+        currentSchoolRows = [];
         return;
       }
+      currentSchoolRows = data;
       tbody.innerHTML = data.map(r => `
         <tr><td>${r.team_no}</td><td>${r.campaign_day}</td><td>${r.schools.name}</td>
         <td>${r.schools.head_teacher_name ?? "—"}</td><td>${r.target_children}</td></tr>

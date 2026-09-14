@@ -71,6 +71,7 @@ assets/
   js/supabaseClient.js          Client init + auth helpers
   js/nav.js                     Shared sidebar
   js/crud.js                    Shared form helpers (campaign dropdowns, UC lookup)
+  js/export.js                  Shared Excel export (SheetJS) — used by team-plan/logistics/mmp/schools/area-summary
 supabase/migrations/
   0001_initial_schema.sql       Version-controlled copy of the applied schema
 ```
@@ -150,6 +151,6 @@ This is a static site — enable GitHub Pages on this repo (Settings → Pages
 ## Not built yet (next steps)
 
 - DDM card's *real* layout — `pages/ddm-cards.html` generates and assigns one card per team/day already, but the visual design is a placeholder until you share the actual template
-- Excel/PDF export matching the original report formats
-- Confirm the Logistic Plan assumptions above and correct the migration if needed
+- The Excel exports (Team Micro Plan, Logistic Plan, CNIC List, School List, Area Incharge Summary) currently use plain generic headers/column order, not the exact sheet layout (merged headers, sheet name, row grouping) from your source files — I don't have those exact formats memorized cell-for-cell, so treat these as "the right numbers, generic layout" until you compare one against the original and tell me what to fix
+- Confirm the Logistic Plan capsule/carrier assumptions above and correct the migration if needed
 - An admin UI for editing other users' profiles/roles (currently only doable directly in Supabase, or by the user themselves on first login)

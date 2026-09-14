@@ -47,6 +47,7 @@
         <h2>CNIC list for a campaign</h2>
         <label>Show campaign</label>
         <select id="filterCampaign" style="max-width:320px;"></select>
+        <button class="btn secondary" id="exportBtn" style="margin-left:0.75rem;">Export to Excel</button>
         <div class="table-wrap" style="margin-top:0.75rem;">
           <table id="table">
             <thead><tr><th>Team</th><th>Day</th><th>Name</th><th>CNIC</th><th>Phone</th><th>Houses</th><th>Children</th></tr></thead>
@@ -58,11 +59,16 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="../assets/js/config.js"></script>
   <script src="../assets/js/supabaseClient.js"></script>
   <script src="../assets/js/nav.js"></script>
   <script src="../assets/js/crud.js"></script>
+  <script src="../assets/js/export.js"></script>
   <script>
+    let currentCnicRows = [];
+    let currentCampaignName = "";
+
     (async () => {
       const session = await requireAuth();
       if (!session) return;
@@ -114,7 +120,21 @@
       }
     });
 
-    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+    document.getElementById("filterCampaign").addEventListener("change", (e) => {
+      const opt = e.target.selectedOptions[0];
+      currentCampaignName = opt ? opt.textContent : "";
+      loadTable(e.target.value);
+    });
+
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      if (!currentCnicRows.length) return;
+      const headers = ["SR NO.", "TEAM NO.", "DAY", "NAME", "CNIC", "PHONE", "HOUSES", "CHILDREN"];
+      const rows = currentCnicRows.map((r, i) => [
+        i + 1, r.team_no, r.campaign_day, r.mmp_contacts.full_name, r.mmp_contacts.cnic ?? "",
+        r.mmp_contacts.phone ?? "", r.house_count, r.child_count,
+      ]);
+      exportSheetToExcel(`CNIC_List_${currentCampaignName.replace(/\s+/g, "_")}.xlsx`, "CNIC List", headers, rows);
+    });
 
     async function loadTable(campaignId) {
       const tbody = document.querySelector("#table tbody");
@@ -133,8 +153,10 @@
       }
       if (!data.length) {
         tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No contacts assigned to this campaign yet.</td></tr>`;
+        currentCnicRows = [];
         return;
       }
+      currentCnicRows = data;
       tbody.innerHTML = data.map(r => `
         <tr><td>${r.team_no}</td><td>${r.campaign_day}</td><td>${r.mmp_contacts.full_name}</td>
         <td>${r.mmp_contacts.cnic ?? "—"}</td><td>${r.mmp_contacts.phone ?? "—"}</td>

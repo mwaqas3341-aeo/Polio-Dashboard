@@ -22,6 +22,7 @@
       <div class="card">
         <label>Campaign</label>
         <select id="filterCampaign" style="max-width:320px;"></select>
+        <button class="btn secondary" id="exportBtn" style="margin-left:0.75rem;">Export to Excel</button>
         <div class="kpi-row" id="totalsRow" style="margin-top:1rem;"></div>
       </div>
 
@@ -44,11 +45,16 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="../assets/js/config.js"></script>
   <script src="../assets/js/supabaseClient.js"></script>
   <script src="../assets/js/nav.js"></script>
   <script src="../assets/js/crud.js"></script>
+  <script src="../assets/js/export.js"></script>
   <script>
+    let currentPlanRows = [];
+    let currentCampaignName = "";
+
     (async () => {
       const session = await requireAuth();
       if (!session) return;
@@ -60,11 +66,27 @@
       await populateCampaignSelect(select);
       if (preselect) {
         select.value = preselect;
+        const opt = select.selectedOptions[0];
+        currentCampaignName = opt ? opt.textContent : "";
         await loadTable(preselect);
       }
     })();
 
-    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+    document.getElementById("filterCampaign").addEventListener("change", (e) => {
+      const opt = e.target.selectedOptions[0];
+      currentCampaignName = opt ? opt.textContent : "";
+      loadTable(e.target.value);
+    });
+
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      if (!currentPlanRows.length) return;
+      const headers = ["SR NO.", "TEAM NO.", "DAY", "SCHOOL CHILDREN", "HOUSE HOLD CHILDREN", "TOTAL CHILDREN", "VACCINE NEEDED", "TARGET HOUSEHOLDS"];
+      const rows = currentPlanRows.map((r, i) => [
+        i + 1, r.team_no, r.campaign_day, r.school_children, r.household_children,
+        r.total_children, r.vaccine_needed, r.target_households,
+      ]);
+      exportSheetToExcel(`Team_Micro_Plan_${currentCampaignName.replace(/\s+/g, "_")}.xlsx`, "Team Micro Plan Summaries", headers, rows);
+    });
 
     async function loadTable(campaignId) {
       const tbody = document.querySelector("#table tbody");
@@ -86,8 +108,10 @@
       if (!data.length) {
         tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Nothing to compute yet — add schools, households, or MMP contacts for this campaign first.</td></tr>`;
         totalsRow.innerHTML = "";
+        currentPlanRows = [];
         return;
       }
+      currentPlanRows = data;
       tbody.innerHTML = data.map(r => `
         <tr>
           <td>${r.team_no}</td><td>${r.campaign_day}</td>

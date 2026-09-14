@@ -15,6 +15,7 @@
       <div class="card">
         <label>Campaign</label>
         <select id="filterCampaign" style="max-width:320px;"></select>
+        <button class="btn secondary" id="exportBtn" style="margin-left:0.75rem;">Export to Excel</button>
       </div>
 
       <div class="card" id="summaryCard" style="display:none;">
@@ -30,11 +31,16 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="../assets/js/config.js"></script>
   <script src="../assets/js/supabaseClient.js"></script>
   <script src="../assets/js/nav.js"></script>
   <script src="../assets/js/crud.js"></script>
+  <script src="../assets/js/export.js"></script>
   <script>
+    let currentSummary = null;
+    let currentCampaignName = "";
+
     (async () => {
       const session = await requireAuth();
       if (!session) return;
@@ -42,7 +48,33 @@
       await populateCampaignSelect(document.getElementById("filterCampaign"));
     })();
 
-    document.getElementById("filterCampaign").addEventListener("change", (e) => loadSummary(e.target.value));
+    document.getElementById("filterCampaign").addEventListener("change", (e) => {
+      const opt = e.target.selectedOptions[0];
+      currentCampaignName = opt ? opt.textContent : "";
+      loadSummary(e.target.value);
+    });
+
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      if (!currentSummary) return;
+      const { plan, missed, actuals } = currentSummary;
+      exportWorkbookToExcel(`Area_Incharge_Summary_${currentCampaignName.replace(/\s+/g, "_")}.xlsx`, [
+        {
+          name: "Planning Totals",
+          headers: ["Teams covered", "Total children", "Vaccine needed", "Target households"],
+          rows: [[plan.teams_covered, plan.grand_total_children, plan.grand_vaccine_needed, plan.grand_target_households]],
+        },
+        {
+          name: "Missed Children",
+          headers: ["Total recorded", "Still missed", "Covered this round"],
+          rows: [[missed?.total_recorded ?? 0, missed?.still_missed ?? 0, missed?.covered ?? 0]],
+        },
+        {
+          name: "Field Performance",
+          headers: ["Households visited", "Children vaccinated (1st visit)", "Catch-up covered", "Still missed"],
+          rows: [[actuals.visited, actuals.vaccinated, actuals.catchup, actuals.stillMissed]],
+        },
+      ]);
+    });
 
     async function loadSummary(campaignId) {
       const summaryCard = document.getElementById("summaryCard");
@@ -63,6 +95,7 @@
         summaryCard.style.display = "none";
         emptyCard.style.display = "block";
         emptyCard.querySelector(".empty-state").textContent = "Nothing to summarize yet — add planning inputs for this campaign first.";
+        currentSummary = null;
         return;
       }
       emptyCard.style.display = "none";
@@ -88,6 +121,8 @@
         acc.catchup += r.catchup_covered || 0;
         return acc;
       }, { visited: 0, vaccinated: 0, stillMissed: 0, catchup: 0 });
+
+      currentSummary = { plan, missed, actuals };
 
       document.getElementById("actualRow").innerHTML = (reports && reports.length) ? `
         <div class="kpi"><div class="value">${actuals.visited}</div><div class="label">Households visited</div></div>
