@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team day plan — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Team day plan</h1></div>
+      <p class="muted">
+        Nothing on this page is typed in — it's computed live from the School list,
+        House registration, and MMP/CNIC assignments you've already entered for this
+        campaign, the same way <strong>Team Micro Plan Summaries</strong> was built in
+        the source spreadsheets: joined on <strong>team&nbsp;no. + campaign day</strong>,
+        with vaccine doses at a 1.11× wastage factor. Add or edit an input on the other
+        pages and this table updates on refresh — no re-entry required.
+      </p>
+
+      <div class="card">
+        <label>Campaign</label>
+        <select id="filterCampaign" style="max-width:320px;"></select>
+        <div class="kpi-row" id="totalsRow" style="margin-top:1rem;"></div>
+      </div>
+
+      <div class="card">
+        <h2>Per team / day</h2>
+        <div class="table-wrap">
+          <table id="table">
+            <thead>
+              <tr>
+                <th>Team</th><th>Day</th>
+                <th>School children</th><th>Household children</th><th>Total children</th>
+                <th>Vaccine doses needed</th><th>Target households</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="7" class="empty-state">Select a campaign above.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("team-plan.html");
+
+      const params = new URLSearchParams(window.location.search);
+      const preselect = params.get("campaign");
+      const select = document.getElementById("filterCampaign");
+      await populateCampaignSelect(select);
+      if (preselect) {
+        select.value = preselect;
+        await loadTable(preselect);
+      }
+    })();
+
+    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+
+    async function loadTable(campaignId) {
+      const tbody = document.querySelector("#table tbody");
+      const totalsRow = document.getElementById("totalsRow");
+      if (!campaignId) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Select a campaign above.</td></tr>`;
+        totalsRow.innerHTML = "";
+        return;
+      }
+      const { data, error } = await supabaseClient
+        .from("team_day_plan")
+        .select("*")
+        .eq("campaign_id", campaignId)
+        .order("team_no").order("campaign_day");
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Nothing to compute yet — add schools, households, or MMP contacts for this campaign first.</td></tr>`;
+        totalsRow.innerHTML = "";
+        return;
+      }
+      tbody.innerHTML = data.map(r => `
+        <tr>
+          <td>${r.team_no}</td><td>${r.campaign_day}</td>
+          <td>${r.school_children}</td><td>${r.household_children}</td>
+          <td><strong>${r.total_children}</strong></td>
+          <td>${r.vaccine_needed}</td><td>${r.target_households}</td>
+        </tr>
+      `).join("");
+
+      const totals = data.reduce((acc, r) => {
+        acc.children += r.total_children;
+        acc.vaccine += Number(r.vaccine_needed);
+        acc.houses += r.target_households;
+        return acc;
+      }, { children: 0, vaccine: 0, houses: 0 });
+
+      totalsRow.innerHTML = `
+        <div class="kpi"><div class="value">${data.length}</div><div class="label">Team-day plans generated</div></div>
+        <div class="kpi"><div class="value">${totals.children}</div><div class="label">Total children (all teams/days)</div></div>
+        <div class="kpi"><div class="value">${totals.vaccine.toFixed(2)}</div><div class="label">Vaccine doses needed (×1.11)</div></div>
+        <div class="kpi"><div class="value">${totals.houses}</div><div class="label">Target households</div></div>
+      `;
+    }
+  </script>
+</body>
+</html>

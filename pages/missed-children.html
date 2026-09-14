@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Missed children — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Missed children</h1></div>
+      <p class="muted">Named children still missed at the end of a campaign — carried forward as a planning target for the next round.</p>
+
+      <div class="card">
+        <h2>Record a missed child</h2>
+        <form id="mcForm">
+          <div class="form-grid">
+            <div><label>Campaign</label><select id="m_campaign" required></select></div>
+            <div><label>Child's name</label><input id="m_name" required></div>
+            <div><label>Father's name</label><input id="m_father"></div>
+            <div><label>Age (months)</label><input type="number" id="m_age" min="0"></div>
+            <div><label>Address</label><input id="m_address"></div>
+            <div><label>Team no.</label><input type="number" id="m_team"></div>
+            <div><label>Campaign day</label><input type="number" id="m_day" min="1"></div>
+            <div><label>House no.</label><input type="number" id="m_house"></div>
+          </div>
+          <div class="error-text" id="mcError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Save</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Missed-children register</h2>
+        <label>Show campaign</label>
+        <select id="filterCampaign" style="max-width:320px;"></select>
+        <div class="table-wrap" style="margin-top:0.75rem;">
+          <table id="table">
+            <thead><tr><th>Name</th><th>Father</th><th>Age (mo)</th><th>Address</th><th>Team</th><th>Day</th><th>Status</th><th></th></tr></thead>
+            <tbody><tr><td colspan="8" class="empty-state">Select a campaign above.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("missed-children.html");
+      await Promise.all([
+        populateCampaignSelect(document.getElementById("m_campaign"), { includeBlank: false }),
+        populateCampaignSelect(document.getElementById("filterCampaign")),
+      ]);
+    })();
+
+    document.getElementById("mcForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("mcError");
+      clearFormError(err);
+      const campaignId = document.getElementById("m_campaign").value;
+      const { error } = await supabaseClient.from("missed_children").insert({
+        campaign_id: campaignId,
+        child_name: document.getElementById("m_name").value.trim(),
+        father_name: document.getElementById("m_father").value.trim() || null,
+        age_months: document.getElementById("m_age").value ? Number(document.getElementById("m_age").value) : null,
+        address: document.getElementById("m_address").value.trim() || null,
+        team_no: document.getElementById("m_team").value ? Number(document.getElementById("m_team").value) : null,
+        campaign_day: document.getElementById("m_day").value ? Number(document.getElementById("m_day").value) : null,
+        house_no: document.getElementById("m_house").value ? Number(document.getElementById("m_house").value) : null,
+      });
+      if (error) return showFormError(err, error);
+      document.getElementById("mcForm").reset();
+      if (document.getElementById("filterCampaign").value === campaignId) await loadTable(campaignId);
+    });
+
+    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+
+    async function markCovered(id, campaignId) {
+      await supabaseClient.from("missed_children").update({ covered_this_round: true }).eq("id", id);
+      await loadTable(campaignId);
+    }
+    window.markCovered = markCovered;
+
+    async function loadTable(campaignId) {
+      const tbody = document.querySelector("#table tbody");
+      if (!campaignId) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Select a campaign above.</td></tr>`;
+        return;
+      }
+      const { data, error } = await supabaseClient
+        .from("missed_children")
+        .select("id, child_name, father_name, age_months, address, team_no, campaign_day, covered_this_round")
+        .eq("campaign_id", campaignId)
+        .order("team_no");
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No missed children recorded for this campaign.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(r => `
+        <tr>
+          <td>${r.child_name}</td><td>${r.father_name ?? "—"}</td><td>${r.age_months ?? "—"}</td>
+          <td>${r.address ?? "—"}</td><td>${r.team_no ?? "—"}</td><td>${r.campaign_day ?? "—"}</td>
+          <td><span class="badge ${r.covered_this_round ? "ok" : "attention"}">${r.covered_this_round ? "Covered" : "Still missed"}</span></td>
+          <td>${r.covered_this_round ? "" : `<button class="btn secondary" onclick="markCovered('${r.id}','${campaignId}')">Mark covered</button>`}</td>
+        </tr>
+      `).join("");
+    }
+  </script>
+</body>
+</html>

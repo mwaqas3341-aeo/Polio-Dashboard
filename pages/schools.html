@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>School list — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>School list</h1></div>
+      <p class="muted">Master school registration, and which team/day each school is assigned to for a campaign — matches the "School Registration Form" register.</p>
+
+      <div class="card">
+        <h2>Add a school</h2>
+        <form id="schoolForm">
+          <div class="form-grid">
+            <div><label>School name</label><input id="sc_name" required></div>
+            <div><label>Head teacher name</label><input id="sc_head"></div>
+            <div><label>Head teacher phone</label><input id="sc_phone"></div>
+            <div><label>District</label><input id="sc_district" value="Layyah" required></div>
+            <div><label>Tehsil</label><input id="sc_tehsil" value="Karor" required></div>
+            <div><label>Union council</label><input id="sc_uc" value="Fateh Pur Urban" required></div>
+          </div>
+          <div class="error-text" id="schoolError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Add school</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Assign a school to a campaign</h2>
+        <form id="assignForm">
+          <div class="form-grid">
+            <div><label>Campaign</label><select id="as_campaign" required></select></div>
+            <div><label>School</label><select id="as_school" required></select></div>
+            <div><label>Team no.</label><input type="number" id="as_team" required></div>
+            <div><label>Campaign day</label><input type="number" id="as_day" min="1" required></div>
+            <div><label>Target children (&lt;5 yrs)</label><input type="number" id="as_target" min="0" required></div>
+          </div>
+          <div class="error-text" id="assignError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Save assignment</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Assignments for a campaign</h2>
+        <label>Show campaign</label>
+        <select id="filterCampaign" style="max-width:320px;"></select>
+        <div class="table-wrap" style="margin-top:0.75rem;">
+          <table id="table">
+            <thead><tr><th>Team</th><th>Day</th><th>School</th><th>Head teacher</th><th>Target children</th></tr></thead>
+            <tbody><tr><td colspan="5" class="empty-state">Select a campaign above.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("schools.html");
+      await Promise.all([
+        populateCampaignSelect(document.getElementById("as_campaign"), { includeBlank: false }),
+        populateCampaignSelect(document.getElementById("filterCampaign")),
+        populateSchoolSelect(),
+      ]);
+    })();
+
+    async function populateSchoolSelect() {
+      const { data } = await supabaseClient.from("schools").select("id, name").order("name");
+      document.getElementById("as_school").innerHTML = (data || []).map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+    }
+
+    document.getElementById("schoolForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("schoolError");
+      clearFormError(err);
+      try {
+        const uc_id = await ensureUnionCouncil(
+          document.getElementById("sc_district").value,
+          document.getElementById("sc_tehsil").value,
+          document.getElementById("sc_uc").value
+        );
+        const { error } = await supabaseClient.from("schools").insert({
+          name: document.getElementById("sc_name").value.trim(),
+          head_teacher_name: document.getElementById("sc_head").value.trim() || null,
+          head_teacher_phone: document.getElementById("sc_phone").value.trim() || null,
+          uc_id,
+        });
+        if (error) throw error;
+        document.getElementById("schoolForm").reset();
+        document.getElementById("sc_district").value = "Layyah";
+        document.getElementById("sc_tehsil").value = "Karor";
+        document.getElementById("sc_uc").value = "Fateh Pur Urban";
+        await populateSchoolSelect();
+      } catch (error) {
+        showFormError(err, error);
+      }
+    });
+
+    document.getElementById("assignForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("assignError");
+      clearFormError(err);
+      const { error } = await supabaseClient.from("school_assignments").upsert({
+        campaign_id: document.getElementById("as_campaign").value,
+        school_id: document.getElementById("as_school").value,
+        team_no: Number(document.getElementById("as_team").value),
+        campaign_day: Number(document.getElementById("as_day").value),
+        target_children: Number(document.getElementById("as_target").value),
+      }, { onConflict: "campaign_id,school_id" });
+      if (error) return showFormError(err, error);
+      document.getElementById("assignForm").reset();
+      if (document.getElementById("filterCampaign").value === document.getElementById("as_campaign").value) {
+        await loadTable(document.getElementById("as_campaign").value);
+      }
+    });
+
+    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+
+    async function loadTable(campaignId) {
+      const tbody = document.querySelector("#table tbody");
+      if (!campaignId) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Select a campaign above.</td></tr>`;
+        return;
+      }
+      const { data, error } = await supabaseClient
+        .from("school_assignments")
+        .select("team_no, campaign_day, target_children, schools(name, head_teacher_name)")
+        .eq("campaign_id", campaignId)
+        .order("team_no").order("campaign_day");
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No schools assigned to this campaign yet.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(r => `
+        <tr><td>${r.team_no}</td><td>${r.campaign_day}</td><td>${r.schools.name}</td>
+        <td>${r.schools.head_teacher_name ?? "—"}</td><td>${r.target_children}</td></tr>
+      `).join("");
+    }
+  </script>
+</body>
+</html>

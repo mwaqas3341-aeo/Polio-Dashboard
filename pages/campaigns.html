@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campaigns — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Campaigns</h1></div>
+
+      <div class="card">
+        <h2>New campaign</h2>
+        <form id="campaignForm">
+          <div class="form-grid">
+            <div><label>Campaign name</label><input id="name" placeholder="NID February 2026" required></div>
+            <div><label>Type</label>
+              <select id="campaign_type"><option value="NID">NID</option><option value="SNID">SNID</option></select>
+            </div>
+            <div><label>Start date</label><input type="date" id="start_date" required></div>
+            <div><label>End date</label><input type="date" id="end_date" required></div>
+            <div><label>Total campaign days</label><input type="number" id="total_days" value="4" min="1" required></div>
+            <div><label>District</label><input id="district" value="Layyah" required></div>
+            <div><label>Tehsil</label><input id="tehsil" value="Karor" required></div>
+            <div><label>Union council</label><input id="uc" value="Fateh Pur Urban" required></div>
+          </div>
+          <div class="error-text" id="formError" style="display:none;"></div>
+          <button type="submit" class="btn" style="margin-top:1rem;">Create campaign</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>All campaigns</h2>
+        <div class="table-wrap">
+          <table id="table">
+            <thead><tr><th>Name</th><th>Type</th><th>Dates</th><th>Days</th><th>UC</th><th>Status</th></tr></thead>
+            <tbody><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("campaigns.html");
+      await loadTable();
+    })();
+
+    document.getElementById("campaignForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("formError");
+      clearFormError(errorEl);
+      try {
+        const uc_id = await ensureUnionCouncil(
+          document.getElementById("district").value,
+          document.getElementById("tehsil").value,
+          document.getElementById("uc").value
+        );
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        const { error } = await supabaseClient.from("campaigns").insert({
+          name: document.getElementById("name").value.trim(),
+          campaign_type: document.getElementById("campaign_type").value,
+          start_date: document.getElementById("start_date").value,
+          end_date: document.getElementById("end_date").value,
+          total_days: Number(document.getElementById("total_days").value),
+          uc_id, tehsil_id: null, district_id: null,
+          created_by: user.id,
+        });
+        if (error) throw error;
+        document.getElementById("campaignForm").reset();
+        document.getElementById("total_days").value = 4;
+        await loadTable();
+      } catch (err) {
+        showFormError(errorEl, err);
+      }
+    });
+
+    async function loadTable() {
+      const { data, error } = await supabaseClient
+        .from("campaigns")
+        .select("id, name, campaign_type, start_date, end_date, total_days, status, union_councils(name)")
+        .order("start_date", { ascending: false });
+      const tbody = document.querySelector("#table tbody");
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No campaigns yet — create one above.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(c => `
+        <tr>
+          <td>${c.name}</td><td>${c.campaign_type}</td>
+          <td>${c.start_date} → ${c.end_date}</td><td>${c.total_days}</td>
+          <td>${c.union_councils?.name ?? "—"}</td>
+          <td><span class="badge ok">${c.status}</span></td>
+        </tr>
+      `).join("");
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teams & staff — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Teams &amp; staff</h1></div>
+
+      <div class="card">
+        <h2>Add staff member</h2>
+        <form id="staffForm">
+          <div class="form-grid">
+            <div><label>Full name</label><input id="s_name" required></div>
+            <div><label>CNIC</label><input id="s_cnic" placeholder="32202-XXXXXXX-X"></div>
+            <div><label>Phone</label><input id="s_phone"></div>
+            <div><label>Designation</label><input id="s_designation" placeholder="Vaccinator / Mobilizer"></div>
+            <div><label>Category</label><input id="s_category" placeholder="e.g. team leader"></div>
+          </div>
+          <div class="error-text" id="staffError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Add staff</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Add / update a team</h2>
+        <form id="teamForm">
+          <div class="form-grid">
+            <div><label>Team no.</label><input type="number" id="t_no" required></div>
+            <div><label>Type</label>
+              <select id="t_type"><option value="mobile_cbv">Mobile / CBV</option><option value="fixed">Fixed</option><option value="transit">Transit</option></select>
+            </div>
+            <div><label>District</label><input id="t_district" value="Layyah" required></div>
+            <div><label>Tehsil</label><input id="t_tehsil" value="Karor" required></div>
+            <div><label>Union council</label><input id="t_uc" value="Fateh Pur Urban" required></div>
+          </div>
+          <div class="error-text" id="teamError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Save team</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Assign a staff member to a team</h2>
+        <form id="assignForm">
+          <div class="form-grid">
+            <div><label>Team</label><select id="a_team"></select></div>
+            <div><label>Staff</label><select id="a_staff"></select></div>
+            <div><label>Role on team</label>
+              <select id="a_role"><option value="member">Member</option><option value="leader">Leader</option></select>
+            </div>
+          </div>
+          <div class="error-text" id="assignError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Assign</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Teams &amp; their members</h2>
+        <div class="table-wrap">
+          <table id="teamsTable">
+            <thead><tr><th>Team no.</th><th>Type</th><th>UC</th><th>Members</th></tr></thead>
+            <tbody><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("teams.html");
+      await Promise.all([loadTeamsTable(), populateAssignDropdowns()]);
+    })();
+
+    document.getElementById("staffForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("staffError");
+      clearFormError(err);
+      const { error } = await supabaseClient.from("staff").insert({
+        full_name: document.getElementById("s_name").value.trim(),
+        cnic: document.getElementById("s_cnic").value.trim() || null,
+        phone: document.getElementById("s_phone").value.trim() || null,
+        designation: document.getElementById("s_designation").value.trim() || null,
+        category: document.getElementById("s_category").value.trim() || null,
+      });
+      if (error) return showFormError(err, error);
+      document.getElementById("staffForm").reset();
+      await populateAssignDropdowns();
+    });
+
+    document.getElementById("teamForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("teamError");
+      clearFormError(err);
+      try {
+        const uc_id = await ensureUnionCouncil(
+          document.getElementById("t_district").value,
+          document.getElementById("t_tehsil").value,
+          document.getElementById("t_uc").value
+        );
+        const { error } = await supabaseClient.from("teams").upsert({
+          team_no: Number(document.getElementById("t_no").value),
+          team_type: document.getElementById("t_type").value,
+          uc_id,
+        }, { onConflict: "uc_id,team_no" });
+        if (error) throw error;
+        document.getElementById("teamForm").reset();
+        document.getElementById("t_district").value = "Layyah";
+        document.getElementById("t_tehsil").value = "Karor";
+        document.getElementById("t_uc").value = "Fateh Pur Urban";
+        await Promise.all([loadTeamsTable(), populateAssignDropdowns()]);
+      } catch (error) {
+        showFormError(err, error);
+      }
+    });
+
+    document.getElementById("assignForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("assignError");
+      clearFormError(err);
+      const { error } = await supabaseClient.from("team_members").upsert({
+        team_id: document.getElementById("a_team").value,
+        staff_id: document.getElementById("a_staff").value,
+        member_role: document.getElementById("a_role").value,
+      }, { onConflict: "team_id,staff_id" });
+      if (error) return showFormError(err, error);
+      await loadTeamsTable();
+    });
+
+    async function populateAssignDropdowns() {
+      const [{ data: teams }, { data: staffList }] = await Promise.all([
+        supabaseClient.from("teams").select("id, team_no").order("team_no"),
+        supabaseClient.from("staff").select("id, full_name").order("full_name"),
+      ]);
+      document.getElementById("a_team").innerHTML =
+        (teams || []).map(t => `<option value="${t.id}">Team ${t.team_no}</option>`).join("");
+      document.getElementById("a_staff").innerHTML =
+        (staffList || []).map(s => `<option value="${s.id}">${s.full_name}</option>`).join("");
+    }
+
+    async function loadTeamsTable() {
+      const { data, error } = await supabaseClient
+        .from("teams")
+        .select("id, team_no, team_type, union_councils(name), team_members(member_role, staff(full_name))")
+        .order("team_no");
+      const tbody = document.querySelector("#teamsTable tbody");
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="4" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No teams yet — add one above.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(t => `
+        <tr>
+          <td>${t.team_no}</td>
+          <td>${t.team_type.replace("_"," / ")}</td>
+          <td>${t.union_councils?.name ?? "—"}</td>
+          <td>${(t.team_members || []).map(m => `${m.staff?.full_name ?? "?"}${m.member_role === "leader" ? " (leader)" : ""}`).join(", ") || "—"}</td>
+        </tr>
+      `).join("");
+    }
+  </script>
+</body>
+</html>

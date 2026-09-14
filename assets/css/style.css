@@ -1,0 +1,169 @@
+/* ============================================================
+   Polio Campaign Dashboard — design tokens & shared styles
+   Palette drawn from EPI/field-health record-keeping: a slate
+   ledger blue for structure, a vaccine-vial teal for action and
+   status, warm amber only for things that need attention (missed
+   children, pending validation). Dense, table-first layout —
+   this is a field register, not a marketing page.
+   ============================================================ */
+
+:root {
+  --ink:        #1b2430;   /* primary text */
+  --ink-soft:   #4b5768;   /* secondary text */
+  --paper:      #f6f7f5;   /* page background */
+  --card:       #ffffff;
+  --line:       #dde2e0;
+  --slate:      #2f4858;   /* primary brand / nav */
+  --slate-dark: #21323d;
+  --teal:       #2f8f7c;   /* action / confirmed */
+  --teal-dark:  #21695b;
+  --amber:      #c98a2c;   /* attention / missed / pending */
+  --amber-bg:   #fbeed8;
+  --red:        #b3432f;
+  --red-bg:     #f8e3de;
+
+  --radius: 6px;
+  --font-ui: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+a { color: var(--teal-dark); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1, h2, h3 { font-weight: 600; margin: 0 0 0.5em; color: var(--slate-dark); }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.15rem; }
+h3 { font-size: 1rem; }
+
+button, input, select, textarea { font-family: inherit; font-size: 0.95rem; }
+
+/* ---------- Layout shell ---------- */
+.app-shell { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 220px;
+  background: var(--slate);
+  color: #dce7e4;
+  flex-shrink: 0;
+  padding: 1.25rem 0;
+}
+.sidebar .brand {
+  font-weight: 700;
+  color: #fff;
+  padding: 0 1.25rem 1.25rem;
+  font-size: 1.05rem;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+  margin-bottom: 0.75rem;
+}
+.sidebar .brand small { display: block; font-weight: 400; opacity: 0.7; font-size: 0.75rem; margin-top: 2px; }
+.sidebar nav a {
+  display: block;
+  padding: 0.55rem 1.25rem;
+  color: #cddbd8;
+  font-size: 0.9rem;
+}
+.sidebar nav a:hover, .sidebar nav a.active {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  text-decoration: none;
+}
+.sidebar .signout {
+  margin-top: 1.5rem;
+  padding: 0 1.25rem;
+}
+.sidebar .signout button {
+  width: 100%;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.25);
+  color: #dce7e4;
+  padding: 0.4rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.main { flex: 1; padding: 1.75rem 2rem; max-width: 1200px; }
+.topbar {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 1.25rem;
+}
+.topbar .who { color: var(--ink-soft); font-size: 0.85rem; }
+
+/* ---------- Cards / KPIs ---------- */
+.kpi-row { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.kpi {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0.9rem 1.1rem; min-width: 150px; flex: 1;
+}
+.kpi .value { font-size: 1.6rem; font-weight: 700; color: var(--slate-dark); }
+.kpi .label { font-size: 0.78rem; color: var(--ink-soft); margin-top: 2px; }
+.kpi.attention .value { color: var(--amber); }
+
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.25rem; margin-bottom: 1.25rem;
+}
+
+/* ---------- Forms ---------- */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem 1rem; }
+label { display: block; font-size: 0.8rem; color: var(--ink-soft); margin-bottom: 0.25rem; }
+input, select, textarea {
+  width: 100%; padding: 0.45rem 0.6rem; border: 1px solid var(--line); border-radius: var(--radius);
+  background: #fff; color: var(--ink);
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--teal); outline-offset: 1px; }
+
+.btn {
+  display: inline-block; padding: 0.5rem 1rem; border-radius: var(--radius);
+  border: 1px solid var(--teal-dark); background: var(--teal); color: #fff;
+  cursor: pointer; font-weight: 600; font-size: 0.9rem;
+}
+.btn:hover { background: var(--teal-dark); }
+.btn.secondary { background: transparent; color: var(--slate); border-color: var(--line); }
+.btn.secondary:hover { background: #eef1f0; }
+.btn.danger { background: var(--red); border-color: #8f3323; }
+
+/* ---------- Tables ---------- */
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th, td { padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--line); text-align: left; }
+th { color: var(--ink-soft); font-weight: 600; font-size: 0.78rem; text-transform: none; }
+tbody tr:hover { background: #f0f4f3; }
+.table-wrap { overflow-x: auto; }
+
+.badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+.badge.ok { background: #e1f1ec; color: var(--teal-dark); }
+.badge.attention { background: var(--amber-bg); color: var(--amber); }
+.badge.problem { background: var(--red-bg); color: var(--red); }
+
+.muted { color: var(--ink-soft); font-size: 0.85rem; }
+.empty-state { padding: 2rem 1rem; text-align: center; color: var(--ink-soft); }
+
+/* ---------- Login page ---------- */
+.login-wrap {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: var(--slate);
+}
+.login-card {
+  background: var(--card); border-radius: var(--radius); padding: 2rem 2.25rem;
+  width: 100%; max-width: 380px;
+}
+.login-card h1 { font-size: 1.25rem; }
+.login-card p.subtitle { color: var(--ink-soft); font-size: 0.85rem; margin-top: -0.5rem; margin-bottom: 1.25rem; }
+.login-card .btn { width: 100%; margin-top: 0.5rem; }
+.error-text { color: var(--red); font-size: 0.85rem; margin-top: 0.5rem; }
+
+@media (max-width: 720px) {
+  .app-shell { flex-direction: column; }
+  .sidebar { width: 100%; }
+  .main { padding: 1.25rem; }
+}

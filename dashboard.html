@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar">
+        <h1>Dashboard</h1>
+        <div class="who" id="whoText"></div>
+      </div>
+
+      <div class="kpi-row" id="kpiRow">
+        <div class="kpi"><div class="value">—</div><div class="label">Active campaigns</div></div>
+        <div class="kpi"><div class="value">—</div><div class="label">Teams</div></div>
+        <div class="kpi"><div class="value">—</div><div class="label">Households registered</div></div>
+        <div class="kpi attention"><div class="value">—</div><div class="label">Missed children (uncovered)</div></div>
+      </div>
+
+      <div class="card">
+        <h2>Campaigns</h2>
+        <div class="table-wrap">
+          <table id="campaignsTable">
+            <thead><tr><th>Name</th><th>Type</th><th>Dates</th><th>Status</th><th></th></tr></thead>
+            <tbody><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/supabaseClient.js"></script>
+  <script src="assets/js/nav.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("dashboard.html");
+
+      const profile = await loadCurrentProfile();
+      document.getElementById("whoText").textContent = profile
+        ? `${profile.full_name} · ${profile.role}`
+        : session.user.email;
+
+      await loadKpis();
+      await loadCampaigns();
+    })();
+
+    async function loadKpis() {
+      const [{ count: campaignCount }, { count: teamCount }, { count: houseCount }, { count: missedCount }] = await Promise.all([
+        supabaseClient.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "active"),
+        supabaseClient.from("teams").select("*", { count: "exact", head: true }),
+        supabaseClient.from("households").select("*", { count: "exact", head: true }),
+        supabaseClient.from("missed_children").select("*", { count: "exact", head: true }).eq("covered_this_round", false),
+      ]);
+      const values = document.querySelectorAll("#kpiRow .value");
+      values[0].textContent = campaignCount ?? 0;
+      values[1].textContent = teamCount ?? 0;
+      values[2].textContent = houseCount ?? 0;
+      values[3].textContent = missedCount ?? 0;
+    }
+
+    async function loadCampaigns() {
+      const { data, error } = await supabaseClient
+        .from("campaigns")
+        .select("id, name, campaign_type, start_date, end_date, status")
+        .order("start_date", { ascending: false });
+
+      const tbody = document.querySelector("#campaignsTable tbody");
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Couldn't load campaigns: ${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No campaigns yet. <a href="pages/campaigns.html">Create the first one</a>.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(c => `
+        <tr>
+          <td>${c.name}</td>
+          <td>${c.campaign_type}</td>
+          <td>${c.start_date} → ${c.end_date}</td>
+          <td><span class="badge ${c.status === 'active' ? 'ok' : c.status === 'closed' ? 'problem' : 'attention'}">${c.status}</span></td>
+          <td><a href="pages/team-plan.html?campaign=${c.id}">View plan</a></td>
+        </tr>
+      `).join("");
+    }
+  </script>
+</body>
+</html>

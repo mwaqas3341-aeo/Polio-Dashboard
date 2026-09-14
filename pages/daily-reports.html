@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily reports — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Daily reports (2A form)</h1></div>
+      <p class="muted">What each team actually did on a given day, against the plan — matches the "2A Form" daily reporting register.</p>
+
+      <div class="card">
+        <h2>Submit / update a day's report</h2>
+        <form id="reportForm">
+          <div class="form-grid">
+            <div><label>Campaign</label><select id="r_campaign" required></select></div>
+            <div><label>Team no.</label><input type="number" id="r_team" required></div>
+            <div><label>Campaign day</label><input type="number" id="r_day" min="1" required></div>
+            <div><label>Catch-up day?</label><select id="r_catchup"><option value="false">No</option><option value="true">Yes</option></select></div>
+            <div><label>Households visited</label><input type="number" id="r_visited" min="0" value="0"></div>
+            <div><label>Children vaccinated (1st visit)</label><input type="number" id="r_vacc" min="0" value="0"></div>
+            <div><label>Missed &lt;12m</label><input type="number" id="r_missed_u1" min="0" value="0"></div>
+            <div><label>Missed 12–59m</label><input type="number" id="r_missed_1_5" min="0" value="0"></div>
+            <div><label>Catch-up covered</label><input type="number" id="r_catchcov" min="0" value="0"></div>
+            <div><label>Still missed</label><input type="number" id="r_stillmissed" min="0" value="0"></div>
+          </div>
+          <div class="error-text" id="reportError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Save report</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Reports for a campaign</h2>
+        <label>Show campaign</label>
+        <select id="filterCampaign" style="max-width:320px;"></select>
+        <div class="table-wrap" style="margin-top:0.75rem;">
+          <table id="table">
+            <thead><tr><th>Team</th><th>Day</th><th>Visited</th><th>Vaccinated</th><th>Missed</th><th>Catch-up covered</th><th>Still missed</th></tr></thead>
+            <tbody><tr><td colspan="7" class="empty-state">Select a campaign above.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("daily-reports.html");
+      await Promise.all([
+        populateCampaignSelect(document.getElementById("r_campaign"), { includeBlank: false }),
+        populateCampaignSelect(document.getElementById("filterCampaign")),
+      ]);
+    })();
+
+    document.getElementById("reportForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("reportError");
+      clearFormError(err);
+      const campaignId = document.getElementById("r_campaign").value;
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      const { error } = await supabaseClient.from("daily_reports").upsert({
+        campaign_id: campaignId,
+        team_no: Number(document.getElementById("r_team").value),
+        campaign_day: Number(document.getElementById("r_day").value),
+        is_catchup: document.getElementById("r_catchup").value === "true",
+        households_visited: Number(document.getElementById("r_visited").value),
+        children_vaccinated_first_visit: Number(document.getElementById("r_vacc").value),
+        missed_children_under_12m: Number(document.getElementById("r_missed_u1").value),
+        missed_children_12_59m: Number(document.getElementById("r_missed_1_5").value),
+        catchup_covered: Number(document.getElementById("r_catchcov").value),
+        still_missed: Number(document.getElementById("r_stillmissed").value),
+        reported_by: user.id,
+      }, { onConflict: "campaign_id,team_no,campaign_day,is_catchup" });
+      if (error) return showFormError(err, error);
+      if (document.getElementById("filterCampaign").value === campaignId) await loadTable(campaignId);
+    });
+
+    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+
+    async function loadTable(campaignId) {
+      const tbody = document.querySelector("#table tbody");
+      if (!campaignId) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Select a campaign above.</td></tr>`;
+        return;
+      }
+      const { data, error } = await supabaseClient
+        .from("daily_reports")
+        .select("team_no, campaign_day, households_visited, children_vaccinated_first_visit, missed_children_under_12m, missed_children_12_59m, catchup_covered, still_missed")
+        .eq("campaign_id", campaignId)
+        .order("team_no").order("campaign_day");
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No daily reports submitted for this campaign yet.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(r => `
+        <tr>
+          <td>${r.team_no}</td><td>${r.campaign_day}</td><td>${r.households_visited}</td>
+          <td>${r.children_vaccinated_first_visit}</td>
+          <td>${r.missed_children_under_12m + r.missed_children_12_59m}</td>
+          <td>${r.catchup_covered}</td>
+          <td>${r.still_missed > 0 ? `<span class="badge attention">${r.still_missed}</span>` : "0"}</td>
+        </tr>
+      `).join("");
+    }
+  </script>
+</body>
+</html>

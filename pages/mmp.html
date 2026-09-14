@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MMP / CNIC list — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>MMP / CNIC list</h1></div>
+      <p class="muted">Mobile / migratory population contacts and CNICs, and which team/day they're assigned to — the source register for the campaign's CNIC list.</p>
+
+      <div class="card">
+        <h2>Add a contact</h2>
+        <form id="contactForm">
+          <div class="form-grid">
+            <div><label>Full name</label><input id="c_name" required></div>
+            <div><label>CNIC</label><input id="c_cnic" placeholder="32202-XXXXXXX-X" required></div>
+            <div><label>Phone</label><input id="c_phone"></div>
+            <div><label>Location</label><input id="c_location"></div>
+            <div><label>Area of origin</label><input id="c_origin"></div>
+          </div>
+          <div class="error-text" id="contactError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Add contact</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Assign to a campaign</h2>
+        <form id="assignForm">
+          <div class="form-grid">
+            <div><label>Campaign</label><select id="a_campaign" required></select></div>
+            <div><label>Contact</label><select id="a_contact" required></select></div>
+            <div><label>Team no.</label><input type="number" id="a_team" required></div>
+            <div><label>Campaign day</label><input type="number" id="a_day" min="1" required></div>
+            <div><label>House count</label><input type="number" id="a_houses" min="0" value="0"></div>
+            <div><label>Child count</label><input type="number" id="a_children" min="0" value="0"></div>
+          </div>
+          <div class="error-text" id="assignError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Save assignment</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>CNIC list for a campaign</h2>
+        <label>Show campaign</label>
+        <select id="filterCampaign" style="max-width:320px;"></select>
+        <div class="table-wrap" style="margin-top:0.75rem;">
+          <table id="table">
+            <thead><tr><th>Team</th><th>Day</th><th>Name</th><th>CNIC</th><th>Phone</th><th>Houses</th><th>Children</th></tr></thead>
+            <tbody><tr><td colspan="7" class="empty-state">Select a campaign above.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("mmp.html");
+      await Promise.all([
+        populateCampaignSelect(document.getElementById("a_campaign"), { includeBlank: false }),
+        populateCampaignSelect(document.getElementById("filterCampaign")),
+        populateContactSelect(),
+      ]);
+    })();
+
+    async function populateContactSelect() {
+      const { data } = await supabaseClient.from("mmp_contacts").select("id, full_name, cnic").order("full_name");
+      document.getElementById("a_contact").innerHTML = (data || []).map(c => `<option value="${c.id}">${c.full_name} (${c.cnic})</option>`).join("");
+    }
+
+    document.getElementById("contactForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("contactError");
+      clearFormError(err);
+      const { error } = await supabaseClient.from("mmp_contacts").insert({
+        full_name: document.getElementById("c_name").value.trim(),
+        cnic: document.getElementById("c_cnic").value.trim(),
+        phone: document.getElementById("c_phone").value.trim() || null,
+        location: document.getElementById("c_location").value.trim() || null,
+        area_of_origin: document.getElementById("c_origin").value.trim() || null,
+      });
+      if (error) return showFormError(err, error);
+      document.getElementById("contactForm").reset();
+      await populateContactSelect();
+    });
+
+    document.getElementById("assignForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("assignError");
+      clearFormError(err);
+      const { error } = await supabaseClient.from("mmp_assignments").upsert({
+        campaign_id: document.getElementById("a_campaign").value,
+        mmp_contact_id: document.getElementById("a_contact").value,
+        team_no: Number(document.getElementById("a_team").value),
+        campaign_day: Number(document.getElementById("a_day").value),
+        house_count: Number(document.getElementById("a_houses").value),
+        child_count: Number(document.getElementById("a_children").value),
+      }, { onConflict: "campaign_id,mmp_contact_id" });
+      if (error) return showFormError(err, error);
+      document.getElementById("assignForm").reset();
+      if (document.getElementById("filterCampaign").value === document.getElementById("a_campaign").value) {
+        await loadTable(document.getElementById("a_campaign").value);
+      }
+    });
+
+    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+
+    async function loadTable(campaignId) {
+      const tbody = document.querySelector("#table tbody");
+      if (!campaignId) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Select a campaign above.</td></tr>`;
+        return;
+      }
+      const { data, error } = await supabaseClient
+        .from("mmp_assignments")
+        .select("team_no, campaign_day, house_count, child_count, mmp_contacts(full_name, cnic, phone)")
+        .eq("campaign_id", campaignId)
+        .order("team_no").order("campaign_day");
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No contacts assigned to this campaign yet.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(r => `
+        <tr><td>${r.team_no}</td><td>${r.campaign_day}</td><td>${r.mmp_contacts.full_name}</td>
+        <td>${r.mmp_contacts.cnic ?? "—"}</td><td>${r.mmp_contacts.phone ?? "—"}</td>
+        <td>${r.house_count}</td><td>${r.child_count}</td></tr>
+      `).join("");
+    }
+  </script>
+</body>
+</html>

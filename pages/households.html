@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>House registration — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>House registration</h1></div>
+      <p class="muted">Door-to-door household census, matching the "House Registration Detail" register. This is the main input that drives the auto-generated Team Day Plan.</p>
+
+      <div class="card">
+        <h2>Add a household</h2>
+        <form id="houseForm">
+          <div class="form-grid">
+            <div><label>Campaign</label><select id="h_campaign" required></select></div>
+            <div><label>Team no.</label><input type="number" id="h_team" required></div>
+            <div><label>Campaign day</label><input type="number" id="h_day" min="1" required></div>
+            <div><label>House no.</label><input type="number" id="h_house" required></div>
+            <div><label>Head of family</label><input id="h_head" required></div>
+            <div><label>Phone</label><input id="h_phone"></div>
+            <div><label>Street / Muhalla</label><input id="h_street"></div>
+            <div><label>Children &lt;12 months</label><input type="number" id="h_u1" min="0" value="0"></div>
+            <div><label>Children 12–59 months</label><input type="number" id="h_1_5" min="0" value="0"></div>
+          </div>
+          <div class="error-text" id="houseError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Add household</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Households for a campaign</h2>
+        <label>Show campaign</label>
+        <select id="filterCampaign" style="max-width:320px;"></select>
+        <div class="table-wrap" style="margin-top:0.75rem;">
+          <table id="table">
+            <thead><tr><th>Team</th><th>Day</th><th>House #</th><th>Head of family</th><th>Street</th><th>&lt;12m</th><th>12–59m</th></tr></thead>
+            <tbody><tr><td colspan="7" class="empty-state">Select a campaign above.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("households.html");
+      await Promise.all([
+        populateCampaignSelect(document.getElementById("h_campaign"), { includeBlank: false }),
+        populateCampaignSelect(document.getElementById("filterCampaign")),
+      ]);
+    })();
+
+    document.getElementById("houseForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("houseError");
+      clearFormError(err);
+      const campaignId = document.getElementById("h_campaign").value;
+      const { error } = await supabaseClient.from("households").insert({
+        campaign_id: campaignId,
+        team_no: Number(document.getElementById("h_team").value),
+        campaign_day: Number(document.getElementById("h_day").value),
+        house_no: Number(document.getElementById("h_house").value),
+        head_of_family: document.getElementById("h_head").value.trim(),
+        phone: document.getElementById("h_phone").value.trim() || null,
+        street_muhalla: document.getElementById("h_street").value.trim() || null,
+        children_under_12m: Number(document.getElementById("h_u1").value),
+        children_12_59m: Number(document.getElementById("h_1_5").value),
+      });
+      if (error) return showFormError(err, error);
+      ["h_house","h_head","h_phone","h_street"].forEach(id => document.getElementById(id).value = "");
+      document.getElementById("h_u1").value = 0;
+      document.getElementById("h_1_5").value = 0;
+      if (document.getElementById("filterCampaign").value === campaignId) await loadTable(campaignId);
+    });
+
+    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+
+    async function loadTable(campaignId) {
+      const tbody = document.querySelector("#table tbody");
+      if (!campaignId) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Select a campaign above.</td></tr>`;
+        return;
+      }
+      const { data, error } = await supabaseClient
+        .from("households")
+        .select("team_no, campaign_day, house_no, head_of_family, street_muhalla, children_under_12m, children_12_59m")
+        .eq("campaign_id", campaignId)
+        .order("team_no").order("campaign_day").order("house_no")
+        .limit(500);
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No households registered for this campaign yet.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(r => `
+        <tr><td>${r.team_no}</td><td>${r.campaign_day}</td><td>${r.house_no}</td>
+        <td>${r.head_of_family}</td><td>${r.street_muhalla ?? "—"}</td>
+        <td>${r.children_under_12m}</td><td>${r.children_12_59m}</td></tr>
+      `).join("");
+    }
+  </script>
+</body>
+</html>
