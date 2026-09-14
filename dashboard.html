@@ -45,9 +45,11 @@
       renderSidebar("dashboard.html");
 
       const profile = await loadCurrentProfile();
-      document.getElementById("whoText").textContent = profile
-        ? `${profile.full_name} · ${profile.role}`
-        : session.user.email;
+      if (!profile) {
+        window.location.href = "setup-profile.html";
+        return;
+      }
+      document.getElementById("whoText").textContent = `${profile.full_name} · ${profile.role}`;
 
       await loadKpis();
       await loadCampaigns();

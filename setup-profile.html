@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Set up your profile — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card" style="max-width: 460px;">
+      <h1>Set up your profile</h1>
+      <p class="subtitle">One-time step — this decides what you can see and edit.</p>
+      <form id="profileForm">
+        <label>Full name</label>
+        <input id="full_name" required>
+
+        <label style="margin-top:0.75rem;">Role</label>
+        <select id="role">
+          <option value="aic">Area Incharge (AIC) — own UC only</option>
+          <option value="encoder">Encoder — data entry in own UC</option>
+          <option value="viewer">Viewer — read-only in own UC</option>
+          <option value="district_coordinator">District coordinator — whole district</option>
+          <option value="admin">Admin — everything</option>
+        </select>
+
+        <label style="margin-top:0.75rem;">District</label>
+        <input id="district" value="Layyah" required>
+        <label style="margin-top:0.75rem;">Tehsil</label>
+        <input id="tehsil" value="Karor" required>
+        <label style="margin-top:0.75rem;">Union council</label>
+        <input id="uc" value="Fateh Pur Urban" required>
+        <p class="muted" style="margin-top:0.5rem;">District coordinators and admins see everything in scope automatically — the union council above still matters for AIC, Encoder, and Viewer roles.</p>
+
+        <button type="submit" class="btn">Save and continue</button>
+        <div class="error-text" id="errorText"></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/supabaseClient.js"></script>
+  <script src="assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      const existing = await loadCurrentProfile();
+      if (existing) window.location.href = "dashboard.html";
+    })();
+
+    document.getElementById("profileForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("errorText");
+      errorEl.textContent = "";
+      try {
+        const { district_id, tehsil_id, uc_id } = await ensureGeographyIds(
+          document.getElementById("district").value,
+          document.getElementById("tehsil").value,
+          document.getElementById("uc").value
+        );
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        const role = document.getElementById("role").value;
+        const { error } = await supabaseClient.from("profiles").insert({
+          id: user.id,
+          full_name: document.getElementById("full_name").value.trim(),
+          role,
+          uc_id,
+          district_id: role === "district_coordinator" ? district_id : null,
+          tehsil_id: role === "district_coordinator" ? tehsil_id : null,
+        });
+        if (error) throw error;
+        window.location.href = "dashboard.html";
+      } catch (err) {
+        errorEl.textContent = err.message || String(err);
+      }
+    });
+  </script>
+</body>
+</html>

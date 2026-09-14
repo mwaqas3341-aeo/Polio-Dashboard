@@ -4,12 +4,23 @@ const supabaseClient = supabase.createClient(
   window.SUPABASE_CONFIG.anonKey
 );
 
-/** Redirect to login if there's no active session. Call at the top of every protected page. */
+/** Redirect to login if there's no active session, or to profile setup if
+ *  the session has no matching profiles row yet (required before any
+ *  UC-scoped table will return rows under the current RLS policies). */
 async function requireAuth() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (!session) {
     window.location.href = "/index.html";
     return null;
+  }
+  const page = window.location.pathname.split("/").pop();
+  if (page !== "setup-profile.html") {
+    const profile = await loadCurrentProfile();
+    if (!profile) {
+      const inPages = window.location.pathname.includes("/pages/");
+      window.location.href = inPages ? "../setup-profile.html" : "setup-profile.html";
+      return null;
+    }
   }
   return session;
 }

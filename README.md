@@ -75,19 +75,49 @@ supabase/migrations/
 
 ## Database
 
-19 tables + 4 views, all with RLS enabled (currently: any authenticated user
-can read/write — tighten to role/UC-scoped policies once user roles are
-assigned in `profiles`). Schema in `supabase/migrations/`, applied in order:
+19 tables + 4 views + 4 helper functions, all with RLS enabled and
+role/UC-scoped as of migration `0004`. Schema in `supabase/migrations/`,
+applied in order:
 
 - `0001_initial_schema.sql` — the 19 base tables + `team_day_plan` (the core auto-generated roll-up)
 - `0002_logistics_and_area_summary_views.sql` — `logistic_plan`, `area_incharge_summary`, `missed_children_status`
 - `0003_audit_log_triggers.sql` — DB-level triggers that write to `audit_log` on every insert/update/delete to the operational tables (not app code — can't be bypassed)
+- `0004_role_and_uc_scoped_rls.sql` — replaces the "any authenticated user" baseline policies with real scoping (see below)
+- `0005_fix_helper_function_search_path.sql` — security-lint fix for the new helper functions
 
 Key tables: `districts` → `tehsils` → `union_councils` (geography),
 `staff`/`teams`/`team_members` (HR), `campaigns`, `schools` +
 `school_assignments`, `mmp_contacts` + `mmp_assignments`, `households`,
 `missed_children`, `daily_reports`, `supervision_visits`, `ddm_cards`,
 `audit_log`.
+
+### Access model
+
+Every profile has a `role` and a `uc_id` (and, for coordinators, a
+`district_id`):
+
+| Role | Scope |
+|---|---|
+| `admin` | Everything, every UC |
+| `district_coordinator` | Every UC within their `district_id` |
+| `aic` | Read/write within their own `uc_id` |
+| `encoder` | Read + operational-data entry (households, MMP, missed children, daily reports, school assignments) within their own `uc_id` — can't manage staff/teams/campaigns |
+| `viewer` | Read-only within their own `uc_id` |
+
+Geography tables (`districts`/`tehsils`/`union_councils`) are readable by
+any signed-in user and open to insert (so a new campaign/school/team can
+register a UC that doesn't exist yet) but only an `admin` can edit or
+delete existing rows. `audit_log` is readable by `admin` and
+`district_coordinator` only, and has no direct write policy for any
+app role — only the database trigger (running as its owning role, which
+bypasses RLS) can insert into it.
+
+**First login:** a brand-new Supabase Auth user has no matching `profiles`
+row yet, and under this RLS every UC-scoped table returns nothing until
+one exists. `requireAuth()` in `assets/js/supabaseClient.js` checks for
+this and redirects to `setup-profile.html`, where the user picks their
+role and union council once; that single insert (allowed because
+`id = auth.uid()`) is what unlocks everything else.
 
 ### Assumptions made in the Logistic Plan (need your sign-off)
 
@@ -102,9 +132,12 @@ you confirm the real rule.
 
 ## Setting up an account
 
-Accounts are created in Supabase Auth (Authentication → Users), then a
-matching row is needed in `profiles` (full_name, role, uc_id) for the app to
-show a name/role. No self-service signup yet — an admin creates accounts.
+Accounts are created in Supabase Auth (Authentication → Users) — no
+self-service signup yet. The first time that person signs in, the app
+sends them to `setup-profile.html` to pick their role and union council;
+that's what determines what they can see (see "Access model" above). Make
+the very first account an `admin` so someone can see everything while the
+rest of the district's users and UCs get set up.
 
 ## Deploying
 
@@ -113,8 +146,8 @@ This is a static site — enable GitHub Pages on this repo (Settings → Pages
 
 ## Not built yet (next steps)
 
-- Role/UC-scoped RLS policies (currently open to any authenticated user)
 - DDM card generation/printing (needs the actual card template — not supplied yet)
 - Excel/PDF export matching the original report formats
 - Supervision visit forms (Desk Review / Field Validation / Tour Plan) — table exists, no entry form yet
 - Confirm the Logistic Plan assumptions above and correct the migration if needed
+- An admin UI for editing other users' profiles/roles (currently only doable directly in Supabase, or by the user themselves on first login)
