@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audit log — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Audit log</h1></div>
+      <p class="muted">Every insert/update/delete on staff, teams, campaigns, schools, MMP contacts, households, missed children, daily reports, DDM cards, and supervision visits is recorded automatically by a database trigger — nothing here is logged by the app itself, so it can't be bypassed.</p>
+
+      <div class="card">
+        <div class="form-grid">
+          <div><label>Table</label><select id="filterTable"><option value="">All tables</option></select></div>
+          <div><label>Action</label>
+            <select id="filterAction">
+              <option value="">All actions</option>
+              <option value="insert">Insert</option>
+              <option value="update">Update</option>
+              <option value="delete">Delete</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table id="table">
+            <thead><tr><th>When</th><th>Table</th><th>Action</th><th>Record</th><th>Details</th></tr></thead>
+            <tbody><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("audit-log.html");
+      await loadTable();
+    })();
+
+    document.getElementById("filterTable").addEventListener("change", loadTable);
+    document.getElementById("filterAction").addEventListener("change", loadTable);
+
+    async function loadTable() {
+      const tbody = document.querySelector("#table tbody");
+      let query = supabaseClient
+        .from("audit_log")
+        .select("created_at, table_name, action, record_id, old_value, new_value")
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      const tableFilter = document.getElementById("filterTable").value;
+      const actionFilter = document.getElementById("filterAction").value;
+      if (tableFilter) query = query.eq("table_name", tableFilter);
+      if (actionFilter) query = query.eq("action", actionFilter);
+
+      const { data, error } = await query;
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+
+      // populate table filter options once, from what's actually in the log
+      const tableSelect = document.getElementById("filterTable");
+      if (tableSelect.options.length <= 1) {
+        const { data: allTables } = await supabaseClient.from("audit_log").select("table_name");
+        const uniq = [...new Set((allTables || []).map(r => r.table_name))].sort();
+        tableSelect.innerHTML = `<option value="">All tables</option>` + uniq.map(t => `<option value="${t}">${t}</option>`).join("");
+        tableSelect.value = tableFilter;
+      }
+
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No matching audit entries.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(r => {
+        const badgeClass = r.action === "delete" ? "problem" : r.action === "update" ? "attention" : "ok";
+        const detail = r.action === "delete" ? r.old_value : r.new_value;
+        const preview = detail ? Object.entries(detail).slice(0, 3).map(([k,v]) => `${k}=${v}`).join(", ") : "—";
+        return `
+          <tr>
+            <td>${new Date(r.created_at).toLocaleString()}</td>
+            <td>${r.table_name}</td>
+            <td><span class="badge ${badgeClass}">${r.action}</span></td>
+            <td class="muted">${r.record_id ?? "—"}</td>
+            <td class="muted">${preview}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+  </script>
+</body>
+</html>

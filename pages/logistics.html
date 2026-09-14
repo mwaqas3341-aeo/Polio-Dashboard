@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logistic plan — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Logistic plan</h1></div>
+      <p class="muted">
+        Auto-computed from the Team day plan, using standard EPI conventions
+        while your Vitamin&nbsp;A capsule rule and carrier/DDM-card ratios are
+        pending confirmation (see the requirement map): <strong>blue capsule
+        → children under 12 months</strong>, <strong>red capsule → children
+        12–59 months</strong>, 1 vaccine carrier + 4 ice packs per team/day,
+        1 DDM card + 1 tally sheet per team/day. Change the assumption once
+        confirmed and every row recalculates — nothing here is hand-entered.
+      </p>
+
+      <div class="card">
+        <label>Campaign</label>
+        <select id="filterCampaign" style="max-width:320px;"></select>
+        <div class="kpi-row" id="totalsRow" style="margin-top:1rem;"></div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table id="table">
+            <thead>
+              <tr>
+                <th>Team</th><th>Day</th><th>Houses</th><th>Total children</th>
+                <th>Vaccine doses</th><th>Blue capsules</th><th>Red capsules</th>
+                <th>Carriers</th><th>Ice packs</th><th>DDM cards</th><th>Tally sheets</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="11" class="empty-state">Select a campaign above.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("logistics.html");
+      await populateCampaignSelect(document.getElementById("filterCampaign"));
+    })();
+
+    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+
+    async function loadTable(campaignId) {
+      const tbody = document.querySelector("#table tbody");
+      const totalsRow = document.getElementById("totalsRow");
+      if (!campaignId) {
+        tbody.innerHTML = `<tr><td colspan="11" class="empty-state">Select a campaign above.</td></tr>`;
+        totalsRow.innerHTML = "";
+        return;
+      }
+      const { data, error } = await supabaseClient
+        .from("logistic_plan")
+        .select("*")
+        .eq("campaign_id", campaignId)
+        .order("team_no").order("campaign_day");
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="11" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="11" class="empty-state">Nothing to compute yet — add planning inputs for this campaign first.</td></tr>`;
+        totalsRow.innerHTML = "";
+        return;
+      }
+      tbody.innerHTML = data.map(r => `
+        <tr>
+          <td>${r.team_no}</td><td>${r.campaign_day}</td><td>${r.target_households}</td>
+          <td>${r.total_children}</td><td>${r.vaccine_needed}</td>
+          <td>${r.blue_capsules_needed}</td><td>${r.red_capsules_needed}</td>
+          <td>${r.vaccine_carriers_needed}</td><td>${r.ice_packs_needed}</td>
+          <td>${r.ddm_cards_needed}</td><td>${r.tally_sheets_needed}</td>
+        </tr>
+      `).join("");
+
+      const totals = data.reduce((acc, r) => {
+        acc.vaccine += Number(r.vaccine_needed);
+        acc.blue += r.blue_capsules_needed;
+        acc.red += r.red_capsules_needed;
+        acc.carriers += r.vaccine_carriers_needed;
+        acc.ice += r.ice_packs_needed;
+        acc.ddm += r.ddm_cards_needed;
+        acc.tally += r.tally_sheets_needed;
+        return acc;
+      }, { vaccine: 0, blue: 0, red: 0, carriers: 0, ice: 0, ddm: 0, tally: 0 });
+
+      totalsRow.innerHTML = `
+        <div class="kpi"><div class="value">${totals.vaccine.toFixed(2)}</div><div class="label">Vaccine doses</div></div>
+        <div class="kpi"><div class="value">${totals.blue}</div><div class="label">Blue capsules</div></div>
+        <div class="kpi"><div class="value">${totals.red}</div><div class="label">Red capsules</div></div>
+        <div class="kpi"><div class="value">${totals.carriers}</div><div class="label">Vaccine carriers</div></div>
+        <div class="kpi"><div class="value">${totals.ice}</div><div class="label">Ice packs</div></div>
+        <div class="kpi"><div class="value">${totals.ddm}</div><div class="label">DDM cards</div></div>
+        <div class="kpi"><div class="value">${totals.tally}</div><div class="label">Tally sheets</div></div>
+      `;
+    }
+  </script>
+</body>
+</html>

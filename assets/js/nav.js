@@ -7,7 +7,10 @@ const NAV_LINKS = [
   { href: "pages/households.html", label: "House registration" },
   { href: "pages/missed-children.html", label: "Missed children" },
   { href: "pages/team-plan.html", label: "Team day plan (auto)" },
+  { href: "pages/logistics.html", label: "Logistic plan (auto)" },
+  { href: "pages/area-summary.html", label: "Area Incharge summary" },
   { href: "pages/daily-reports.html", label: "Daily reports (2A form)" },
+  { href: "pages/audit-log.html", label: "Audit log" },
 ];
 
 function renderSidebar(activeHref) {

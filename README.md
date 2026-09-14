@@ -59,7 +59,10 @@ pages/
   households.html               Door-to-door household census
   missed-children.html         Missed-children carry-forward register
   team-plan.html               ★ auto-generated plan (read-only)
+  logistics.html                ★ auto-generated logistics needs (read-only)
+  area-summary.html             ★ area-level grand totals + missed-children + field performance
   daily-reports.html            2A-form field actuals entry
+  audit-log.html                Read-only view of the DB-level audit trail
 assets/
   css/style.css                 Shared design tokens/styles
   js/config.js                  Public Supabase URL + anon key
@@ -72,15 +75,30 @@ supabase/migrations/
 
 ## Database
 
-19 tables + 1 view, all with RLS enabled (currently: any authenticated user
+19 tables + 4 views, all with RLS enabled (currently: any authenticated user
 can read/write — tighten to role/UC-scoped policies once user roles are
-assigned in `profiles`). Full schema in `supabase/migrations/0001_initial_schema.sql`.
+assigned in `profiles`). Schema in `supabase/migrations/`, applied in order:
+
+- `0001_initial_schema.sql` — the 19 base tables + `team_day_plan` (the core auto-generated roll-up)
+- `0002_logistics_and_area_summary_views.sql` — `logistic_plan`, `area_incharge_summary`, `missed_children_status`
+- `0003_audit_log_triggers.sql` — DB-level triggers that write to `audit_log` on every insert/update/delete to the operational tables (not app code — can't be bypassed)
 
 Key tables: `districts` → `tehsils` → `union_councils` (geography),
 `staff`/`teams`/`team_members` (HR), `campaigns`, `schools` +
 `school_assignments`, `mmp_contacts` + `mmp_assignments`, `households`,
 `missed_children`, `daily_reports`, `supervision_visits`, `ddm_cards`,
 `audit_log`.
+
+### Assumptions made in the Logistic Plan (need your sign-off)
+
+The source spreadsheet's blue/red capsule and carrier/DDM-card formulas were
+inconsistent between sheets (see the requirement map). To keep moving,
+`logistic_plan` currently uses standard EPI field conventions instead:
+**blue capsule → children under 12 months, red capsule → children 12–59
+months**, **1 vaccine carrier + 4 ice packs per team/day**, **1 DDM card +
+1 tally sheet per team/day**. Correct these in
+`0002_logistics_and_area_summary_views.sql` (and re-apply via Supabase) once
+you confirm the real rule.
 
 ## Setting up an account
 
@@ -97,9 +115,6 @@ This is a static site — enable GitHub Pages on this repo (Settings → Pages
 
 - Role/UC-scoped RLS policies (currently open to any authenticated user)
 - DDM card generation/printing (needs the actual card template — not supplied yet)
-- Logistic Plan page (vaccine doses/capsules/carriers — formula needs your
-  sign-off on the blue/red capsule discrepancy noted in the requirement map)
-- Area Incharge Summary roll-up page
 - Excel/PDF export matching the original report formats
-- Audit log UI (table exists; nothing writes to it yet)
-- Supervision visit forms (Desk Review / Field Validation / Tour Plan)
+- Supervision visit forms (Desk Review / Field Validation / Tour Plan) — table exists, no entry form yet
+- Confirm the Logistic Plan assumptions above and correct the migration if needed

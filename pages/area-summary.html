@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Area summary — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Area Incharge summary</h1></div>
+      <p class="muted">Area-level grand totals across every team and day — the same roll-up the source "AREA INCHARGE SUMMARY" sheet pulled from its team micro-plan totals row.</p>
+
+      <div class="card">
+        <label>Campaign</label>
+        <select id="filterCampaign" style="max-width:320px;"></select>
+      </div>
+
+      <div class="card" id="summaryCard" style="display:none;">
+        <h2>Planning totals</h2>
+        <div class="kpi-row" id="planRow"></div>
+        <h2 style="margin-top:1.5rem;">Missed-children register</h2>
+        <div class="kpi-row" id="missedRow"></div>
+        <h2 style="margin-top:1.5rem;">Field performance so far</h2>
+        <div class="kpi-row" id="actualRow"></div>
+      </div>
+      <div class="card" id="emptyCard"><div class="empty-state">Select a campaign above.</div></div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("area-summary.html");
+      await populateCampaignSelect(document.getElementById("filterCampaign"));
+    })();
+
+    document.getElementById("filterCampaign").addEventListener("change", (e) => loadSummary(e.target.value));
+
+    async function loadSummary(campaignId) {
+      const summaryCard = document.getElementById("summaryCard");
+      const emptyCard = document.getElementById("emptyCard");
+      if (!campaignId) {
+        summaryCard.style.display = "none";
+        emptyCard.style.display = "block";
+        return;
+      }
+
+      const [{ data: plan }, { data: missed }, { data: reports }] = await Promise.all([
+        supabaseClient.from("area_incharge_summary").select("*").eq("campaign_id", campaignId).maybeSingle(),
+        supabaseClient.from("missed_children_status").select("*").eq("campaign_id", campaignId).maybeSingle(),
+        supabaseClient.from("daily_reports").select("households_visited, children_vaccinated_first_visit, still_missed, catchup_covered").eq("campaign_id", campaignId),
+      ]);
+
+      if (!plan) {
+        summaryCard.style.display = "none";
+        emptyCard.style.display = "block";
+        emptyCard.querySelector(".empty-state").textContent = "Nothing to summarize yet — add planning inputs for this campaign first.";
+        return;
+      }
+      emptyCard.style.display = "none";
+      summaryCard.style.display = "block";
+
+      document.getElementById("planRow").innerHTML = `
+        <div class="kpi"><div class="value">${plan.teams_covered}</div><div class="label">Teams covered</div></div>
+        <div class="kpi"><div class="value">${plan.grand_total_children}</div><div class="label">Total children planned</div></div>
+        <div class="kpi"><div class="value">${plan.grand_vaccine_needed}</div><div class="label">Vaccine doses needed</div></div>
+        <div class="kpi"><div class="value">${plan.grand_target_households}</div><div class="label">Target households</div></div>
+      `;
+
+      document.getElementById("missedRow").innerHTML = missed ? `
+        <div class="kpi"><div class="value">${missed.total_recorded}</div><div class="label">Total on register</div></div>
+        <div class="kpi ${missed.still_missed > 0 ? 'attention' : ''}"><div class="value">${missed.still_missed}</div><div class="label">Still missed</div></div>
+        <div class="kpi"><div class="value">${missed.covered}</div><div class="label">Covered this round</div></div>
+      ` : `<div class="muted">No missed-children entries recorded yet.</div>`;
+
+      const actuals = (reports || []).reduce((acc, r) => {
+        acc.visited += r.households_visited || 0;
+        acc.vaccinated += r.children_vaccinated_first_visit || 0;
+        acc.stillMissed += r.still_missed || 0;
+        acc.catchup += r.catchup_covered || 0;
+        return acc;
+      }, { visited: 0, vaccinated: 0, stillMissed: 0, catchup: 0 });
+
+      document.getElementById("actualRow").innerHTML = (reports && reports.length) ? `
+        <div class="kpi"><div class="value">${actuals.visited}</div><div class="label">Households visited</div></div>
+        <div class="kpi"><div class="value">${actuals.vaccinated}</div><div class="label">Children vaccinated (1st visit)</div></div>
+        <div class="kpi"><div class="value">${actuals.catchup}</div><div class="label">Catch-up covered</div></div>
+        <div class="kpi ${actuals.stillMissed > 0 ? 'attention' : ''}"><div class="value">${actuals.stillMissed}</div><div class="label">Still missed (daily reports)</div></div>
+      ` : `<div class="muted">No daily reports submitted yet.</div>`;
+    }
+  </script>
+</body>
+</html>
