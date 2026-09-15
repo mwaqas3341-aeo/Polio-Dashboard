@@ -12,22 +12,35 @@
       <div class="topbar"><h1>Team targets</h1></div>
       <p class="muted">
         These are <strong>your</strong> plan numbers — set them here as the Area
-        Incharge, the way you would when preparing the micro-plan by hand. They
-        become the official target used on the 2A form, the Logistic Plan, and
-        the Area Incharge Summary. The register totals shown alongside (from
-        the School list, House registration, and MMP/CNIC assignments) are
-        there to help you decide the number — they are not set automatically.
+        Incharge. The total is always the sum of three parts —
+        <strong>school children</strong> (from the School list), <strong>household
+        children</strong> (from House registration), and <strong>MMP/HRMP
+        children</strong> (from the MMP/CNIC list) — so none of the three can be
+        left out by mistake. Pick a campaign, team, and day, then "Pull reference
+        numbers" to bring in what's already in your registers as a starting
+        point — adjust any of the three before saving if your own plan differs.
       </p>
 
       <div class="card">
         <h2>Set a target</h2>
+        <div class="form-grid">
+          <div><label>Campaign</label><select id="t_campaign" required></select></div>
+          <div><label>Team no.</label><input type="number" id="t_team" required></div>
+          <div><label>Campaign day</label><input type="number" id="t_day" min="1" required></div>
+        </div>
+        <button class="btn secondary" id="pullBtn" style="margin-top:0.75rem;">Pull reference numbers</button>
+        <p class="muted" id="pullNote" style="margin-top:0.5rem;"></p>
+
         <form id="targetForm">
-          <div class="form-grid">
-            <div><label>Campaign</label><select id="t_campaign" required></select></div>
-            <div><label>Team no.</label><input type="number" id="t_team" required></div>
-            <div><label>Campaign day</label><input type="number" id="t_day" min="1" required></div>
-            <div><label>Target households</label><input type="number" id="t_households" min="0" required></div>
-            <div><label>Target children</label><input type="number" id="t_children" min="0" required></div>
+          <div class="form-grid" style="margin-top:0.75rem;">
+            <div><label>Target school children</label><input type="number" id="t_school" min="0" value="0" required></div>
+            <div><label>Target household children</label><input type="number" id="t_household" min="0" value="0" required></div>
+            <div><label>Target MMP/HRMP children</label><input type="number" id="t_mmp" min="0" value="0" required></div>
+            <div><label>Target households (houses)</label><input type="number" id="t_households" min="0" value="0" required></div>
+          </div>
+          <div class="kpi-row" style="margin-top:0.75rem;">
+            <div class="kpi"><div class="value" id="totalPreview">0</div><div class="label">Total target children (auto-summed)</div></div>
+            <div class="kpi"><div class="value" id="vaccinePreview">0</div><div class="label">Vaccine doses needed (×1.11)</div></div>
           </div>
           <div style="margin-top:0.75rem;"><label>Notes (optional)</label><input id="t_notes" placeholder="Why you picked this number, any adjustment made"></div>
           <div class="error-text" id="targetError" style="display:none;"></div>
@@ -43,11 +56,12 @@
           <table id="table">
             <thead>
               <tr>
-                <th>Team</th><th>Day</th><th>Your target households</th><th>Your target children</th>
-                <th>Vaccine needed (×1.11)</th><th>Register total households (reference)</th><th>Register total children (reference)</th><th>Notes</th>
+                <th>Team</th><th>Day</th>
+                <th>School target</th><th>Household target</th><th>MMP/HRMP target</th><th>Total children</th>
+                <th>Target houses</th><th>Vaccine needed</th><th>Notes</th>
               </tr>
             </thead>
-            <tbody><tr><td colspan="8" class="empty-state">Select a campaign above.</td></tr></tbody>
+            <tbody><tr><td colspan="9" class="empty-state">Select a campaign above.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -76,6 +90,44 @@
       }
     })();
 
+    function updatePreview() {
+      const school = Number(document.getElementById("t_school").value) || 0;
+      const household = Number(document.getElementById("t_household").value) || 0;
+      const mmp = Number(document.getElementById("t_mmp").value) || 0;
+      const total = school + household + mmp;
+      document.getElementById("totalPreview").textContent = total;
+      document.getElementById("vaccinePreview").textContent = (total * 1.11).toFixed(2);
+    }
+    ["t_school", "t_household", "t_mmp"].forEach(id =>
+      document.getElementById(id).addEventListener("input", updatePreview)
+    );
+
+    document.getElementById("pullBtn").addEventListener("click", async () => {
+      const note = document.getElementById("pullNote");
+      const campaignId = document.getElementById("t_campaign").value;
+      const teamNo = Number(document.getElementById("t_team").value);
+      const day = Number(document.getElementById("t_day").value);
+      if (!campaignId || !teamNo || !day) {
+        note.textContent = "Choose a campaign, team, and day first.";
+        return;
+      }
+      const { data, error } = await supabaseClient
+        .from("team_day_plan").select("*")
+        .eq("campaign_id", campaignId).eq("team_no", teamNo).eq("campaign_day", day)
+        .maybeSingle();
+      if (error) { note.textContent = error.message; return; }
+      if (!data) {
+        note.textContent = "Nothing in the registers yet for this team/day — enter your target manually below.";
+        return;
+      }
+      document.getElementById("t_school").value = data.school_children;
+      document.getElementById("t_household").value = data.household_children;
+      document.getElementById("t_mmp").value = data.mmp_children;
+      document.getElementById("t_households").value = data.household_houses + data.mmp_houses;
+      updatePreview();
+      note.textContent = `Pulled from registers: ${data.school_children} school + ${data.household_children} household + ${data.mmp_children} MMP/HRMP children, ${data.household_houses + data.mmp_houses} houses. Adjust anything before saving.`;
+    });
+
     document.getElementById("targetForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const err = document.getElementById("targetError");
@@ -86,14 +138,18 @@
         campaign_id: campaignId,
         team_no: Number(document.getElementById("t_team").value),
         campaign_day: Number(document.getElementById("t_day").value),
+        target_school_children: Number(document.getElementById("t_school").value),
+        target_household_children: Number(document.getElementById("t_household").value),
+        target_mmp_children: Number(document.getElementById("t_mmp").value),
         target_households: Number(document.getElementById("t_households").value),
-        target_children: Number(document.getElementById("t_children").value),
         notes: document.getElementById("t_notes").value.trim() || null,
         set_by: user.id,
         updated_at: new Date().toISOString(),
       }, { onConflict: "campaign_id,team_no,campaign_day" });
       if (error) return showFormError(err, error);
       document.getElementById("targetForm").reset();
+      updatePreview();
+      document.getElementById("pullNote").textContent = "";
       if (document.getElementById("filterCampaign").value === campaignId) await loadTable(campaignId);
     });
 
@@ -102,7 +158,7 @@
     async function loadTable(campaignId) {
       const tbody = document.querySelector("#table tbody");
       if (!campaignId) {
-        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Select a campaign above.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="empty-state">Select a campaign above.</td></tr>`;
         return;
       }
       const { data, error } = await supabaseClient
@@ -111,19 +167,22 @@
         .eq("campaign_id", campaignId)
         .order("team_no").order("campaign_day");
       if (error) {
-        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${error.message}</td></tr>`;
         return;
       }
       if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No targets set yet for this campaign — add one above.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="empty-state">No targets set yet for this campaign — add one above.</td></tr>`;
         return;
       }
       tbody.innerHTML = data.map(r => `
         <tr>
           <td>${r.team_no}</td><td>${r.campaign_day}</td>
-          <td><strong>${r.target_households}</strong></td><td><strong>${r.target_children}</strong></td>
+          <td>${r.target_school_children}${r.target_school_children !== r.computed_school_children ? ` <span class="badge attention" title="Registers say ${r.computed_school_children}">≠ reg</span>` : ""}</td>
+          <td>${r.target_household_children}${r.target_household_children !== r.computed_household_children ? ` <span class="badge attention" title="Registers say ${r.computed_household_children}">≠ reg</span>` : ""}</td>
+          <td>${r.target_mmp_children}${r.target_mmp_children !== r.computed_mmp_children ? ` <span class="badge attention" title="Registers say ${r.computed_mmp_children}">≠ reg</span>` : ""}</td>
+          <td><strong>${r.target_children}</strong></td>
+          <td>${r.target_households}</td>
           <td>${r.vaccine_needed}</td>
-          <td class="muted">${r.computed_households}</td><td class="muted">${r.computed_total_children}</td>
           <td class="muted">${r.notes ?? ""}</td>
         </tr>
       `).join("");

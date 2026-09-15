@@ -93,6 +93,7 @@ applied in order:
 - `0007_team_member_cnic_photos_and_numbering.sql` — adds `team_members.member_no` and `staff.cnic_pic_front_path`/`cnic_pic_back_path`
 - `0008_staff_documents_storage_bucket.sql` — private Storage bucket for CNIC photos, scoped by UC via the object path
 - `0009_team_targets_table.sql` — adds `team_targets` (the AIC's manually-set plan numbers) and rebuilds `logistic_plan`/`area_incharge_summary` to roll up from it instead of the auto-computed register totals
+- `0010_include_school_and_mmp_in_targets.sql` — fixes a real gap: the register-totals reference never included MMP/HRMP counts, only School list + House registration. `team_targets` now has explicit `target_school_children`/`target_household_children`/`target_mmp_children` columns that always sum to `target_children` (a generated column), so none of the three can be silently left out
 
 Key tables: `districts` → `tehsils` → `union_councils` (geography),
 `staff` (now includes `cnic_pic_front_path`/`cnic_pic_back_path`) /`teams`/
@@ -152,6 +153,16 @@ now split in two, on request:
 
 `team_plan` is the view that joins the two: your target, plus the register
 totals alongside for comparison.
+
+**The target is always three explicit parts, not one blind number:**
+`target_school_children` + `target_household_children` +
+`target_mmp_children` = `target_children` (a generated column — you can't
+enter a total that skips one of the three). `pages/team-targets.html` has a
+"Pull reference numbers" button that fetches what's currently in the School
+list, House registration, and MMP/CNIC list for that team/day and pre-fills
+all three fields, so MMP/HRMP children specifically can't be forgotten —
+you can still edit any of the three before saving if your own plan differs
+from what's registered so far.
 
 ### Assumptions made in the Logistic Plan (need your sign-off)
 
