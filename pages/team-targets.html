@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team targets — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Team targets</h1></div>
+      <p class="muted">
+        These are <strong>your</strong> plan numbers — set them here as the Area
+        Incharge, the way you would when preparing the micro-plan by hand. They
+        become the official target used on the 2A form, the Logistic Plan, and
+        the Area Incharge Summary. The register totals shown alongside (from
+        the School list, House registration, and MMP/CNIC assignments) are
+        there to help you decide the number — they are not set automatically.
+      </p>
+
+      <div class="card">
+        <h2>Set a target</h2>
+        <form id="targetForm">
+          <div class="form-grid">
+            <div><label>Campaign</label><select id="t_campaign" required></select></div>
+            <div><label>Team no.</label><input type="number" id="t_team" required></div>
+            <div><label>Campaign day</label><input type="number" id="t_day" min="1" required></div>
+            <div><label>Target households</label><input type="number" id="t_households" min="0" required></div>
+            <div><label>Target children</label><input type="number" id="t_children" min="0" required></div>
+          </div>
+          <div style="margin-top:0.75rem;"><label>Notes (optional)</label><input id="t_notes" placeholder="Why you picked this number, any adjustment made"></div>
+          <div class="error-text" id="targetError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Save target</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Targets for a campaign</h2>
+        <label>Show campaign</label>
+        <select id="filterCampaign" style="max-width:320px;"></select>
+        <div class="table-wrap" style="margin-top:0.75rem;">
+          <table id="table">
+            <thead>
+              <tr>
+                <th>Team</th><th>Day</th><th>Your target households</th><th>Your target children</th>
+                <th>Vaccine needed (×1.11)</th><th>Register total households (reference)</th><th>Register total children (reference)</th><th>Notes</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="8" class="empty-state">Select a campaign above.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("team-targets.html");
+      await Promise.all([
+        populateCampaignSelect(document.getElementById("t_campaign"), { includeBlank: false }),
+        populateCampaignSelect(document.getElementById("filterCampaign")),
+      ]);
+      const preselect = new URLSearchParams(window.location.search).get("campaign");
+      if (preselect) {
+        document.getElementById("filterCampaign").value = preselect;
+        document.getElementById("t_campaign").value = preselect;
+        await loadTable(preselect);
+      }
+    })();
+
+    document.getElementById("targetForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("targetError");
+      clearFormError(err);
+      const campaignId = document.getElementById("t_campaign").value;
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      const { error } = await supabaseClient.from("team_targets").upsert({
+        campaign_id: campaignId,
+        team_no: Number(document.getElementById("t_team").value),
+        campaign_day: Number(document.getElementById("t_day").value),
+        target_households: Number(document.getElementById("t_households").value),
+        target_children: Number(document.getElementById("t_children").value),
+        notes: document.getElementById("t_notes").value.trim() || null,
+        set_by: user.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "campaign_id,team_no,campaign_day" });
+      if (error) return showFormError(err, error);
+      document.getElementById("targetForm").reset();
+      if (document.getElementById("filterCampaign").value === campaignId) await loadTable(campaignId);
+    });
+
+    document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
+
+    async function loadTable(campaignId) {
+      const tbody = document.querySelector("#table tbody");
+      if (!campaignId) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Select a campaign above.</td></tr>`;
+        return;
+      }
+      const { data, error } = await supabaseClient
+        .from("team_plan")
+        .select("*")
+        .eq("campaign_id", campaignId)
+        .order("team_no").order("campaign_day");
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${error.message}</td></tr>`;
+        return;
+      }
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No targets set yet for this campaign — add one above.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(r => `
+        <tr>
+          <td>${r.team_no}</td><td>${r.campaign_day}</td>
+          <td><strong>${r.target_households}</strong></td><td><strong>${r.target_children}</strong></td>
+          <td>${r.vaccine_needed}</td>
+          <td class="muted">${r.computed_households}</td><td class="muted">${r.computed_total_children}</td>
+          <td class="muted">${r.notes ?? ""}</td>
+        </tr>
+      `).join("");
+    }
+  </script>
+</body>
+</html>

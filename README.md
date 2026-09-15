@@ -58,9 +58,10 @@ pages/
   mmp.html                     MMP/CNIC contact master + campaign assignment
   households.html               Door-to-door household census
   missed-children.html         Missed-children carry-forward register
-  team-plan.html               ★ auto-generated plan (read-only)
-  logistics.html                ★ auto-generated logistics needs (read-only)
-  area-summary.html             ★ area-level grand totals + missed-children + field performance
+  team-targets.html            ★ AIC sets the plan target here (households + children per team/day)
+  team-plan.html                Register totals — reference only, not the target
+  logistics.html                 Logistic plan, driven by your targets, not the register totals
+  area-summary.html             Area-level grand totals + missed-children + field performance
   daily-reports.html            Quick data-entry table for field actuals, no roster/plan context
   two-a-form.html               ★ the actual 2A form: auto-fills header/roster/plan targets, then save + print
   supervision.html              Tour plan / field validation / desk review entry
@@ -91,6 +92,7 @@ applied in order:
 - `0006_ddm_cards_unique_constraint.sql` — one DDM card per team/day/campaign, enforced at the DB level
 - `0007_team_member_cnic_photos_and_numbering.sql` — adds `team_members.member_no` and `staff.cnic_pic_front_path`/`cnic_pic_back_path`
 - `0008_staff_documents_storage_bucket.sql` — private Storage bucket for CNIC photos, scoped by UC via the object path
+- `0009_team_targets_table.sql` — adds `team_targets` (the AIC's manually-set plan numbers) and rebuilds `logistic_plan`/`area_incharge_summary` to roll up from it instead of the auto-computed register totals
 
 Key tables: `districts` → `tehsils` → `union_councils` (geography),
 `staff` (now includes `cnic_pic_front_path`/`cnic_pic_back_path`) /`teams`/
@@ -133,6 +135,23 @@ one exists. `requireAuth()` in `assets/js/supabaseClient.js` checks for
 this and redirects to `setup-profile.html`, where the user picks their
 role and union council once; that single insert (allowed because
 `id = auth.uid()`) is what unlocks everything else.
+
+## Why targets are entered by hand, not auto-computed
+
+Originally `team_day_plan` (summed live from the School list, House
+registration, and MMP/CNIC inputs) was also used as *the* plan number. That's
+now split in two, on request:
+
+- **`team_targets`** — the Area Incharge's own number, typed in on
+  `pages/team-targets.html`, the way it's done by hand when preparing a
+  micro-plan. This is what the 2A form, Logistic Plan, and Area Incharge
+  Summary use.
+- **`team_day_plan`** (via `pages/team-plan.html`, now labeled "Register
+  totals (reference)") — still computed live from the registers, but only
+  as a cross-check while you're deciding a target, not the target itself.
+
+`team_plan` is the view that joins the two: your target, plus the register
+totals alongside for comparison.
 
 ### Assumptions made in the Logistic Plan (need your sign-off)
 

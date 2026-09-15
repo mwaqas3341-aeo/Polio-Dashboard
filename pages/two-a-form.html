@@ -53,8 +53,9 @@
           <tbody id="rosterBody"><tr><td colspan="5" class="empty-state">—</td></tr></tbody>
         </table>
 
-        <div class="section-title">Planning targets (auto-generated)</div>
+        <div class="section-title">Your team target (set on the Team Targets page)</div>
         <div class="kpi-row" id="planRow"></div>
+        <p class="muted" id="refNote" style="margin-top:0.25rem;"></p>
 
         <div class="section-title">Field actuals — fill in and save</div>
         <form id="actualsForm">
@@ -109,10 +110,10 @@
       const campaignId = document.getElementById("f_campaign").value;
       if (!campaignId) return;
       const { data } = await supabaseClient
-        .from("team_day_plan").select("team_no, campaign_day").eq("campaign_id", campaignId);
+        .from("team_targets").select("team_no, campaign_day").eq("campaign_id", campaignId);
       const teams = [...new Set((data || []).map(r => r.team_no))].sort((a, b) => a - b);
       const days = [...new Set((data || []).map(r => r.campaign_day))].sort((a, b) => a - b);
-      document.getElementById("f_team").innerHTML = teams.map(t => `<option value="${t}">Team ${t}</option>`).join("") || `<option value="">—</option>`;
+      document.getElementById("f_team").innerHTML = teams.map(t => `<option value="${t}">Team ${t}</option>`).join("") || `<option value="">— no targets set yet —</option>`;
       document.getElementById("f_day").innerHTML = days.map(d => `<option value="${d}">Day ${d}</option>`).join("") || `<option value="">—</option>`;
     }
 
@@ -134,7 +135,7 @@
 
       const [{ data: team }, { data: plan }, { data: existingReport }] = await Promise.all([
         supabaseClient.from("teams").select("id, union_councils(name)").eq("team_no", currentTeamNo).limit(1).maybeSingle(),
-        supabaseClient.from("team_day_plan").select("*").eq("campaign_id", currentCampaignId).eq("team_no", currentTeamNo).eq("campaign_day", currentDay).maybeSingle(),
+        supabaseClient.from("team_plan").select("*").eq("campaign_id", currentCampaignId).eq("team_no", currentTeamNo).eq("campaign_day", currentDay).maybeSingle(),
         supabaseClient.from("daily_reports").select("*").eq("campaign_id", currentCampaignId).eq("team_no", currentTeamNo).eq("campaign_day", currentDay).eq("is_catchup", currentIsCatchup).maybeSingle(),
       ]);
       currentTeamId = team?.id ?? null;
@@ -161,9 +162,12 @@
 
       document.getElementById("planRow").innerHTML = plan ? `
         <div class="kpi"><div class="value">${plan.target_households}</div><div class="label">Target households</div></div>
-        <div class="kpi"><div class="value">${plan.total_children}</div><div class="label">Total children</div></div>
+        <div class="kpi"><div class="value">${plan.target_children}</div><div class="label">Target children</div></div>
         <div class="kpi"><div class="value">${plan.vaccine_needed}</div><div class="label">Vaccine doses needed</div></div>
-      ` : `<div class="muted">No plan computed yet for this team/day — add schools or households for this campaign first.</div>`;
+      ` : `<div class="muted">No target set yet for this team/day — set one on the Team Targets page first.</div>`;
+      document.getElementById("refNote").textContent = plan
+        ? `For reference, your registers currently sum to ${plan.computed_households} households and ${plan.computed_total_children} children for this team/day.`
+        : "";
 
       const fields = {
         r_visited: "households_visited", r_vacc: "children_vaccinated_first_visit",

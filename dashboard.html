@@ -90,7 +90,7 @@
           <td>${c.campaign_type}</td>
           <td>${c.start_date} → ${c.end_date}</td>
           <td><span class="badge ${c.status === 'active' ? 'ok' : c.status === 'closed' ? 'problem' : 'attention'}">${c.status}</span></td>
-          <td><a href="pages/team-plan.html?campaign=${c.id}">View plan</a></td>
+          <td><a href="pages/team-targets.html?campaign=${c.id}">Set targets</a></td>
         </tr>
       `).join("");
     }

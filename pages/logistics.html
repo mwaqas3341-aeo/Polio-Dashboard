@@ -11,7 +11,7 @@
     <main class="main">
       <div class="topbar"><h1>Logistic plan</h1></div>
       <p class="muted">
-        Auto-computed from the Team day plan, using standard EPI conventions
+        Driven by your Team Targets (not the auto-computed register totals), using standard EPI conventions
         while your Vitamin&nbsp;A capsule rule and carrier/DDM-card ratios are
         pending confirmation (see the requirement map): <strong>blue capsule
         → children under 12 months</strong>, <strong>red capsule → children
@@ -73,7 +73,7 @@
       const headers = ["SR NO.", "TEAM NO.", "DAY", "TOTAL HOUSES", "TOTAL CHILDREN", "VACCINE NEEDED",
         "BLUE CAPSULES NEEDED", "RED CAPSULES NEEDED", "VACCINE CARRIER", "ICE PACKS", "DDM CARDS", "TALLY SHEETS"];
       const rows = currentLogisticsRows.map((r, i) => [
-        i + 1, r.team_no, r.campaign_day, r.target_households, r.total_children, r.vaccine_needed,
+        i + 1, r.team_no, r.campaign_day, r.target_households, r.target_children, r.vaccine_needed,
         r.blue_capsules_needed, r.red_capsules_needed, r.vaccine_carriers_needed, r.ice_packs_needed,
         r.ddm_cards_needed, r.tally_sheets_needed,
       ]);
@@ -107,7 +107,7 @@
       tbody.innerHTML = data.map(r => `
         <tr>
           <td>${r.team_no}</td><td>${r.campaign_day}</td><td>${r.target_households}</td>
-          <td>${r.total_children}</td><td>${r.vaccine_needed}</td>
+          <td>${r.target_children}</td><td>${r.vaccine_needed}</td>
           <td>${r.blue_capsules_needed}</td><td>${r.red_capsules_needed}</td>
           <td>${r.vaccine_carriers_needed}</td><td>${r.ice_packs_needed}</td>
           <td>${r.ddm_cards_needed}</td><td>${r.tally_sheets_needed}</td>
