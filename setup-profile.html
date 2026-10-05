@@ -19,8 +19,6 @@
           <option value="aic">Area Incharge (AIC) — own UC only</option>
           <option value="encoder">Encoder — data entry in own UC</option>
           <option value="viewer">Viewer — read-only in own UC</option>
-          <option value="district_coordinator">District coordinator — whole district</option>
-          <option value="admin">Admin — everything</option>
         </select>
 
         <label style="margin-top:0.75rem;">District</label>
@@ -29,7 +27,7 @@
         <input id="tehsil" value="Karor" required>
         <label style="margin-top:0.75rem;">Union council</label>
         <input id="uc" value="Fateh Pur Urban" required>
-        <p class="muted" style="margin-top:0.5rem;">District coordinators and admins see everything in scope automatically — the union council above still matters for AIC, Encoder, and Viewer roles.</p>
+        <p class="muted" style="margin-top:0.5rem;">District coordinator and Admin roles are assigned by an existing admin.</p>
 
         <button type="submit" class="btn">Save and continue</button>
         <div class="error-text" id="errorText"></div>
