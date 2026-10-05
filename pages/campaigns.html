@@ -2,112 +2,194 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Campaigns — Polio Campaign Dashboard</title>
+<title>Campaign Details — Polio Campaign Dashboard</title>
 <link rel="stylesheet" href="../assets/css/style.css">
+<style>
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:.6rem; margin:.5rem 0; }
+  .kpi { border:1px solid var(--line); border-radius:var(--radius); padding:.6rem .8rem; background:#fff; }
+  .kpi b { display:block; font-size:1.5rem; } .kpi span { font-size:.8rem; color:#666; }
+  details.uc { border:1px solid var(--line); border-radius:var(--radius); margin:.5rem 0; padding:.5rem .8rem; background:#fff; }
+  details.uc summary { cursor:pointer; font-weight:600; }
+  .daychips span { display:inline-block; margin:.2rem .3rem .2rem 0; padding:.25rem .6rem; border-radius:6px; background:#eef4f1; font-size:.85rem; }
+  .btn.small { padding:.25rem .6rem; font-size:.85rem; }
+  .btn.ghost { background:#fff; color:inherit; border:1px solid var(--line); }
+</style>
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar" id="sidebar-mount"></aside>
-    <main class="main">
-      <div class="topbar"><h1>Campaigns</h1></div>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar-mount"></aside>
+  <main class="main">
+    <div class="topbar"><h1>Campaign Details</h1></div>
 
-      <div class="card">
-        <h2>New campaign</h2>
-        <form id="campaignForm">
-          <div class="form-grid">
-            <div><label>Campaign name</label><input id="name" placeholder="NID February 2026" required></div>
-            <div><label>Type</label>
-              <select id="campaign_type"><option value="NID">NID</option><option value="SNID">SNID</option></select>
-            </div>
-            <div><label>Start date</label><input type="date" id="start_date" required></div>
-            <div><label>End date</label><input type="date" id="end_date" required></div>
-            <div><label>Total campaign days</label><input type="number" id="total_days" value="4" min="1" required></div>
-            <div><label>District</label><input id="district" value="Layyah" required></div>
-            <div><label>Tehsil</label><input id="tehsil" value="Karor" required></div>
-            <div><label>Union council</label><input id="uc" value="Fateh Pur Urban" required></div>
-          </div>
-          <div class="error-text" id="formError" style="display:none;"></div>
-          <button type="submit" class="btn" style="margin-top:1rem;">Create campaign</button>
-        </form>
-      </div>
+    <div class="card">
+      <h2>Campaigns</h2>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th></th></tr></thead>
+      <tbody id="list"><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody></table></div>
+      <button class="btn" id="newBtn" style="margin-top:.7rem;">+ New campaign</button>
+    </div>
 
-      <div class="card">
-        <h2>All campaigns</h2>
-        <div class="table-wrap">
-          <table id="table">
-            <thead><tr><th>Name</th><th>Type</th><th>Dates</th><th>Days</th><th>UC</th><th>Status</th></tr></thead>
-            <tbody><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody>
-          </table>
+    <div class="card" id="newCard" style="display:none;">
+      <h2>New campaign</h2>
+      <form id="campaignForm">
+        <div class="form-grid">
+          <div><label>Campaign name</label><input id="n_name" placeholder="NID February 2026" required></div>
+          <div><label>Type</label><select id="n_type"><option>NID</option><option>SNID</option></select></div>
+          <div><label>Start date</label><input type="date" id="n_start" required></div>
+          <div><label>End date</label><input type="date" id="n_end" required></div>
+          <div><label>District</label><input id="n_district" value="Layyah" required></div>
+          <div><label>Tehsil</label><input id="n_tehsil" value="Karor" required></div>
+          <div><label>Union council</label><input id="n_uc" value="Fateh Pur Urban" required></div>
         </div>
+        <p class="muted">Number of campaign days is worked out from the two dates.</p>
+        <div class="error-text" id="newErr" style="display:none;"></div>
+        <button class="btn" type="submit">Create campaign</button>
+        <button class="btn ghost" type="button" onclick="document.getElementById('newCard').style.display='none'">Cancel</button>
+      </form>
+    </div>
+
+    <div id="detail" style="display:none;">
+      <div class="card">
+        <h2 id="dTitle">Campaign</h2>
+        <div class="form-grid">
+          <div><label>Campaign name</label><input id="e_name"></div>
+          <div><label>Type</label><select id="e_type"><option>NID</option><option>SNID</option></select></div>
+          <div><label>Status</label><select id="e_status"><option value="planning">Planning</option><option value="active">Active</option><option value="catchup">Catch-up</option><option value="closed">Closed</option></select></div>
+          <div><label>Start date</label><input type="date" id="e_start"></div>
+          <div><label>End date</label><input type="date" id="e_end"></div>
+          <div><label>Campaign year</label><input id="e_year" disabled></div>
+          <div><label>Total campaign days</label><input id="e_days" disabled></div>
+        </div>
+        <label style="margin-top:.8rem;">Campaign days (generated from the dates)</label>
+        <div class="daychips" id="dayChips"></div>
+        <div class="error-text" id="editErr" style="display:none;"></div>
+        <button class="btn" id="saveCamp" style="margin-top:.6rem;">Save changes</button>
+        <p class="muted">Editing never creates a second campaign; reports, targets and DDM cards stay linked by day number, so they follow the new dates.</p>
       </div>
-    </main>
-  </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../assets/js/config.js"></script>
-  <script src="../assets/js/supabaseClient.js"></script>
-  <script src="../assets/js/nav.js"></script>
-  <script src="../assets/js/crud.js"></script>
-  <script>
-    (async () => {
-      const session = await requireAuth();
-      if (!session) return;
-      renderSidebar("campaigns.html");
-      await loadTable();
-    })();
+      <div class="card">
+        <h2>Operational structure (calculated live)</h2>
+        <div class="kpis" id="kpis"></div>
+        <h3>By union council</h3>
+        <p class="muted">Open a union council to see its UCMO, Area Incharges, teams and active members.</p>
+        <div id="ucList"></div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/supabaseClient.js"></script>
+<script src="../assets/js/nav.js"></script>
+<script src="../assets/js/crud.js"></script>
+<script src="../assets/js/validators.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let current = null;
+const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const diffDays = (a, b) => Math.round((new Date(b + "T00:00:00Z") - new Date(a + "T00:00:00Z")) / 864e5) + 1;
+const dayName = (iso) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", timeZone: "UTC" });
 
-    document.getElementById("campaignForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const errorEl = document.getElementById("formError");
-      clearFormError(errorEl);
-      try {
-        const uc_id = await ensureUnionCouncil(
-          document.getElementById("district").value,
-          document.getElementById("tehsil").value,
-          document.getElementById("uc").value
-        );
-        const { data: { user } } = await supabaseClient.auth.getUser();
-        const { error } = await supabaseClient.from("campaigns").insert({
-          name: document.getElementById("name").value.trim(),
-          campaign_type: document.getElementById("campaign_type").value,
-          start_date: document.getElementById("start_date").value,
-          end_date: document.getElementById("end_date").value,
-          total_days: Number(document.getElementById("total_days").value),
-          uc_id, tehsil_id: null, district_id: null,
-          created_by: user.id,
-        });
-        if (error) throw error;
-        document.getElementById("campaignForm").reset();
-        document.getElementById("total_days").value = 4;
-        await loadTable();
-      } catch (err) {
-        showFormError(errorEl, err);
-      }
-    });
+(async () => {
+  const session = await requireAuth(); if (!session) return;
+  renderSidebar("campaigns.html"); await loadList();
+})();
 
-    async function loadTable() {
-      const { data, error } = await supabaseClient
-        .from("campaigns")
-        .select("id, name, campaign_type, start_date, end_date, total_days, status, union_councils(name)")
-        .order("start_date", { ascending: false });
-      const tbody = document.querySelector("#table tbody");
-      if (error) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">${error.message}</td></tr>`;
-        return;
-      }
-      if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No campaigns yet — create one above.</td></tr>`;
-        return;
-      }
-      tbody.innerHTML = data.map(c => `
-        <tr>
-          <td>${c.name}</td><td>${c.campaign_type}</td>
-          <td>${c.start_date} → ${c.end_date}</td><td>${c.total_days}</td>
-          <td>${c.union_councils?.name ?? "—"}</td>
-          <td><span class="badge ok">${c.status}</span></td>
-        </tr>
-      `).join("");
+async function loadList() {
+  const { data, error } = await supabaseClient.from("campaigns").select("id, name, campaign_type, start_date, end_date, total_days, status").order("start_date", { ascending: false });
+  if (error) { $("list").innerHTML = `<tr><td colspan="6" class="empty-state">${esc(error.message)}</td></tr>`; return; }
+  $("list").innerHTML = data.length ? data.map(c => `<tr><td>${esc(c.name)}</td><td>${c.campaign_type}</td><td>${c.start_date} → ${c.end_date}</td><td>${c.total_days}</td>
+      <td><span class="badge ok">${c.status}</span></td><td><button class="btn small" onclick="openCampaign('${c.id}')">Open / edit</button></td></tr>`).join("")
+    : `<tr><td colspan="6" class="empty-state">No campaigns yet.</td></tr>`;
+}
+
+$("newBtn").onclick = () => { $("newCard").style.display = "block"; };
+$("campaignForm").addEventListener("submit", async (e) => {
+  e.preventDefault(); clearFormError($("newErr"));
+  try {
+    const s = $("n_start").value, en = $("n_end").value;
+    if (en < s) throw new Error("End date cannot be before the start date.");
+    const total = diffDays(s, en); if (total > 31) throw new Error("A campaign cannot be longer than 31 days.");
+    const uc_id = await ensureUnionCouncil($("n_district").value, $("n_tehsil").value, $("n_uc").value);
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data, error } = await supabaseClient.from("campaigns").insert({ name: $("n_name").value.trim(), campaign_type: $("n_type").value, start_date: s, end_date: en, total_days: total, uc_id, created_by: user.id }).select().single();
+    if (error) throw error;
+    $("campaignForm").reset(); $("newCard").style.display = "none"; await loadList(); openCampaign(data.id);
+  } catch (err) { showFormError($("newErr"), err); }
+});
+
+async function openCampaign(id) {
+  const { data, error } = await supabaseClient.from("campaigns").select("*").eq("id", id).single();
+  if (error) return alert(error.message);
+  current = data; $("detail").style.display = "block";
+  $("dTitle").textContent = data.name; $("e_name").value = data.name; $("e_type").value = data.campaign_type; $("e_status").value = data.status;
+  $("e_start").value = data.start_date; $("e_end").value = data.end_date; refreshDays();
+  $("detail").scrollIntoView({ behavior: "smooth" });
+  loadStructure();
+}
+function refreshDays() {
+  const s = $("e_start").value, e = $("e_end").value; if (!s || !e || e < s) { $("e_days").value = "—"; $("dayChips").innerHTML = "<span>Check the dates</span>"; return; }
+  const n = diffDays(s, e); $("e_year").value = s.slice(0, 4); $("e_days").value = n;
+  $("dayChips").innerHTML = Array.from({ length: n }, (_, i) => `<span><b>Day ${i + 1}</b> · ${dayName(addDays(s, i))}</span>`).join("");
+}
+$("e_start").oninput = $("e_end").oninput = refreshDays;
+
+$("saveCamp").onclick = async () => {
+  const err = $("editErr"); clearFormError(err); const btn = $("saveCamp"); btn.disabled = true;
+  try {
+    const s = $("e_start").value, en = $("e_end").value, name = $("e_name").value.trim();
+    if (!name) throw new Error("Campaign name is required.");
+    if (!s || !en || en < s) throw new Error("End date cannot be before the start date.");
+    const total = diffDays(s, en); if (total > 31) throw new Error("A campaign cannot be longer than 31 days.");
+    const lines = [];
+    if (s !== current.start_date) lines.push(`Start date: ${current.start_date} → ${s}. Day 1 becomes ${dayName(s)}; all day-numbered data (reports, targets, DDM cards) moves with it.`);
+    if (en !== current.end_date) lines.push(`End date: ${current.end_date} → ${en}.`);
+    if (total !== current.total_days) lines.push(`Campaign days: ${current.total_days} → ${total}.`);
+    if (total < current.total_days) {
+      const { data: used } = await supabaseClient.rpc("campaign_days_in_use", { p_campaign: current.id, p_new_total: total });
+      const n = (used?.daily_reports || 0) + (used?.team_targets || 0) + (used?.ddm_cards || 0);
+      if (n) lines.push(`WARNING: ${used.daily_reports} daily report(s), ${used.team_targets} team target(s) and ${used.ddm_cards} DDM card(s) belong to days after the new last day. Nothing is deleted, but they will fall outside the campaign until you extend it again.`);
     }
-  </script>
+    if (lines.length && !confirm("Apply these changes to this campaign?\n\n" + lines.join("\n\n"))) return;
+    const { data, error } = await supabaseClient.from("campaigns").update({ name, campaign_type: $("e_type").value, status: $("e_status").value, start_date: s, end_date: en, total_days: total }).eq("id", current.id).select().single();
+    if (error) throw error;
+    current = data; $("dTitle").textContent = data.name; await loadList(); alert("Campaign updated.");
+  } catch (e) { showFormError(err, e); err.style.whiteSpace = "pre-line"; } finally { btn.disabled = false; }
+};
+
+/* ---- structure: counts only on open; per-UC detail loads when expanded ---- */
+const cnt = (q) => q.then(r => r.count ?? 0);
+async function loadStructure() {
+  const S = () => supabaseClient.from("staff").select("id", { count: "exact", head: true }).eq("status", "active");
+  const T = () => supabaseClient.from("teams").select("id", { count: "exact", head: true });
+  const [ucs, ucmo, aic, drv, teams, fx, tr, mb, mem] = await Promise.all([
+    cnt(supabaseClient.from("union_councils").select("id", { count: "exact", head: true })),
+    cnt(S().eq("designation", "ucmo")), cnt(S().eq("designation", "aic")), cnt(S().eq("designation", "driver")),
+    cnt(T()), cnt(T().eq("team_type", "fixed")), cnt(T().eq("team_type", "transit")), cnt(T().eq("team_type", "mobile")),
+    cnt(supabaseClient.from("team_members").select("id", { count: "exact", head: true }).eq("active", true))]);
+  const k = (n, l) => `<div class="kpi"><b>${n}</b><span>${l}</span></div>`;
+  $("kpis").innerHTML = k(ucs, "Union councils") + k(ucmo, "UCMOs") + k(aic, "Area Incharges") + k(drv, "Drivers") + k(teams, "Teams") + k(fx, "Fixed teams") + k(tr, "Transit teams") + k(mb, "Mobile teams") + k(mem, "Active team members");
+  const { data: list } = await supabaseClient.from("union_councils").select("id, name").order("name");
+  $("ucList").innerHTML = (list || []).map(u => `<details class="uc" data-uc="${u.id}"><summary>${esc(u.name)}</summary><div class="body muted">Loading…</div></details>`).join("") || `<p class="muted">No union councils yet.</p>`;
+  document.querySelectorAll("details.uc").forEach(d => d.addEventListener("toggle", () => { if (d.open && !d.dataset.loaded) { d.dataset.loaded = 1; loadUc(d); } }));
+}
+async function loadUc(d) {
+  const uc = d.dataset.uc, body = d.querySelector(".body");
+  const [{ data: staff }, { data: teams }] = await Promise.all([
+    supabaseClient.from("staff").select("id, full_name, designation, aic_no, can_have_driver, status").eq("uc_id", uc).in("designation", ["ucmo", "aic", "driver"]).eq("status", "active").order("aic_no"),
+    supabaseClient.from("teams").select("id, team_no, team_type, aic_staff_id, team_members(active, member_no, staff(full_name))").eq("uc_id", uc).order("team_no")]);
+  const ucmo = (staff || []).find(s => s.designation === "ucmo"), aics = (staff || []).filter(s => s.designation === "aic"), drivers = (staff || []).filter(s => s.designation === "driver");
+  const tl = (teams || []).map(t => ({ ...t, active: (t.team_members || []).filter(m => m.active).sort((a, b) => a.member_no - b.member_no) }));
+  const typ = (t) => ({ fixed: "Fixed", transit: "Transit", mobile: "Mobile" })[t];
+  const unassigned = tl.filter(t => !t.aic_staff_id);
+  body.classList.remove("muted");
+  body.innerHTML = `<p><b>UCMO:</b> ${ucmo ? esc(ucmo.full_name) : "<i>not assigned</i>"} &nbsp;·&nbsp; <b>AICs:</b> ${aics.length} &nbsp;·&nbsp; <b>Teams:</b> ${tl.length}</p>` +
+    (aics.map(a => { const mine = tl.filter(t => t.aic_staff_id === a.id);
+      return `<div style="margin:.6rem 0;"><b>AIC ${String(a.aic_no).padStart(2, "0")}</b> — ${esc(a.full_name)}${a.can_have_driver ? " · driver assigned" : ""} · ${mine.length} team(s)
+        <div class="table-wrap"><table><thead><tr><th>Team No.</th><th>Type</th><th>Active members</th><th>Status</th></tr></thead><tbody>
+        ${mine.length ? mine.map(t => `<tr><td>${String(t.team_no).padStart(2, "0")}</td><td>${typ(t.team_type)}</td><td>${t.active.map(m => esc(m.staff.full_name)).join(", ") || "—"} (${t.active.length}/2)</td><td>${t.active.length === 2 ? "Complete" : t.active.length ? "Incomplete" : "Empty"}</td></tr>`).join("") : `<tr><td colspan="4" class="empty-state">No teams yet</td></tr>`}
+        </tbody></table></div></div>`; }).join("") || `<p class="muted">No Area Incharge yet.</p>`) +
+    (unassigned.length ? `<p class="muted">Teams without an AIC: ${unassigned.map(t => t.team_no).join(", ")}</p>` : "");
+}
+</script>
 </body>
 </html>
