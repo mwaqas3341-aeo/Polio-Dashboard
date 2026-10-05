@@ -1,0 +1,32 @@
+name: Supabase heartbeat
+
+# Move this file to .github/workflows/heartbeat.yml on the main branch (see README note).
+# Pings the Supabase REST API so the free-tier project is not paused for inactivity.
+on:
+  schedule:
+    - cron: "17 */12 * * *"   # every 12 hours
+  workflow_dispatch: {}        # manual "Run workflow" button
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ping Supabase (database round-trip)
+        run: |
+          set -euo pipefail
+          URL=$(grep -o 'https://[a-z0-9]*\.supabase\.co' assets/js/config.js | head -1)
+          KEY=$(grep -o 'eyJ[A-Za-z0-9_.-]*\|sb_publishable_[A-Za-z0-9_-]*' assets/js/config.js | head -1)
+          [ -n "$URL" ] && [ -n "$KEY" ] || { echo "Could not read URL/key from assets/js/config.js"; exit 1; }
+          for i in 1 2 3; do
+            CODE=$(curl -s -o /tmp/out.txt -w '%{http_code}' --max-time 30 \
+              "$URL/rest/v1/districts?select=id&limit=1" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" || echo 000)
+            echo "attempt $i: HTTP $CODE"
+            if [ "$CODE" = "200" ]; then echo "Supabase is alive"; exit 0; fi
+            sleep 20
+          done
+          echo "::error::Supabase did not answer with HTTP 200 - project may be paused. Restore it in the Supabase dashboard."
+          exit 1
