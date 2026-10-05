@@ -2,92 +2,79 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Staff Management — Polio Campaign Dashboard</title>
+<title>Staff — Polio Campaign Dashboard</title>
 <link rel="stylesheet" href="../assets/css/style.css">
 <style>
-  .steps { display:flex; gap:.5rem; flex-wrap:wrap; margin:.25rem 0 1rem; }
-  .steps .pill { padding:.35rem .8rem; border-radius:999px; border:1px solid var(--line); background:#fff; cursor:pointer; font-size:.9rem; }
-  .steps .pill.on { background:var(--primary, #1a7f5a); color:#fff; border-color:transparent; }
+  .hdr { display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; }
+  .hdr > div { min-width:14rem; flex:1; }
+  .board .ucmo { border:2px solid #1a7f5a; border-radius:var(--radius); padding:.8rem 1rem; background:#f2faf6; }
+  .big { font-size:1.05rem; font-weight:600; }
+  .bar { height:.5rem; background:#e3e8e6; border-radius:99px; overflow:hidden; margin:.2rem 0 .5rem; } .bar i { display:block; height:100%; background:#1a7f5a; }
+  .aic { border:1px solid var(--line); border-radius:var(--radius); margin:.7rem 0; padding:.7rem .9rem; background:#fff; }
+  .aic.empty { background:#fafafa; border-style:dashed; display:flex; justify-content:space-between; align-items:center; color:#666; }
+  .team { border-top:1px dashed var(--line); padding:.5rem 0; }
+  .team .slots { display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-top:.3rem; }
+  @media (max-width:640px) { .team .slots { grid-template-columns:1fr; } }
+  .slot { border:1px solid var(--line); border-radius:8px; padding:.45rem .6rem; background:#fbfcfc; font-size:.92rem; }
+  .slot.free { border-style:dashed; color:#777; display:flex; justify-content:space-between; align-items:center; }
+  .tag { display:inline-block; padding:.1rem .5rem; border-radius:99px; font-size:.75rem; background:#e8efed; margin-left:.3rem; }
+  .btn.small { padding:.25rem .65rem; font-size:.85rem; } .btn.ghost { background:#fff; color:inherit; border:1px solid var(--line); }
+  .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); overflow:auto; padding:1rem; z-index:50; }
+  .panel { background:#fff; max-width:760px; margin:0 auto; padding:1rem 1.2rem 1.4rem; border-radius:12px; }
+  .panel h2 { margin-top:0; }
   .sect { border:1px solid var(--line); border-radius:var(--radius); padding:.8rem; margin-top:.9rem; background:#fbfcfc; }
   .sect h3 { margin:0 0 .5rem; font-size:1rem; }
   .chips span { display:inline-block; margin:.15rem .3rem .15rem 0; padding:.15rem .55rem; border-radius:999px; font-size:.8rem; background:#eee; }
   .chips .good { background:#dff3e8; color:#14633f; } .chips .bad { background:#fde2e1; color:#9b1c1c; } .chips .na { background:#eef0f2; color:#555; }
-  .aicgrid { display:grid; grid-template-columns:repeat(10,1fr); gap:.3rem; max-width:34rem; }
-  .aicgrid button { padding:.35rem 0; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; }
-  .aicgrid button.taken { background:#f1d6d6; color:#777; cursor:not-allowed; text-decoration:line-through; }
-  .aicgrid button.sel { background:#1a7f5a; color:#fff; }
+  .types { display:flex; gap:.6rem; flex-wrap:wrap; } .types button { flex:1; min-width:6rem; padding:.7rem; border:2px solid var(--line); border-radius:10px; background:#fff; cursor:pointer; font-size:1rem; }
+  .types button.sel { border-color:#1a7f5a; background:#e6f5ee; font-weight:600; }
+  .numgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(3rem,1fr)); gap:.3rem; }
+  .numgrid button { padding:.4rem 0; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; }
+  .numgrid button.taken { background:#f1d6d6; color:#888; cursor:not-allowed; text-decoration:line-through; } .numgrid button.sel { background:#1a7f5a; color:#fff; }
   .docbox { display:inline-block; vertical-align:top; margin:.4rem 1rem .4rem 0; min-width:15rem; }
   .docbox img { max-width:100%; width:85.6mm; height:auto; border:1px solid #999; border-radius:3mm; display:block; margin:.3rem 0; }
   .radios label { display:block; font-weight:normal; margin:.25rem 0; }
-  .btn.small { padding:.25rem .6rem; font-size:.85rem; }
-  .btn.ghost { background:#fff; color:inherit; border:1px solid var(--line); }
-  td .btn { margin:.1rem .1rem .1rem 0; }
+  details.more { margin-top:.6rem; } details.more summary { cursor:pointer; color:#1a7f5a; }
 </style>
 </head>
 <body>
 <div class="app-shell">
   <aside class="sidebar" id="sidebar-mount"></aside>
   <main class="main">
-    <div class="topbar"><h1>Staff Management</h1></div>
-
-    <!-- ===== Filters / list ===== -->
-    <div class="card">
-      <div class="form-grid">
-        <div><label>Union council</label><select id="fUc"></select></div>
-        <div><label>Designation</label>
-          <select id="fDes"><option value="">All</option><option value="ucmo">UCMO</option><option value="aic">Area Incharge</option><option value="team_member">Team Member</option><option value="driver">Driver</option></select></div>
-        <div><label>Status</label>
-          <select id="fStatus"><option value="">All</option><option value="active">Active</option><option value="reserve">Reserve</option><option value="left_campaign">Left campaign</option><option value="replaced">Replaced</option><option value="transferred">Transferred</option><option value="inactive">Inactive</option></select></div>
-        <div><label>Search name / CNIC</label><input id="fQ" placeholder="name or CNIC"></div>
-      </div>
-      <button class="btn" id="addBtn" style="margin-top:.75rem;">+ Add staff</button>
-      <button class="btn ghost" id="ucHistBtn" style="margin-top:.75rem;">Adjustment history (this UC)</button>
-    </div>
-
-    <!-- ===== Add / edit form ===== -->
-    <div class="card" id="formCard" style="display:none;">
-      <h2 id="formTitle">Add staff</h2>
-      <div class="form-grid">
-        <div><label>1. Campaign (recorded in adjustment history)</label><select id="campSel"></select></div>
-        <div><label>2. Union council</label><select id="ucSel"></select></div>
-      </div>
-      <label style="margin-top:.8rem;">3. Designation</label>
-      <div class="steps" id="desPills">
-        <span class="pill" data-d="ucmo">UCMO</span><span class="pill" data-d="aic">Area Incharge</span>
-        <span class="pill" data-d="team_member">Team Member</span><span class="pill" data-d="driver">Driver</span>
-      </div>
-
-      <div id="dynForm"></div>
-      <div class="error-text" id="formErr" style="display:none;"></div>
-      <div id="formBtns" style="margin-top:1rem;display:none;">
-        <button class="btn" id="saveBtn">Save</button>
-        <button class="btn ghost" id="cancelBtn">Close</button>
-      </div>
-    </div>
-
-    <!-- ===== Team adjustment ===== -->
-    <div class="card" id="adjCard" style="display:none;">
-      <h2>Team Adjustment</h2>
-      <div id="adjBody"></div>
-    </div>
-
-    <!-- ===== History ===== -->
-    <div class="card" id="histCard" style="display:none;">
-      <h2 id="histTitle">History</h2>
-      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Staff</th><th>Type</th><th>From</th><th>To</th><th>Reason</th></tr></thead><tbody id="histBody"></tbody></table></div>
-      <button class="btn ghost small" id="histMore" style="display:none;">Load more</button>
-    </div>
+    <div class="topbar"><h1>Staff</h1></div>
 
     <div class="card">
-      <div class="table-wrap">
-        <table><thead><tr><th>Name</th><th>Designation</th><th>CNIC</th><th>Cell</th><th>Reports to / team</th><th>CNIC images</th><th>Status</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="8" class="empty-state">Loading…</td></tr></tbody></table>
+      <div class="hdr">
+        <div><label>Union council</label><select id="ucSel"></select></div>
+        <div><label>Working in campaign</label><select id="campSel"></select></div>
       </div>
-      <div style="margin-top:.6rem;"><button class="btn ghost small" id="prevP">‹ Previous</button> <span class="muted" id="pageInfo"></span> <button class="btn ghost small" id="nextP">Next ›</button></div>
+      <p class="muted" style="margin:.6rem 0 0;">Staff, Area Incharges and teams stay in the system from one campaign to the next. When a new campaign starts, everyone carries over — just change what is different.</p>
+    </div>
+
+    <div class="board" id="board"><div class="card"><p class="muted">Loading…</p></div></div>
+
+    <div class="card">
+      <details id="waitBox"><summary class="big">People not on a team (waiting list, left, replaced)</summary><div id="waitList" class="muted" style="margin-top:.6rem;">Loading…</div></details>
+    </div>
+    <div class="card">
+      <details id="findBox"><summary class="big">Find any staff member</summary>
+        <div class="form-grid" style="margin-top:.6rem;">
+          <div><label>Type</label><select id="fDes"><option value="">All</option><option value="ucmo">UCMO</option><option value="aic">Area Incharge</option><option value="team_member">Team Member</option><option value="driver">Driver</option></select></div>
+          <div><label>Status</label><select id="fStatus"><option value="">All</option><option value="active">Active</option><option value="reserve">Reserve</option><option value="left_campaign">Left campaign</option><option value="replaced">Replaced</option><option value="transferred">Transferred</option><option value="inactive">Inactive</option></select></div>
+          <div><label>Name or CNIC</label><input id="fQ" placeholder="search"></div>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Name</th><th>Type</th><th>CNIC</th><th>Cell</th><th>Team</th><th>Status</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+        <button class="btn ghost small" id="prevP">‹ Previous</button> <span class="muted" id="pageInfo"></span> <button class="btn ghost small" id="nextP">Next ›</button>
+      </details>
     </div>
     <datalist id="bankList"></datalist>
   </main>
 </div>
+
+<div class="overlay" id="overlay"><div class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;"><h2 id="panelTitle"></h2><button class="btn ghost small" onclick="closePanel()">✕ Close</button></div>
+  <div id="panelBody"></div>
+</div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../assets/js/config.js"></script>
@@ -97,479 +84,409 @@
 <script src="../assets/js/validators.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-const PAGE = 25;
-let banks = [], page = 0, editing = null, designation = null, selAicNo = null, existingDriver = null, histScope = null, histPage = 0;
+const PAGE = 15;
+let banks = [], ctx = null, B = null /* board data */, page = 0, selNum = null, selType = null, existingDriver = null, adjStaff = null, histScope = null, histPage = 0;
 
-/* ---------- helpers ---------- */
+/* ---------- small helpers ---------- */
 function friendly(err) {
   const m = err?.message || String(err);
   if (/staff_cnic_key|duplicate key.*cnic/i.test(m)) return "This CNIC is already registered in the system.";
-  if (/staff_aic_no_uniq/i.test(m)) return "That AIC number is already used in this union council.";
+  if (/staff_aic_no_uniq/i.test(m)) return "That AIC number is already taken in this union council.";
   if (/staff_one_ucmo_per_uc/i.test(m)) return "This union council already has an active UCMO.";
-  if (/staff_aic_no_check/i.test(m)) return "AIC number must be between 1 and 20.";
   if (/staff_iban_format_check/i.test(m)) return "The IBAN failed the checksum / format check.";
   if (/staff_phone_format_check/i.test(m)) return "Cell number must look like 03XX-XXXXXXX.";
   if (/staff_cnic_format_check/i.test(m)) return "CNIC must look like XXXXX-XXXXXXX-X.";
-  if (/staff_payment_pair_check/i.test(m)) return "Wallet number and wallet type must be given together.";
   if (/teams_uc_id_team_no_key|duplicate key.*team_no/i.test(m)) return "That team number already exists in this union council.";
   if (/row-level security/i.test(m)) return "You are not allowed to do this for this union council.";
   return m.replace(/^.*?TEAM_FULL: /, "");
 }
 const bankLabel = (b) => `${b.code} — ${b.name}`;
-const bankFromInput = (v) => { v = (v || "").trim(); if (!v) return null;
-  const code = v.split(" — ")[0].trim().toUpperCase();
+const bankFromInput = (v) => { v = (v || "").trim(); if (!v) return null; const code = v.split(" — ")[0].trim().toUpperCase();
   return banks.find(b => b.code === code) || banks.find(b => b.name.toLowerCase() === v.toLowerCase()) || null; };
-const ucId = () => $("ucSel").value;
 const badge = (s) => `<span class="badge ${s === "active" ? "ok" : "attention"}">${STATUS_LABEL[s] || s}</span>`;
+const typeName = (t) => (TEAM_TYPES.find(x => x[0] === t) || [, t])[1];
+const ucId = () => $("ucSel").value;
+const campId = () => $("campSel").value || null;
+function openPanel(title, html) { $("panelTitle").textContent = title; $("panelBody").innerHTML = html; $("overlay").style.display = "block"; document.body.style.overflow = "hidden"; $("overlay").scrollTop = 0; }
+function closePanel() { $("overlay").style.display = "none"; document.body.style.overflow = ""; ctx = null; }
+const errBox = () => `<div class="error-text" id="pErr" style="display:none;white-space:pre-line;"></div>`;
+const showErr = (e) => { const el = $("pErr"); el.textContent = friendly(e); el.style.display = "block"; el.scrollIntoView({ block: "nearest" }); };
 
 /* ---------- init ---------- */
 (async () => {
   const session = await requireAuth(); if (!session) return;
   renderSidebar("staff.html");
-  const [{ data: ucs }, { data: bk }] = await Promise.all([
+  const [{ data: ucs }, { data: bk }, { data: camps }] = await Promise.all([
     supabaseClient.from("union_councils").select("id, name").order("name"),
     supabaseClient.from("banks").select("code, name, iban_code").order("name"),
-  ]);
+    supabaseClient.from("campaigns").select("id, name, status, start_date").order("start_date", { ascending: false })]);
   banks = bk || [];
   $("bankList").innerHTML = banks.map(b => `<option value="${esc(bankLabel(b))}">`).join("");
-  const opts = (ucs || []).map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join("");
-  $("fUc").innerHTML = opts; $("ucSel").innerHTML = opts;
-  await populateCampaignSelect($("campSel"));
-  $("campSel").insertAdjacentHTML("afterbegin", `<option value="">(no campaign)</option>`);
-  $("campSel").selectedIndex = $("campSel").options.length > 2 ? 1 : 0;
-  if (!(ucs || []).length) $("rows").innerHTML = `<tr><td colspan="8" class="empty-state">No union council yet — create a campaign first (Campaigns page) so a union council exists.</td></tr>`;
-  else await loadRows();
+  $("ucSel").innerHTML = (ucs || []).map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join("");
+  $("campSel").innerHTML = `<option value="">(none)</option>` + (camps || []).map(c => `<option value="${c.id}">${esc(c.name)}${c.status === "closed" ? " (closed)" : ""}</option>`).join("");
+  const cur = (camps || []).find(c => c.status !== "closed") || (camps || [])[0]; if (cur) $("campSel").value = cur.id;
+  if (!(ucs || []).length) { $("board").innerHTML = `<div class="card"><p>No union council exists yet. Create a campaign first (Campaign Details) — that creates the union council.</p></div>`; return; }
+  $("ucSel").onchange = () => { page = 0; loadBoard(); loadRows(); $("waitBox").open = false; };
+  await loadBoard(); loadRows();
 })();
-["fUc","fDes","fStatus"].forEach(i => $(i).addEventListener("change", () => { page = 0; loadRows(); }));
-let qT; $("fQ").addEventListener("input", () => { clearTimeout(qT); qT = setTimeout(() => { page = 0; loadRows(); }, 300); });
-$("prevP").onclick = () => { if (page > 0) { page--; loadRows(); } };
-$("nextP").onclick = () => { page++; loadRows(); };
-$("ucHistBtn").onclick = () => openHistory({ uc: $("fUc").value, title: "Adjustment history — this union council" });
 
-/* ---------- list ---------- */
-async function loadRows() {
-  let q = supabaseClient.from("staff")
-    .select("id, uc_id, full_name, cnic, phone, designation, status, aic_no, aic_staff_id, can_have_driver, cnic_pic_front_path, cnic_pic_back_path, aic:aic_staff_id(full_name, aic_no), team_members(active, member_no, teams(team_no, team_type))", { count: "exact" })
-    .eq("uc_id", $("fUc").value).order("designation").order("aic_no", { nullsFirst: false }).order("full_name")
-    .range(page * PAGE, page * PAGE + PAGE - 1);
-  if ($("fDes").value) q = q.eq("designation", $("fDes").value);
-  if ($("fStatus").value) q = q.eq("status", $("fStatus").value);
-  const s = $("fQ").value.trim().replace(/[%,()]/g, "");
-  if (s) q = q.or(`full_name.ilike.%${s}%,cnic.ilike.%${s}%`);
-  const { data, error, count } = await q;
-  if (error) { $("rows").innerHTML = `<tr><td colspan="8" class="empty-state">${esc(error.message)}</td></tr>`; return; }
-  $("pageInfo").textContent = `${count ? page * PAGE + 1 : 0}–${Math.min((page + 1) * PAGE, count || 0)} of ${count || 0}`;
-  $("prevP").disabled = page === 0; $("nextP").disabled = (page + 1) * PAGE >= (count || 0);
-  if (!data.length) { $("rows").innerHTML = `<tr><td colspan="8" class="empty-state">No staff match.</td></tr>`; return; }
-  $("rows").innerHTML = data.map(r => {
-    const tm = (r.team_members || []).find(m => m.active);
-    const rep = r.designation === "aic" ? `AIC ${r.aic_no}${r.can_have_driver ? " (has driver)" : ""}`
-      : r.designation === "ucmo" ? "—"
-      : `${r.aic ? "AIC " + r.aic.aic_no + " · " + esc(r.aic.full_name) : "—"}${r.designation === "team_member" ? (tm ? ` · Team ${tm.teams.team_no} (${tm.teams.team_type})` : " · no team") : ""}`;
-    const docs = r.designation === "team_member"
-      ? `Front: ${r.cnic_pic_front_path ? "Uploaded ✓" : "<b>Missing</b>"}<br>Back: ${r.cnic_pic_back_path ? "Uploaded ✓" : "<b>Missing</b>"}` : "—";
-    return `<tr><td>${esc(r.full_name)}</td><td>${DESIGNATIONS[r.designation]}</td><td>${esc(r.cnic)}</td><td>${esc(r.phone)}</td>
-      <td>${rep}</td><td>${docs}</td><td>${badge(r.status)}</td>
-      <td><button class="btn small" onclick="openEdit('${r.id}')">Edit</button>
-      ${r.designation === "team_member" ? `<button class="btn small ghost" onclick="openAdjust('${r.id}')">Adjust</button>` : ""}
-      <button class="btn small ghost" onclick="openHistory({staff:'${r.id}', title:'History — ${esc(r.full_name).replace(/'/g, "")}'})">History</button></td></tr>`;
-  }).join("");
+/* ---------- the board ---------- */
+async function loadBoard() {
+  const uc = ucId();
+  const [{ data: plan }, { data: people }, { data: teams }] = await Promise.all([
+    supabaseClient.from("uc_plans").select("total_aics, total_teams").eq("uc_id", uc).maybeSingle(),
+    supabaseClient.from("staff").select("id, uc_id, full_name, cnic, phone, designation, status, aic_no, aic_staff_id, can_have_driver").eq("uc_id", uc).in("designation", ["ucmo", "aic", "driver"]).order("aic_no"),
+    supabaseClient.from("teams").select("id, team_no, team_type, aic_staff_id, team_members(id, active, member_no, staff(id, full_name, phone, status, cnic_pic_front_path, cnic_pic_back_path))").eq("uc_id", uc).order("team_no")]);
+  const ucmo = (people || []).find(p => p.designation === "ucmo" && p.status === "active") || null;
+  const aics = (people || []).filter(p => p.designation === "aic");
+  const drivers = (people || []).filter(p => p.designation === "driver" && p.status !== "inactive");
+  B = { uc, plan, ucmo, aics, drivers, teams: (teams || []).map(t => ({ ...t, active: (t.team_members || []).filter(m => m.active).sort((a, b) => a.member_no - b.member_no) })) };
+  renderBoard();
+}
+function renderBoard() {
+  const { plan, ucmo, aics, drivers, teams } = B;
+  if (!ucmo) { $("board").innerHTML = `<div class="card"><h2>Step 1 — Add the UCMO</h2><p>Start with the UCMO of this union council. You will be asked how many Area Incharges and how many teams there will be.</p>
+      <button class="btn" onclick="openPerson({kind:'ucmo'})">+ Add UCMO</button></div>`; return; }
+  const nA = plan?.total_aics ?? Math.max(0, ...aics.map(a => a.aic_no)), nT = plan?.total_teams ?? Math.max(0, ...teams.map(t => t.team_no));
+  const haveA = aics.length, haveT = teams.length, pc = (a, b) => b ? Math.min(100, Math.round(a * 100 / b)) : 0;
+  let h = `<div class="card ucmo"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
+      <div><span class="tag">UCMO</span> <span class="big">${esc(ucmo.full_name)}</span><br><span class="muted">${esc(ucmo.phone)}</span></div>
+      <div><button class="btn small" onclick="openPerson({kind:'ucmo',staff:'${ucmo.id}'})">Edit</button> <button class="btn small ghost" onclick="openPlan()">Change numbers</button></div></div>
+      <div style="margin-top:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div>Area Incharges: <b>${haveA}</b> of ${nA}<div class="bar"><i style="width:${pc(haveA, nA)}%"></i></div></div>
+        <div>Teams: <b>${haveT}</b> of ${nT}<div class="bar"><i style="width:${pc(haveT, nT)}%"></i></div></div></div></div>`;
+  if (!plan) h += `<div class="card"><b>Tell the system how many Area Incharges and teams this union council will have.</b> <button class="btn small" onclick="openPlan()">Set the numbers</button></div>`;
+  for (let n = 1; n <= nA; n++) {
+    const a = aics.find(x => x.aic_no === n);
+    if (!a) { h += `<div class="aic empty"><span><b>AIC ${n}</b> — not added yet</span><button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n}})">+ Add AIC ${n}</button></div>`; continue; }
+    const drv = drivers.find(d => d.aic_staff_id === a.id), mine = teams.filter(t => t.aic_staff_id === a.id);
+    h += `<div class="aic"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
+        <div><span class="tag">AIC ${n}</span> <span class="big">${esc(a.full_name)}</span> ${a.status !== "active" ? badge(a.status) : ""}<br><span class="muted">${esc(a.phone)}</span></div>
+        <div><button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n},staff:'${a.id}'})">Edit</button>
+          <button class="btn small ghost" onclick="openTeamPicker('${a.id}')">+ Add team</button></div></div>
+      <div style="margin-top:.3rem;">Driver: ${drv ? `${esc(drv.full_name)} <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n},staff:'${drv.id}'})">Edit</button>`
+        : `<span class="muted">none</span> <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n}})">+ Add driver</button>`}</div>
+      ${mine.map(teamHtml).join("") || `<p class="muted" style="margin:.5rem 0 0;">No teams yet — press “+ Add team”.</p>`}</div>`;
+  }
+  const loose = teams.filter(t => !t.aic_staff_id);
+  if (loose.length) h += `<div class="card"><b>Teams without an Area Incharge:</b> ${loose.map(t => t.team_no).join(", ")}</div>`;
+  $("board").innerHTML = h;
+}
+function teamHtml(t) {
+  const slot = (i) => { const m = t.active.find(x => x.member_no === i);
+    if (!m) return `<div class="slot free"><span>Member ${i} — empty</span><button class="btn small" onclick="openPerson({kind:'member',team:'${t.id}'})">+ Add</button></div>`;
+    const s = m.staff, f = s.cnic_pic_front_path, b = s.cnic_pic_back_path;
+    return `<div class="slot"><b>${esc(s.full_name)}</b><br><span class="muted">${esc(s.phone)}</span><br>
+      <span class="muted">CNIC: front ${f ? "✓" : "<b>missing</b>"} · back ${b ? "✓" : "<b>missing</b>"}</span><br>
+      <button class="btn small" onclick="openPerson({kind:'member',staff:'${s.id}',team:'${t.id}'})">Edit</button>
+      <button class="btn small ghost" onclick="openAdjust('${s.id}')">Move / change</button>
+      <button class="btn small ghost" onclick="openPerson({kind:'member',team:'${t.id}',replace:'${s.id}'})">Replace</button></div>`; };
+  return `<div class="team"><b>Team ${t.team_no}</b> <span class="tag">${typeName(t.team_type)}</span> <span class="muted">${t.active.length}/2 members</span>
+    <div class="slots">${slot(1)}${slot(2)}</div></div>`;
 }
 
-/* ---------- form building ---------- */
+/* ---------- plan (how many AICs / teams) ---------- */
+function planFields(aics, teams) {
+  return `<div class="sect"><h3>Your structure</h3><div class="form-grid">
+    <div><label>Total number of Area Incharges (1–20)</label><input type="number" id="p_aics" min="1" max="20" value="${aics ?? ""}"></div>
+    <div><label>Total number of teams</label><input type="number" id="p_teams" min="1" max="200" value="${teams ?? ""}"></div></div>
+    <p class="muted">These numbers create the empty AIC and team places you fill in next. You can change them later.</p></div>`;
+}
+function readPlan(errs) {
+  const a = Number($("p_aics").value), t = Number($("p_teams").value);
+  if (!Number.isInteger(a) || a < 1 || a > 20) errs.push("Number of Area Incharges must be between 1 and 20");
+  if (!Number.isInteger(t) || t < 1 || t > 200) errs.push("Enter the total number of teams");
+  return { a, t };
+}
+function openPlan() {
+  openPanel("Change the numbers", planFields(B.plan?.total_aics, B.plan?.total_teams) + errBox() + `<button class="btn" style="margin-top:1rem;" id="planSave">Save</button>`);
+  $("planSave").onclick = async () => { try { const e = []; const { a, t } = readPlan(e); if (e.length) throw new Error(e.join("\n"));
+    const { error } = await supabaseClient.rpc("set_uc_plan", { p_uc: ucId(), p_aics: a, p_teams: t }); if (error) throw error; closePanel(); await loadBoard(); } catch (e) { showErr(e); } };
+}
+
+/* ---------- add team ---------- */
+function openTeamPicker(aicId) {
+  const a = B.aics.find(x => x.id === aicId), used = new Set(B.teams.map(t => t.team_no)), max = B.plan?.total_teams ?? 200;
+  selNum = null; selType = null;
+  openPanel(`Add a team for AIC ${a.aic_no}`, `<h3>Team number</h3><div class="numgrid" id="numGrid">${Array.from({ length: max }, (_, i) => i + 1).map(n => `<button type="button" data-n="${n}" class="${used.has(n) ? "taken" : ""}">${n}</button>`).join("")}</div>
+    <p class="muted">Crossed-out numbers are already used.</p>
+    <h3>Team type</h3><div class="types" id="typeBtns">${TEAM_TYPES.map(t => `<button type="button" data-t="${t[0]}">${t[1]}</button>`).join("")}</div>
+    ${errBox()}<button class="btn" style="margin-top:1rem;" id="teamSave">Create team</button>`);
+  $("numGrid").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.classList.contains("taken")) return; selNum = Number(b.dataset.n); $("numGrid").querySelectorAll("button").forEach(x => x.classList.toggle("sel", x === b)); };
+  $("typeBtns").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; selType = b.dataset.t; $("typeBtns").querySelectorAll("button").forEach(x => x.classList.toggle("sel", x === b)); };
+  $("teamSave").onclick = async () => { try { if (!selNum) throw new Error("Choose the team number"); if (!selType) throw new Error("Choose the team type");
+    const { error } = await supabaseClient.from("teams").insert({ uc_id: ucId(), team_no: selNum, team_type: selType, aic_staff_id: aicId }); if (error) throw error;
+    closePanel(); await loadBoard(); } catch (e) { showErr(e); } };
+}
+
+/* ---------- person form ---------- */
 function personFields(p) {
   return `<div class="form-grid">
-    <div><label>Name</label><input id="${p}_name" required></div>
-    <div><label>Father name</label><input id="${p}_father" required></div>
+    <div><label>Name</label><input id="${p}_name"></div>
+    <div><label>Father name</label><input id="${p}_father"></div>
     <div><label>CNIC</label><input id="${p}_cnic" placeholder="XXXXX-XXXXXXX-X" inputmode="numeric" maxlength="15"></div>
     <div><label>Cell number</label><input id="${p}_phone" placeholder="03XX-XXXXXXX" inputmode="numeric" maxlength="12"></div>
-    <div><label>Wallet number (EasyPaisa / JazzCash / other)</label><input id="${p}_pay" placeholder="03XX-XXXXXXX" inputmode="numeric" maxlength="12"></div>
-    <div><label>Wallet type</label><select id="${p}_wallet"><option value="">Select…</option>${WALLETS.map(w => `<option value="${w[0]}">${w[1]}</option>`).join("")}</select></div>
+    <div><label>Payment wallet</label><select id="${p}_wallet"><option value="">Select…</option>${WALLETS.map(w => `<option value="${w[0]}">${w[1]}</option>`).join("")}</select></div>
+    <div id="${p}_payrow" style="display:none;"><label>Wallet number</label><input id="${p}_pay" placeholder="03XX-XXXXXXX" inputmode="numeric" maxlength="12"></div>
   </div>
-  <label class="muted" style="display:block;margin:.4rem 0;"><input type="checkbox" id="${p}_same"> Wallet number is the same as cell number</label>
-  <div class="form-grid">
-    <div><label>Bank (optional — type to search)</label><input id="${p}_bank" list="bankList" placeholder="e.g. HBL"></div>
-    <div><label>IBAN (optional)</label><input id="${p}_iban" placeholder="PK00XXXX0000000000000000" maxlength="29"></div>
-  </div>
-  <div class="chips" id="${p}_chips"></div>`;
+  <label class="muted" style="display:block;margin:.4rem 0;"><input type="checkbox" id="${p}_same" checked> Wallet number is the same as the cell number</label>
+  <details class="more"><summary>Bank account (optional)</summary>
+    <div class="form-grid" style="margin-top:.5rem;"><div><label>Bank (type to search)</label><input id="${p}_bank" list="bankList" placeholder="e.g. HBL"></div>
+    <div><label>IBAN</label><input id="${p}_iban" placeholder="PK00XXXX0000000000000000" maxlength="29"></div></div>
+    <div class="chips" id="${p}_chips"></div></details>`;
 }
 function wirePerson(p) {
   $(`${p}_cnic`).oninput = (e) => e.target.value = Validate.formatCnic(e.target.value);
   for (const f of ["phone", "pay"]) $(`${p}_${f}`).oninput = (e) => e.target.value = Validate.formatMobile(e.target.value);
-  $(`${p}_same`).onchange = (e) => { if (e.target.checked) $(`${p}_pay`).value = $(`${p}_phone`).value; };
+  $(`${p}_same`).onchange = (e) => { $(`${p}_payrow`).style.display = e.target.checked ? "none" : "block"; };
   const upd = () => {
-    const bank = bankFromInput($(`${p}_bank`).value), r = Validate.iban($(`${p}_iban`).value, bank);
-    const c = (cls, t) => `<span class="${cls}">${t}</span>`;
-    let h = "";
+    const bank = bankFromInput($(`${p}_bank`).value), r = Validate.iban($(`${p}_iban`).value, bank), c = (cls, t) => `<span class="${cls}">${t}</span>`; let h = "";
     if (!r.empty) {
-      h += c(r.format ? "good" : "bad", r.format ? "Format valid" : (r.length ? "Format invalid" : "Length not 24"));
+      h += c(r.format ? "good" : "bad", r.format ? "Format valid" : (r.length ? "Format invalid" : "Length is not 24"));
       h += c(r.format ? (r.checksum ? "good" : "bad") : "na", r.format ? (r.checksum ? "Checksum valid" : "Checksum INVALID") : "Checksum —");
-      h += c(r.bank === "matched" ? "good" : r.bank === "mismatch" ? "bad" : "na",
-             r.bank === "matched" ? "Bank matched" : r.bank === "mismatch" ? `Bank mismatch (IBAN code ${r.bankCode})` : (bank ? "Bank code not on file — not checked" : "No bank selected"));
+      h += c(r.bank === "matched" ? "good" : r.bank === "mismatch" ? "bad" : "na", r.bank === "matched" ? "Bank matched" : r.bank === "mismatch" ? `Bank mismatch (IBAN says ${r.bankCode})` : (bank ? "Bank code not on file — not checked" : "No bank selected"));
       h += c("na", "Account holder: not verified (no verification service connected)");
     }
     $(`${p}_chips`).innerHTML = h;
-    if (!r.empty && r.format && r.bankCode && !$(`${p}_bank`).value) {
-      const guess = banks.find(b => b.iban_code === r.bankCode);
-      if (guess) $(`${p}_bank`).value = bankLabel(guess);
-    }
+    if (!r.empty && r.format && r.bankCode && !$(`${p}_bank`).value) { const g = banks.find(b => b.iban_code === r.bankCode); if (g) $(`${p}_bank`).value = bankLabel(g); }
   };
   $(`${p}_iban`).oninput = (e) => { e.target.value = Validate.normalizeIban(e.target.value); upd(); };
   $(`${p}_bank`).oninput = upd; $(`${p}_bank`).onchange = upd;
 }
 function fillPerson(p, s) {
-  $(`${p}_name`).value = s.full_name || ""; $(`${p}_father`).value = s.father_name || "";
-  $(`${p}_cnic`).value = s.cnic || ""; $(`${p}_phone`).value = s.phone || "";
-  $(`${p}_pay`).value = s.payment_number || ""; $(`${p}_wallet`).value = s.payment_wallet || "";
-  const b = banks.find(x => x.code === s.bank_code); $(`${p}_bank`).value = b ? bankLabel(b) : "";
-  $(`${p}_iban`).value = s.iban || ""; $(`${p}_iban`).dispatchEvent(new Event("input"));
+  $(`${p}_name`).value = s.full_name || ""; $(`${p}_father`).value = s.father_name || ""; $(`${p}_cnic`).value = s.cnic || ""; $(`${p}_phone`).value = s.phone || "";
+  $(`${p}_wallet`).value = s.payment_wallet || ""; const same = !s.payment_number || s.payment_number === s.phone;
+  $(`${p}_same`).checked = same; $(`${p}_payrow`).style.display = same ? "none" : "block"; $(`${p}_pay`).value = s.payment_number || "";
+  const b = banks.find(x => x.code === s.bank_code); $(`${p}_bank`).value = b ? bankLabel(b) : ""; $(`${p}_iban`).value = s.iban || "";
+  if (s.bank_code || s.iban) $(`${p}_bank`).closest("details").open = true; $(`${p}_iban`).dispatchEvent(new Event("input"));
 }
 function readPerson(p, errs, label) {
   const v = (f) => $(`${p}_${f}`).value.trim();
-  const name = v("name"), father = v("father"), cnic = v("cnic"), phone = v("phone"), pay = v("pay"), wallet = v("wallet"), iban = Validate.normalizeIban(v("iban"));
-  const bank = bankFromInput(v("bank"));
+  const name = v("name"), father = v("father"), cnic = v("cnic"), phone = v("phone"), wallet = v("wallet"), iban = Validate.normalizeIban(v("iban")), bank = bankFromInput(v("bank"));
+  const pay = $(`${p}_same`).checked ? phone : v("pay");
   if (!name) errs.push(`${label}: name is required`);
   if (!father) errs.push(`${label}: father name is required`);
-  if (!Validate.isCnic(cnic)) errs.push(`${label}: CNIC must be XXXXX-XXXXXXX-X (13 digits)`);
-  if (!Validate.isMobile(phone)) errs.push(`${label}: cell number must be 03XX-XXXXXXX`);
-  if (!Validate.isMobile(pay)) errs.push(`${label}: wallet number must be 03XX-XXXXXXX`);
-  if (!wallet) errs.push(`${label}: choose the wallet type`);
-  if (v("bank") && !bank) errs.push(`${label}: choose a bank from the list (or "OTHER")`);
-  if (iban) {
-    const r = Validate.iban(iban, bank);
-    if (!r.format) errs.push(`${label}: IBAN must be PK + 22 characters (24 total)`);
-    else if (!r.checksum) errs.push(`${label}: IBAN checksum is invalid — check for a typing mistake`);
-    else if (r.bank === "mismatch") errs.push(`${label}: IBAN belongs to bank code ${r.bankCode}, which does not match the selected bank`);
-  }
+  if (!Validate.isCnic(cnic)) errs.push(`${label}: CNIC must be 13 digits`);
+  if (!Validate.isMobile(phone)) errs.push(`${label}: cell number must be like 03XX-XXXXXXX`);
+  if (!wallet) errs.push(`${label}: choose the payment wallet (EasyPaisa, JazzCash or Other)`);
+  if (!$(`${p}_same`).checked && !Validate.isMobile(pay)) errs.push(`${label}: wallet number must be like 03XX-XXXXXXX`);
+  if (v("bank") && !bank) errs.push(`${label}: choose a bank from the list (or OTHER)`);
+  if (iban) { const r = Validate.iban(iban, bank);
+    if (!r.format) errs.push(`${label}: IBAN must be PK + 22 characters (24 in total)`);
+    else if (!r.checksum) errs.push(`${label}: IBAN checksum is wrong — check for a typing mistake`);
+    else if (r.bank === "mismatch") errs.push(`${label}: IBAN belongs to bank code ${r.bankCode}, not the selected bank`); }
   return { full_name: name, father_name: father, cnic, phone, payment_number: pay, payment_wallet: wallet || null, bank_code: bank?.code || null, iban: iban || null };
 }
 
-async function loadAics(uc) {
-  const { data } = await supabaseClient.from("staff").select("id, aic_no, full_name, can_have_driver, status").eq("uc_id", uc).eq("designation", "aic").order("aic_no");
-  return data || [];
-}
-async function loadTeams(aicId) {
-  const { data } = await supabaseClient.from("teams").select("id, team_no, team_type, team_members(active)").eq("aic_staff_id", aicId).order("team_no");
-  return (data || []).map(t => ({ ...t, n: (t.team_members || []).filter(m => m.active).length }));
-}
-
-function pickDesignation(d) {
-  if (editing && editing.designation !== d) return;
-  designation = d; selAicNo = editing?.aic_no ?? null;
-  document.querySelectorAll("#desPills .pill").forEach(p => p.classList.toggle("on", p.dataset.d === d));
-  buildForm();
-}
-document.querySelectorAll("#desPills .pill").forEach(p => p.onclick = () => pickDesignation(p.dataset.d));
-$("ucSel").onchange = () => { if (designation) buildForm(); };
-
-async function buildForm() {
-  clearFormError($("formErr"));
-  const d = designation, uc = ucId();
-  let html = `<div class="sect"><h3>${DESIGNATIONS[d]} details</h3>${personFields("f")}</div>`;
-  const aics = d === "aic" ? [] : await loadAics(uc);
-  if (d === "aic") {
-    html += `<div class="sect"><h3>AIC number (1–20)</h3><div class="aicgrid" id="aicGrid"></div>
-      <p class="muted" id="aicInfo"></p>
-      <h3 style="margin-top:.8rem;">Does this AIC have a driver?</h3>
-      <div class="radios"><label><input type="radio" name="hasDrv" value="no" checked> No</label><label><input type="radio" name="hasDrv" value="yes"> Yes</label></div>
-      <div id="drvBox" style="display:none;"><h3>Driver details</h3>${personFields("d")}</div></div>`;
-  } else {
-    html += `<div class="sect"><h3>Reports to</h3><label>Area Incharge</label>
-      <select id="aicSel"><option value="">Select AIC…</option>${aics.map(a => `<option value="${a.id}">AIC ${a.aic_no} — ${esc(a.full_name)}${d === "driver" && !a.can_have_driver ? " (no driver slot yet)" : ""}</option>`).join("")}</select>
-      ${!aics.length ? `<p class="muted">No Area Incharge in this union council yet — add an AIC first.</p>` : ""}
-      ${d === "team_member" && !editing ? `<div id="teamBox" style="margin-top:.6rem;"></div>` : ""}</div>`;
+async function openPerson(c) {
+  ctx = c; let editing = null;
+  if (c.staff) { const { data, error } = await supabaseClient.from("staff").select("*").eq("id", c.staff).single(); if (error) return alert(error.message); editing = data; ctx.editing = data; }
+  const aic = c.aic ? B.aics.find(a => a.id === c.aic) : null, team = c.team ? B.teams.find(t => t.id === c.team) : null;
+  const title = { ucmo: editing ? "Edit UCMO" : "Add UCMO", aic: `${editing ? "Edit" : "Add"} Area Incharge ${c.aicNo}`, driver: `${editing ? "Edit" : "Add"} driver for AIC ${c.aicNo}`,
+    member: editing ? `Edit team member — Team ${team?.team_no ?? ""}` : c.replace ? `Replace a member of Team ${team?.team_no}` : `Add member to Team ${team?.team_no}` }[c.kind];
+  let extra = "";
+  if (c.kind === "ucmo" && !editing) extra += planFields(null, null);
+  if (c.kind === "aic") extra += `<div class="sect"><h3>Does this Area Incharge have a driver?</h3><div class="radios"><label><input type="radio" name="hasDrv" value="no" checked> No</label><label><input type="radio" name="hasDrv" value="yes"> Yes</label></div>
+      <div id="drvBox" style="display:none;margin-top:.5rem;"><h3>Driver details</h3>${personFields("d")}</div></div>`;
+  if (c.kind === "member" && c.replace && !editing) extra += `<div class="sect"><b>This person will replace a member of Team ${team.team_no}.</b>${replaceBlock("nr")}</div>`;
+  if (editing && c.kind !== "member") extra += `<div class="sect"><label>Status</label><select id="f_status"><option value="active">Active</option><option value="inactive">Inactive</option><option value="left_campaign">Left campaign</option></select></div>`;
+  if (c.kind === "member") extra += `<div class="sect"><h3>CNIC pictures (front and back)</h3><div id="docBox"></div></div>`;
+  openPanel(title, `<div class="sect"><h3>Personal details</h3>${personFields("f")}</div>${extra}${errBox()}
+    <div style="margin-top:1rem;"><button class="btn" id="saveBtn">Save</button> <button class="btn ghost" onclick="closePanel()">Cancel</button></div>`);
+  wirePerson("f"); if (editing) { fillPerson("f", editing); if ($("f_status")) $("f_status").value = editing.status === "active" ? "active" : editing.status === "left_campaign" ? "left_campaign" : "inactive"; }
+  if (c.kind === "aic") {
+    wirePerson("d"); existingDriver = null;
+    document.querySelectorAll('input[name="hasDrv"]').forEach(r => r.onchange = () => { $("drvBox").style.display = r.value === "yes" ? "block" : "none"; });
+    const drv = editing ? B.drivers.find(d => d.aic_staff_id === editing.id) : null;
+    if (drv) { const { data } = await supabaseClient.from("staff").select("*").eq("id", drv.id).single(); existingDriver = data;
+      document.querySelector('input[name="hasDrv"][value="yes"]').checked = true; document.querySelectorAll('input[name="hasDrv"]').forEach(r => r.disabled = true); $("drvBox").style.display = "block"; fillPerson("d", data); }
   }
-  if (d === "team_member") html += `<div class="sect" id="docSect"><h3>CNIC images (front &amp; back)</h3><div id="docBox"></div></div>`;
-  $("dynForm").innerHTML = html; $("formBtns").style.display = "block";
-  wirePerson("f");
-  if (editing) fillPerson("f", editing);
+  if (c.kind === "member" && c.replace && !editing) { await loadReplaceBlock("nr", c.team); const r = document.querySelector(`input[name="nr_who"][value="${c.replace}"]`); if (r) r.checked = true; }
+  if (c.kind === "member") renderDocs();
+  $("saveBtn").onclick = savePerson;
+}
 
-  if (d === "aic") {
-    const { data: taken } = await supabaseClient.from("staff").select("id, aic_no").eq("uc_id", uc).eq("designation", "aic");
-    const used = new Set((taken || []).filter(t => t.id !== editing?.id).map(t => t.aic_no));
-    const free = []; $("aicGrid").innerHTML = Array.from({ length: 20 }, (_, i) => i + 1).map(n => {
-      if (!used.has(n)) free.push(n);
-      return `<button type="button" data-n="${n}" class="${used.has(n) ? "taken" : ""} ${selAicNo === n ? "sel" : ""}">${n}</button>`; }).join("");
-    $("aicInfo").textContent = `Occupied: ${[...used].sort((a, b) => a - b).join(", ") || "none"}. Available: ${free.length ? free.join(", ") : "none — maximum of 20 reached"}.`;
-    $("aicGrid").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.classList.contains("taken")) return;
-      selAicNo = Number(b.dataset.n); $("aicGrid").querySelectorAll("button").forEach(x => x.classList.toggle("sel", x === b)); };
-    wirePerson("d");
-    const showDrv = (yes) => { $("drvBox").style.display = yes ? "block" : "none"; };
-    document.querySelectorAll('input[name="hasDrv"]').forEach(r => r.onchange = () => showDrv(r.value === "yes"));
-    existingDriver = null;
-    if (editing) {
-      const { data: drv } = await supabaseClient.from("staff").select("*").eq("aic_staff_id", editing.id).eq("designation", "driver").neq("status", "inactive").maybeSingle();
-      existingDriver = drv;
-      if (drv) { document.querySelector('input[name="hasDrv"][value="yes"]').checked = true; document.querySelectorAll('input[name="hasDrv"]').forEach(r => r.disabled = true); showDrv(true); fillPerson("d", drv); }
+async function savePerson() {
+  const btn = $("saveBtn"); btn.disabled = true; $("pErr").style.display = "none";
+  try {
+    const c = ctx, ed = c.editing, errs = [], uc = ucId(), label = { ucmo: "UCMO", aic: "Area Incharge", driver: "Driver", member: "Team member" }[c.kind];
+    const p = readPerson("f", errs, label); let plan = null, drvPayload = null, replace = null, team = c.team ? B.teams.find(t => t.id === c.team) : null;
+    if (c.kind === "ucmo" && !ed) plan = readPlan(errs);
+    if (c.kind === "aic") { const yes = document.querySelector('input[name="hasDrv"]:checked').value === "yes"; p.can_have_driver = yes; if (yes) drvPayload = { uc_id: uc, designation: "driver", ...readPerson("d", errs, "Driver") }; }
+    if (c.kind === "member" && c.replace && !ed) replace = readReplaceBlock("nr", errs);
+    if (errs.length) throw new Error(errs.join("\n"));
+    if ($("f_status") && ed && $("f_status").value !== "active" && ed.status === "active" && !confirm("Make this person " + $("f_status").selectedOptions[0].text + "?")) return;
+    const row = { uc_id: uc, ...p };
+    if (c.kind === "ucmo") row.designation = "ucmo";
+    if (c.kind === "aic") { row.designation = "aic"; row.aic_no = c.aicNo; }
+    if (c.kind === "driver") { row.designation = "driver"; row.aic_staff_id = c.aic; await supabaseClient.from("staff").update({ can_have_driver: true }).eq("id", c.aic); }
+    if (c.kind === "member") { row.designation = "team_member"; row.aic_staff_id = team.aic_staff_id; }
+    if (!team?.aic_staff_id && c.kind === "member") throw new Error("This team has no Area Incharge yet.");
+    if ($("f_status") && ed) row.status = $("f_status").value;
+    if (plan) { const { error } = await supabaseClient.rpc("set_uc_plan", { p_uc: uc, p_aics: plan.a, p_teams: plan.t }); if (error) throw error; }
+    let rec;
+    if (ed) { const { uc_id, ...upd } = row; delete upd.designation; delete upd.aic_staff_id; delete upd.aic_no;
+      const { data, error } = await supabaseClient.from("staff").update(upd).eq("id", ed.id).select().single(); if (error) throw error; rec = data; }
+    else { const { data, error } = await supabaseClient.from("staff").insert(row).select().single(); if (error) throw error; rec = data; }
+    if (c.kind === "aic" && drvPayload) { drvPayload.aic_staff_id = rec.id;
+      const { error } = await (existingDriver ? supabaseClient.from("staff").update(drvPayload).eq("id", existingDriver.id) : supabaseClient.from("staff").insert(drvPayload));
+      if (error) throw new Error("The Area Incharge was saved, but the driver was not: " + friendly(error)); }
+    let note = "";
+    if (c.kind === "member" && !ed) {
+      const args = replace ? { p_action: "replace", p_staff: rec.id, p_reason: replace.reason, p_campaign: campId(), p_to_team: team.id, p_replace_staff: replace.who, p_old_disposition: replace.disp, p_old_to_team: replace.dest }
+                           : { p_action: "assign", p_staff: rec.id, p_campaign: campId(), p_to_team: team.id };
+      const { error } = await supabaseClient.rpc("adjust_team_member", args);
+      if (error) note = ` The person is saved but is not on the team yet: ${friendly(error)}`;
+      await loadBoard(); loadRows();
+      const { data: fresh } = await supabaseClient.from("staff").select("*").eq("id", rec.id).single(); ctx = { ...c, editing: fresh, replace: null };
+      $("panelTitle").textContent = "Saved ✓ — now add the CNIC pictures"; renderDocs(); $("saveBtn").textContent = "Save changes"; $("docBox").scrollIntoView({ block: "center" });
+      if (note) alert(note.trim()); return;
     }
-  } else {
-    if (editing?.aic_staff_id) $("aicSel").value = editing.aic_staff_id;
-    if (editing) $("aicSel").disabled = true;
-    if (d === "team_member" && !editing) $("aicSel").onchange = () => renderTeamBox();
-    if (d === "team_member") renderDocs();
-  }
+    closePanel(); await loadBoard(); loadRows();
+  } catch (e) { showErr(e); } finally { btn.disabled = false; }
 }
 
-async function renderTeamBox() {
-  const aic = $("aicSel").value, box = $("teamBox"); if (!box) return;
-  if (!aic) { box.innerHTML = ""; return; }
-  const teams = await loadTeams(aic);
-  box.innerHTML = `<label>Team</label><select id="teamSel"><option value="">Select team…</option>
-      ${teams.map(t => `<option value="${t.id}">Team ${t.team_no} · ${TEAM_TYPES.find(x => x[0] === t.team_type)?.[1]} · ${t.n}/2 members${t.n >= 2 ? " (full)" : ""}</option>`).join("")}
-      <option value="__new">+ Create a new team for this AIC</option></select>
-    <div id="newTeam" style="display:none;margin-top:.5rem;" class="form-grid">
-      <div><label>Team number</label><input type="number" id="nt_no" min="1" max="999"></div>
-      <div><label>Team type</label><select id="nt_type">${TEAM_TYPES.map(t => `<option value="${t[0]}">${t[1]}</option>`).join("")}</select></div></div>
-    <div id="fullBox"></div>`;
-  $("teamSel").onchange = async () => {
-    const v = $("teamSel").value; $("newTeam").style.display = v === "__new" ? "grid" : "none"; $("fullBox").innerHTML = "";
-    const t = teams.find(x => x.id === v);
-    if (t && t.n >= 2) { $("fullBox").innerHTML = `<div class="sect"><b>This team already has 2 active members. Which existing member will be replaced?</b>${replaceBlock("nr")}</div>`; await loadReplaceBlock("nr", t.id); }
-  };
-}
-
-/* replace chooser (used by add flow and by the adjustment panel) */
+/* ---------- replace chooser ---------- */
 function replaceBlock(id) {
-  return `<div id="${id}_who" class="radios"></div>
-    <b>What happens to the replaced member?</b>
-    <div class="radios">
-      <label><input type="radio" name="${id}_disp" value="left_campaign"> Left campaign (no longer participating)</label>
-      <label><input type="radio" name="${id}_disp" value="transfer"> Transfer to another team</label>
-      <label><input type="radio" name="${id}_disp" value="reserve"> Keep as available / reserve</label>
-      <label><input type="radio" name="${id}_disp" value="other"> Other adjustment</label></div>
-    <div id="${id}_dest" style="display:none;"></div>
-    <label>Reason (required)</label><input id="${id}_reason" placeholder="why is this change being made?">`;
+  return `<div id="${id}_who" class="radios" style="margin-top:.5rem;"></div>
+    <b>What happens to the member who is replaced?</b>
+    <div class="radios"><label><input type="radio" name="${id}_disp" value="left_campaign"> Left the campaign</label>
+      <label><input type="radio" name="${id}_disp" value="transfer"> Moves to another team</label>
+      <label><input type="radio" name="${id}_disp" value="reserve"> Stays available (reserve)</label>
+      <label><input type="radio" name="${id}_disp" value="other"> Something else</label></div>
+    <div id="${id}_dest" style="display:none;"></div><label>Reason (required)</label><input id="${id}_reason" placeholder="why is this change being made?">`;
 }
 async function loadReplaceBlock(id, teamId) {
-  const { data } = await supabaseClient.from("team_members").select("member_no, staff(id, full_name, cnic)").eq("team_id", teamId).eq("active", true).order("member_no");
-  $(`${id}_who`).innerHTML = (data || []).map(m => `<label><input type="radio" name="${id}_who" value="${m.staff.id}"> Replace ${esc(m.staff.full_name)} (member ${m.member_no}, ${esc(m.staff.cnic)})</label>`).join("");
-  document.querySelectorAll(`input[name="${id}_disp"]`).forEach(r => r.onchange = async () => {
+  const { data } = await supabaseClient.from("team_members").select("member_no, staff(id, full_name)").eq("team_id", teamId).eq("active", true).order("member_no");
+  $(`${id}_who`).innerHTML = (data || []).map(m => `<label><input type="radio" name="${id}_who" value="${m.staff.id}"> Replace ${esc(m.staff.full_name)} (member ${m.member_no})</label>`).join("") || `<p class="muted">This team has no active members.</p>`;
+  document.querySelectorAll(`input[name="${id}_disp"]`).forEach(r => r.onchange = () => {
     const box = $(`${id}_dest`); if (r.value !== "transfer") { box.style.display = "none"; return; }
-    const { data: team } = await supabaseClient.from("teams").select("uc_id").eq("id", teamId).single();
-    const { data: ts } = await supabaseClient.from("teams").select("id, team_no, team_type, team_members(active)").eq("uc_id", team.uc_id).neq("id", teamId).order("team_no");
-    box.style.display = "block";
-    box.innerHTML = `<label>Destination team</label><select id="${id}_destSel"><option value="">Select…</option>${(ts || []).map(t => {
-      const n = (t.team_members || []).filter(m => m.active).length;
-      return `<option value="${t.id}" ${n >= 2 ? "disabled" : ""}>Team ${t.team_no} · ${t.team_type} · ${n}/2${n >= 2 ? " (full)" : ""}</option>`; }).join("")}</select>`;
-  });
+    const opts = B.teams.filter(t => t.id !== teamId).map(t => `<option value="${t.id}" ${t.active.length >= 2 ? "disabled" : ""}>Team ${t.team_no} · ${typeName(t.team_type)} · ${t.active.length}/2${t.active.length >= 2 ? " (full)" : ""}</option>`).join("");
+    box.style.display = "block"; box.innerHTML = `<label>Move to team</label><select id="${id}_destSel"><option value="">Select…</option>${opts}</select>`; });
 }
 function readReplaceBlock(id, errs) {
-  const who = document.querySelector(`input[name="${id}_who"]:checked`)?.value;
-  const disp = document.querySelector(`input[name="${id}_disp"]:checked`)?.value;
+  const who = document.querySelector(`input[name="${id}_who"]:checked`)?.value, disp = document.querySelector(`input[name="${id}_disp"]:checked`)?.value;
   const reason = $(`${id}_reason`).value.trim(), dest = $(`${id}_destSel`)?.value || null;
-  if (!who) errs.push("Choose which existing member will be replaced");
-  if (!disp) errs.push("Choose what happens to the replaced member");
-  if (disp === "transfer" && !dest) errs.push("Choose the destination team for the replaced member");
-  if (reason.length < 3) errs.push("A reason is required");
+  if (!who) errs.push("Choose which member is being replaced"); if (!disp) errs.push("Choose what happens to the replaced member");
+  if (disp === "transfer" && !dest) errs.push("Choose the team the replaced member moves to"); if (reason.length < 3) errs.push("A reason is required");
   return { who, disp, reason, dest };
 }
 
-/* ---------- open / close form ---------- */
-function resetForm() { editing = null; designation = null; selAicNo = null; existingDriver = null;
-  $("dynForm").innerHTML = ""; $("formBtns").style.display = "none"; clearFormError($("formErr"));
-  document.querySelectorAll("#desPills .pill").forEach(p => p.classList.remove("on")); }
-$("addBtn").onclick = () => { resetForm(); $("formTitle").textContent = "Add staff"; $("ucSel").value = $("fUc").value; $("ucSel").disabled = false;
-  $("formCard").style.display = "block"; $("formCard").scrollIntoView({ behavior: "smooth" }); };
-$("cancelBtn").onclick = () => { $("formCard").style.display = "none"; resetForm(); };
-async function openEdit(id) {
-  const { data, error } = await supabaseClient.from("staff").select("*").eq("id", id).single();
-  if (error) return alert(error.message);
-  resetForm(); editing = data;
-  $("formTitle").textContent = `Edit ${DESIGNATIONS[data.designation]} — ${data.full_name}`;
-  $("ucSel").value = data.uc_id; $("ucSel").disabled = true;
-  $("formCard").style.display = "block"; $("formCard").scrollIntoView({ behavior: "smooth" });
-  pickDesignation(data.designation);
-}
-
-/* ---------- save ---------- */
-$("saveBtn").onclick = async () => {
-  const errEl = $("formErr"); clearFormError(errEl);
-  const btn = $("saveBtn"); btn.disabled = true;
-  try {
-    const errs = [], uc = ucId(), campaign = $("campSel").value || null;
-    if (!uc || !designation) throw new Error("Select the union council and designation first");
-    const base = { uc_id: uc, designation, ...readPerson("f", errs, DESIGNATIONS[designation]) };
-    let aicId = null, drvPayload = null, replace = null, teamId = null, newTeam = null;
-
-    if (designation === "aic") {
-      if (!selAicNo) errs.push("Choose an AIC number (1–20)");
-      base.aic_no = selAicNo;
-      const yes = document.querySelector('input[name="hasDrv"]:checked').value === "yes";
-      base.can_have_driver = yes;
-      if (yes) drvPayload = { uc_id: uc, designation: "driver", ...readPerson("d", errs, "Driver") };
-    } else {
-      aicId = editing ? editing.aic_staff_id : $("aicSel").value;
-      if (!aicId) errs.push("Choose the Area Incharge");
-      base.aic_staff_id = aicId;
-      if (designation === "team_member" && !editing) {
-        teamId = $("teamSel")?.value;
-        if (!teamId) errs.push("Choose a team (or create a new one)");
-        else if (teamId === "__new") {
-          const no = Number($("nt_no").value);
-          if (!no || no < 1) errs.push("Enter the new team number");
-          newTeam = { uc_id: uc, team_no: no, team_type: $("nt_type").value, aic_staff_id: aicId };
-        } else if ($("nr_who")) replace = readReplaceBlock("nr", errs);
-      }
-    }
-    if (errs.length) throw new Error(errs.join("\n"));
-    if (editing && !confirm("Save changes to this staff record? Adjustment history is not affected.")) return;
-
-    if (designation === "driver") await supabaseClient.from("staff").update({ can_have_driver: true }).eq("id", aicId);
-
-    let rec;
-    if (editing) {
-      const { uc_id, designation: _d, aic_staff_id, aic_no, ...upd } = base;
-      if (designation === "aic") { upd.aic_no = aic_no; upd.can_have_driver = base.can_have_driver; }
-      const { data, error } = await supabaseClient.from("staff").update(upd).eq("id", editing.id).select().single();
-      if (error) throw error; rec = data;
-    } else {
-      const { data, error } = await supabaseClient.from("staff").insert(base).select().single();
-      if (error) throw error; rec = data;
-    }
-
-    let note = "";
-    if (designation === "aic" && drvPayload) {
-      drvPayload.aic_staff_id = rec.id;
-      const q = existingDriver ? supabaseClient.from("staff").update(drvPayload).eq("id", existingDriver.id) : supabaseClient.from("staff").insert(drvPayload);
-      const { error } = await q; if (error) throw new Error("AIC saved, but the driver could not be saved: " + friendly(error));
-    }
-    if (designation === "team_member" && !editing) {
-      try {
-        if (newTeam) { const { data: t, error } = await supabaseClient.from("teams").insert(newTeam).select().single(); if (error) throw error; teamId = t.id; }
-        if (replace) {
-          const { error } = await supabaseClient.rpc("adjust_team_member", { p_action: "replace", p_staff: rec.id, p_reason: replace.reason, p_campaign: campaign,
-            p_to_team: teamId, p_replace_staff: replace.who, p_old_disposition: replace.disp, p_old_to_team: replace.dest });
-          if (error) throw error;
-        } else {
-          const { error } = await supabaseClient.rpc("adjust_team_member", { p_action: "assign", p_staff: rec.id, p_campaign: campaign, p_to_team: teamId });
-          if (error) throw error;
-        }
-      } catch (e) { note = ` The person was saved but is not on a team yet: ${friendly(e)}`; }
-    }
-    await loadRows();
-    if (designation === "team_member" && !editing) {   // stay on the record so CNIC images can be uploaded straight away
-      const { data } = await supabaseClient.from("staff").select("*").eq("id", rec.id).single();
-      editing = data; $("formTitle").textContent = `Edit Team Member — ${data.full_name}`; $("ucSel").disabled = true;
-      renderDocs(); $("docSect")?.scrollIntoView({ behavior: "smooth" });
-      alert("Saved. Now upload the CNIC front and back images below." + note);
-    } else { alert("Saved." + note); $("formCard").style.display = "none"; resetForm(); }
-  } catch (e) { showFormError(errEl, { message: friendly(e).replace(/\n/g, "\n") }); errEl.style.whiteSpace = "pre-line"; }
-  finally { btn.disabled = false; }
-};
-
-/* ---------- CNIC documents ---------- */
+/* ---------- CNIC pictures ---------- */
 async function signedUrl(path) { const { data } = await supabaseClient.storage.from("staff-documents").createSignedUrl(path, 300); return data?.signedUrl || null; }
 async function renderDocs() {
-  const box = $("docBox"); if (!box) return;
-  if (!editing) { box.innerHTML = `<p class="muted">Save the team member first — then the front and back images can be uploaded here.</p>`; return; }
-  const one = (side) => { const path = editing[`cnic_pic_${side}_path`];
-    return `<div class="docbox"><b>CNIC ${side === "front" ? "Front" : "Back"}:</b> ${path ? "Uploaded ✓" : "<b>Missing</b>"}
-      <div id="img_${side}"></div>
+  const box = $("docBox"); if (!box) return; const e = ctx?.editing;
+  if (!e) { box.innerHTML = `<p class="muted">Save the person first — then the front and back pictures can be added here.</p>`; return; }
+  const one = (side) => { const path = e[`cnic_pic_${side}_path`];
+    return `<div class="docbox"><b>CNIC ${side === "front" ? "front" : "back"}:</b> ${path ? "Uploaded ✓" : "<b>Missing</b>"}<div id="img_${side}"></div>
       <input type="file" id="file_${side}" accept="image/jpeg,image/png" style="display:none">
       <button class="btn small" type="button" onclick="$('file_${side}').click()">${path ? "Replace" : "Upload"}</button>
       ${path ? `<button class="btn small ghost" type="button" onclick="previewDoc('${side}')">Preview</button><button class="btn small ghost" type="button" onclick="removeDoc('${side}')">Remove</button>` : ""}</div>`; };
   box.innerHTML = one("front") + one("back");
-  for (const side of ["front", "back"]) $(`file_${side}`).onchange = (e) => uploadDoc(side, e.target.files[0]);
+  for (const side of ["front", "back"]) $(`file_${side}`).onchange = (ev) => uploadDoc(side, ev.target.files[0]);
 }
-async function previewDoc(side) { const u = await signedUrl(editing[`cnic_pic_${side}_path`]); $(`img_${side}`).innerHTML = u ? `<img src="${u}" alt="CNIC ${side}">` : `<span class="error-text">Could not load image</span>`; }
+async function previewDoc(side) { const u = await signedUrl(ctx.editing[`cnic_pic_${side}_path`]); $(`img_${side}`).innerHTML = u ? `<img src="${u}" alt="CNIC ${side}">` : `<span class="error-text">Could not load the picture</span>`; }
 async function uploadDoc(side, file) {
-  if (!file) return;
-  if (!/^image\/(jpeg|png)$/.test(file.type)) return alert("Only JPG or PNG images are allowed.");
-  if (file.size > 6 * 1024 * 1024) return alert("Image is larger than 6 MB — please use a smaller photo.");
-  const ext = file.type === "image/png" ? "png" : "jpg", col = `cnic_pic_${side}_path`, path = `${editing.uc_id}/${editing.id}/${side}.${ext}`;
-  const old = editing[col]; if (old && old !== path) await supabaseClient.storage.from("staff-documents").remove([old]);
-  const { error } = await supabaseClient.storage.from("staff-documents").upload(path, file, { upsert: true, contentType: file.type });
-  if (error) return alert("Upload failed: " + error.message);
-  const { error: e2 } = await supabaseClient.from("staff").update({ [col]: path }).eq("id", editing.id);
-  if (e2) return alert(e2.message);
-  editing[col] = path; await renderDocs(); await previewDoc(side); loadRows();
+  if (!file) return; const e = ctx.editing;
+  if (!/^image\/(jpeg|png)$/.test(file.type)) return alert("Only JPG or PNG pictures are allowed.");
+  if (file.size > 6 * 1024 * 1024) return alert("The picture is bigger than 6 MB — please use a smaller photo.");
+  const ext = file.type === "image/png" ? "png" : "jpg", col = `cnic_pic_${side}_path`, path = `${e.uc_id}/${e.id}/${side}.${ext}`;
+  if (e[col] && e[col] !== path) await supabaseClient.storage.from("staff-documents").remove([e[col]]);
+  const { error } = await supabaseClient.storage.from("staff-documents").upload(path, file, { upsert: true, contentType: file.type }); if (error) return alert("Upload failed: " + error.message);
+  const { error: e2 } = await supabaseClient.from("staff").update({ [col]: path }).eq("id", e.id); if (e2) return alert(e2.message);
+  e[col] = path; await renderDocs(); await previewDoc(side); loadBoard(); loadRows();
 }
 async function removeDoc(side) {
-  if (!confirm(`Remove the CNIC ${side} image? You can upload a new one afterwards.`)) return;
-  const col = `cnic_pic_${side}_path`;
-  await supabaseClient.storage.from("staff-documents").remove([editing[col]]);
-  await supabaseClient.from("staff").update({ [col]: null }).eq("id", editing.id);
-  editing[col] = null; await renderDocs(); loadRows();
+  if (!confirm(`Remove the CNIC ${side} picture? You can upload a new one afterwards.`)) return; const e = ctx.editing, col = `cnic_pic_${side}_path`;
+  await supabaseClient.storage.from("staff-documents").remove([e[col]]); await supabaseClient.from("staff").update({ [col]: null }).eq("id", e.id);
+  e[col] = null; await renderDocs(); loadBoard(); loadRows();
 }
 
-/* ---------- Team Adjustment ---------- */
-let adjStaff = null;
+/* ---------- move / change a team member ---------- */
 async function openAdjust(id) {
-  const { data: s } = await supabaseClient.from("staff").select("id, uc_id, full_name, status, aic_staff_id, team_members(active, team_id, member_no, teams(team_no, team_type))").eq("id", id).single();
+  const { data: s } = await supabaseClient.from("staff").select("id, uc_id, full_name, status, team_members(active, team_id, member_no, teams(team_no, team_type))").eq("id", id).single();
   adjStaff = s; const cur = (s.team_members || []).find(m => m.active);
-  $("adjCard").style.display = "block"; $("adjCard").scrollIntoView({ behavior: "smooth" });
-  $("adjBody").innerHTML = `<p><b>${esc(s.full_name)}</b> — ${badge(s.status)} — ${cur ? `Team ${cur.teams.team_no} (${cur.teams.team_type}), member ${cur.member_no}` : "not on any team"}</p>
-    <label>What do you want to do?</label>
-    <select id="adjAct"><option value="">Select…</option>
-      ${cur ? `<option value="leave">Member leaves Polio / the campaign</option><option value="reserve">Remove from team — keep as reserve</option><option value="swap">Swap with a member of another team</option>` : ""}
-      <option value="transfer">${cur ? "Transfer to another team" : "Assign to a team"}</option>
-      <option value="replace">Place this person in a full team, replacing a member</option></select>
-    <div id="adjFields"></div><div class="error-text" id="adjErr" style="display:none;"></div>
-    <div style="margin-top:.8rem;"><button class="btn" id="adjGo" style="display:none;">Confirm adjustment</button> <button class="btn ghost" onclick="$('adjCard').style.display='none'">Close</button></div>`;
-  $("adjAct").onchange = renderAdjFields;
+  openPanel("Move / change — " + s.full_name, `<p>${badge(s.status)} ${cur ? `Team ${cur.teams.team_no} (${typeName(cur.teams.team_type)}), member ${cur.member_no}` : "not on any team"}</p>
+    <label>What happened?</label><select id="adjAct"><option value="">Select…</option>
+      ${cur ? `<option value="leave">Left Polio / the campaign</option><option value="reserve">Take off the team — keep available (reserve)</option><option value="swap">Swap with a member of another team</option>` : ""}
+      <option value="transfer">${cur ? "Move to another team" : "Put on a team"}</option><option value="replace">Put in a full team, replacing a member</option></select>
+    <div id="adjFields"></div>${errBox()}<div style="margin-top:.8rem;"><button class="btn" id="adjGo" style="display:none;">Confirm</button> <button class="btn ghost" onclick="closePanel()">Cancel</button></div>
+    <p><a href="#" onclick="openHistory({staff:'${s.id}', title:'History — ${esc(s.full_name).replace(/'/g, "")}'});return false;">See this person's history</a></p>`);
+  $("adjAct").onchange = renderAdjFields; $("adjGo").onclick = doAdjust;
 }
-async function teamOptions(excludeTeam, onlyWithSpace) {
-  const { data } = await supabaseClient.from("teams").select("id, team_no, team_type, aic:aic_staff_id(aic_no), team_members(active)").eq("uc_id", adjStaff.uc_id).order("team_no");
-  return (data || []).filter(t => t.id !== excludeTeam).map(t => ({ ...t, n: (t.team_members || []).filter(m => m.active).length }))
-    .filter(t => !onlyWithSpace || t.n < 2)
-    .map(t => `<option value="${t.id}">Team ${t.team_no} · ${t.team_type} · AIC ${t.aic?.aic_no ?? "—"} · ${t.n}/2</option>`).join("");
-}
+function teamOpts(excl, onlyFree) { return B.teams.filter(t => t.id !== excl && (!onlyFree || t.active.length < 2)).map(t => `<option value="${t.id}">Team ${t.team_no} · ${typeName(t.team_type)} · ${t.active.length}/2</option>`).join(""); }
 async function renderAdjFields() {
   const a = $("adjAct").value, cur = (adjStaff.team_members || []).find(m => m.active); $("adjGo").style.display = a ? "inline-block" : "none";
-  const dateF = `<label>Effective date</label><input type="date" id="adjDate" value="${new Date().toISOString().slice(0, 10)}">`;
-  const reasonF = `<label>Reason ${a === "transfer" ? "(optional)" : "(required)"}</label><input id="adjReason">`;
-  let h = "";
+  const dateF = `<label>Date</label><input type="date" id="adjDate" value="${new Date().toISOString().slice(0, 10)}">`, reasonF = `<label>Reason ${a === "transfer" ? "(optional)" : "(required)"}</label><input id="adjReason">`; let h = "";
   if (a === "leave" || a === "reserve") h = reasonF + dateF;
-  else if (a === "transfer") h = `<label>Destination team (teams with a free place)</label><select id="adjTeam"><option value="">Select…</option>${await teamOptions(cur?.team_id, true)}</select>
-      <p class="muted">If the team you need is full, use “Place this person in a full team, replacing a member”.</p>${reasonF}${dateF}`;
-  else if (a === "replace") h = `<label>Team</label><select id="adjTeam"><option value="">Select…</option>${await teamOptions(cur?.team_id, false)}</select><div id="adjRep"></div>${dateF}`;
-  else if (a === "swap") {
-    const { data } = await supabaseClient.from("team_members").select("staff_id, member_no, teams(team_no), staff(full_name)").eq("active", true).neq("staff_id", adjStaff.id).neq("team_id", cur.team_id);
-    h = `<label>Swap with</label><select id="adjWith"><option value="">Select…</option>${(data || []).map(m => `<option value="${m.staff_id}">${esc(m.staff.full_name)} — Team ${m.teams.team_no}</option>`).join("")}</select>${reasonF}${dateF}`;
-  }
+  else if (a === "transfer") h = `<label>Team (only teams with a free place)</label><select id="adjTeam"><option value="">Select…</option>${teamOpts(cur?.team_id, true)}</select>${reasonF}${dateF}`;
+  else if (a === "replace") h = `<label>Team</label><select id="adjTeam"><option value="">Select…</option>${teamOpts(cur?.team_id, false)}</select><div id="adjRep"></div>${dateF}`;
+  else if (a === "swap") { const { data } = await supabaseClient.from("team_members").select("staff_id, teams(team_no), staff(full_name)").eq("active", true).neq("staff_id", adjStaff.id).neq("team_id", cur.team_id);
+    h = `<label>Swap with</label><select id="adjWith"><option value="">Select…</option>${(data || []).map(m => `<option value="${m.staff_id}">${esc(m.staff.full_name)} — Team ${m.teams.team_no}</option>`).join("")}</select>${reasonF}${dateF}`; }
   $("adjFields").innerHTML = h;
   if (a === "replace") $("adjTeam").onchange = async () => { const t = $("adjTeam").value; $("adjRep").innerHTML = t ? replaceBlock("ar") : ""; if (t) await loadReplaceBlock("ar", t); };
 }
-document.addEventListener("click", async (e) => {
-  if (e.target.id !== "adjGo") return;
-  const err = $("adjErr"); clearFormError(err); e.target.disabled = true;
+async function doAdjust() {
+  const go = $("adjGo"); go.disabled = true; $("pErr").style.display = "none";
   try {
-    const a = $("adjAct").value, errs = [], date = $("adjDate")?.value || undefined, campaign = $("campSel").value || null;
-    const args = { p_action: a, p_staff: adjStaff.id, p_campaign: campaign, p_effective: date };
-    if (a === "replace") {
-      args.p_to_team = $("adjTeam").value; if (!args.p_to_team) errs.push("Choose the team");
-      else { const r = readReplaceBlock("ar", errs); args.p_replace_staff = r.who; args.p_old_disposition = r.disp; args.p_old_to_team = r.dest; args.p_reason = r.reason; }
-    } else {
-      args.p_reason = $("adjReason")?.value.trim() || null;
-      if (a === "transfer") { args.p_to_team = $("adjTeam").value; if (!args.p_to_team) errs.push("Choose the destination team"); }
+    const a = $("adjAct").value, errs = [], args = { p_action: a, p_staff: adjStaff.id, p_campaign: campId(), p_effective: $("adjDate")?.value || undefined };
+    if (a === "replace") { args.p_to_team = $("adjTeam").value; if (!args.p_to_team) errs.push("Choose the team"); else { const r = readReplaceBlock("ar", errs); args.p_replace_staff = r.who; args.p_old_disposition = r.disp; args.p_old_to_team = r.dest; args.p_reason = r.reason; } }
+    else { args.p_reason = $("adjReason")?.value.trim() || null;
+      if (a === "transfer") { args.p_to_team = $("adjTeam").value; if (!args.p_to_team) errs.push("Choose the team"); }
       if (a === "swap") { args.p_swap_with = $("adjWith").value; if (!args.p_swap_with) errs.push("Choose who to swap with"); }
-      if (a !== "transfer" && (args.p_reason || "").length < 3) errs.push("A reason is required");
-    }
+      if (a !== "transfer" && (args.p_reason || "").length < 3) errs.push("A reason is required"); }
     if (errs.length) throw new Error(errs.join("\n"));
-    if (!confirm("Confirm this team adjustment? It will be recorded permanently in the adjustment history.")) return;
-    const { error } = await supabaseClient.rpc("adjust_team_member", args);
-    if (error) throw error;
-    $("adjCard").style.display = "none"; await loadRows(); alert("Adjustment recorded.");
-  } catch (ex) { showFormError(err, { message: friendly(ex) }); err.style.whiteSpace = "pre-line"; }
-  finally { e.target.disabled = false; }
-});
+    if (!confirm("Save this change? It is recorded permanently in the history.")) return;
+    const { error } = await supabaseClient.rpc("adjust_team_member", args); if (error) throw error;
+    closePanel(); await loadBoard(); loadRows();
+  } catch (e) { showErr(e); } finally { go.disabled = false; }
+}
 
-/* ---------- History (lazy) ---------- */
-const ADJ_LABEL = { assign: "Assigned", leave: "Left campaign", transfer: "Transferred", reserve: "Reserve", replaced: "Replaced", replacement_in: "Joined as replacement", swap: "Swapped" };
-async function openHistory(scope) { histScope = scope; histPage = 0; $("histBody").innerHTML = ""; $("histTitle").textContent = scope.title; $("histCard").style.display = "block"; $("histCard").scrollIntoView({ behavior: "smooth" }); await loadHistory(); }
+/* ---------- history (loaded only when opened) ---------- */
+const ADJ_LABEL = { assign: "Put on team", leave: "Left campaign", transfer: "Moved", reserve: "Reserve", replaced: "Replaced", replacement_in: "Joined as replacement", swap: "Swapped" };
+async function openHistory(scope) {
+  histScope = scope; histPage = 0;
+  openPanel(scope.title, `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Person</th><th>What</th><th>From</th><th>To</th><th>Reason</th></tr></thead><tbody id="histBody"></tbody></table></div><button class="btn ghost small" id="histMore" style="display:none;">Load more</button>`);
+  $("histMore").onclick = () => { histPage++; loadHistory(); }; await loadHistory();
+}
 async function loadHistory() {
-  let q = supabaseClient.from("staff_adjustment_history").select("effective_date, adjustment_type, from_team_no, to_team_no, from_team_type, to_team_type, reason, staff(full_name), from_aic:from_aic_id(aic_no), to_aic:to_aic_id(aic_no)")
-    .order("created_at", { ascending: false }).range(histPage * 25, histPage * 25 + 24);
-  q = histScope.staff ? q.eq("staff_id", histScope.staff) : q.eq("uc_id", histScope.uc);
-  const { data, error } = await q;
+  let q = supabaseClient.from("staff_adjustment_history").select("effective_date, adjustment_type, from_team_no, to_team_no, from_team_type, to_team_type, reason, staff(full_name), from_aic:from_aic_id(aic_no), to_aic:to_aic_id(aic_no)").order("created_at", { ascending: false }).range(histPage * 25, histPage * 25 + 24);
+  q = histScope.staff ? q.eq("staff_id", histScope.staff) : q.eq("uc_id", histScope.uc); const { data, error } = await q;
   if (error) { $("histBody").innerHTML = `<tr><td colspan="6">${esc(error.message)}</td></tr>`; return; }
-  const loc = (t, ty, aic) => t ? `Team ${t} (${ty})${aic ? ` · AIC ${aic.aic_no}` : ""}` : "—";
-  if (!histPage && !data.length) $("histBody").innerHTML = `<tr><td colspan="6" class="empty-state">No adjustments recorded yet.</td></tr>`;
-  $("histBody").insertAdjacentHTML("beforeend", data.map(h => `<tr><td>${h.effective_date}</td><td>${esc(h.staff?.full_name)}</td><td>${ADJ_LABEL[h.adjustment_type]}</td>
-    <td>${loc(h.from_team_no, h.from_team_type, h.from_aic)}</td><td>${loc(h.to_team_no, h.to_team_type, h.to_aic)}</td><td>${esc(h.reason || "")}</td></tr>`).join(""));
+  const loc = (t, ty, aic) => t ? `Team ${t} (${typeName(ty)})${aic ? ` · AIC ${aic.aic_no}` : ""}` : "—";
+  if (!histPage && !data.length) $("histBody").innerHTML = `<tr><td colspan="6" class="muted">Nothing recorded yet.</td></tr>`;
+  $("histBody").insertAdjacentHTML("beforeend", data.map(h => `<tr><td>${h.effective_date}</td><td>${esc(h.staff?.full_name)}</td><td>${ADJ_LABEL[h.adjustment_type]}</td><td>${loc(h.from_team_no, h.from_team_type, h.from_aic)}</td><td>${loc(h.to_team_no, h.to_team_type, h.to_aic)}</td><td>${esc(h.reason || "")}</td></tr>`).join(""));
   $("histMore").style.display = data.length === 25 ? "inline-block" : "none";
 }
-$("histMore").onclick = () => { histPage++; loadHistory(); };
+
+/* ---------- waiting list + search (load on demand) ---------- */
+$("waitBox").addEventListener("toggle", async () => {
+  if (!$("waitBox").open) return; $("waitList").textContent = "Loading…";
+  const { data } = await supabaseClient.from("staff").select("id, full_name, cnic, phone, status, team_members(active)").eq("uc_id", ucId()).eq("designation", "team_member").order("full_name").limit(300);
+  const idle = (data || []).filter(s => !(s.team_members || []).some(m => m.active));
+  $("waitList").innerHTML = idle.length ? `<div class="table-wrap"><table><tbody>${idle.map(s => `<tr><td>${esc(s.full_name)}</td><td>${esc(s.cnic)}</td><td>${badge(s.status)}</td><td><button class="btn small" onclick="openAdjust('${s.id}')">Put on a team</button></td></tr>`).join("")}</tbody></table></div>` : "Everyone is on a team.";
+});
+async function loadRows() {
+  let q = supabaseClient.from("staff").select("id, full_name, cnic, phone, designation, status, aic_no, team_members(active, teams(team_no))", { count: "exact" }).eq("uc_id", ucId()).order("designation").order("full_name").range(page * PAGE, page * PAGE + PAGE - 1);
+  if ($("fDes").value) q = q.eq("designation", $("fDes").value); if ($("fStatus").value) q = q.eq("status", $("fStatus").value);
+  const s = $("fQ").value.trim().replace(/[%,()]/g, ""); if (s) q = q.or(`full_name.ilike.%${s}%,cnic.ilike.%${s}%`);
+  const { data, error, count } = await q; if (error) { $("rows").innerHTML = `<tr><td colspan="7">${esc(error.message)}</td></tr>`; return; }
+  $("pageInfo").textContent = `${count ? page * PAGE + 1 : 0}–${Math.min((page + 1) * PAGE, count || 0)} of ${count || 0}`; $("prevP").disabled = page === 0; $("nextP").disabled = (page + 1) * PAGE >= (count || 0);
+  $("rows").innerHTML = (data || []).map(r => { const tm = (r.team_members || []).find(m => m.active);
+    const kind = { ucmo: "ucmo", aic: "aic", driver: "driver", team_member: "member" }[r.designation];
+    return `<tr><td>${esc(r.full_name)}</td><td>${DESIGNATIONS[r.designation]}${r.aic_no ? " " + r.aic_no : ""}</td><td>${esc(r.cnic)}</td><td>${esc(r.phone)}</td><td>${tm ? "Team " + tm.teams.team_no : "—"}</td><td>${badge(r.status)}</td>
+      <td><button class="btn small ghost" onclick="findEdit('${r.id}')">Open</button></td></tr>`; }).join("") || `<tr><td colspan="7" class="muted">No staff found.</td></tr>`;
+}
+async function findEdit(id) {
+  const { data: s } = await supabaseClient.from("staff").select("id, designation, aic_no, aic_staff_id, team_members(active, team_id)").eq("id", id).single();
+  if (s.designation === "team_member") { const tm = (s.team_members || []).find(m => m.active); if (tm) return openPerson({ kind: "member", staff: id, team: tm.team_id }); return openAdjust(id); }
+  if (s.designation === "ucmo") return openPerson({ kind: "ucmo", staff: id });
+  if (s.designation === "aic") return openPerson({ kind: "aic", aicNo: s.aic_no, staff: id });
+  const a = B.aics.find(x => x.id === s.aic_staff_id); return openPerson({ kind: "driver", aic: s.aic_staff_id, aicNo: a?.aic_no ?? "", staff: id });
+}
+["fDes", "fStatus"].forEach(i => $(i).addEventListener("change", () => { page = 0; loadRows(); }));
+let qT; $("fQ").addEventListener("input", () => { clearTimeout(qT); qT = setTimeout(() => { page = 0; loadRows(); }, 300); });
+$("prevP").onclick = () => { if (page > 0) { page--; loadRows(); } }; $("nextP").onclick = () => { page++; loadRows(); };
 </script>
 </body>
 </html>

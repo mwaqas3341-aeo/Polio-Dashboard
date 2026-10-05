@@ -40,7 +40,7 @@
           <div><label>Tehsil</label><input id="n_tehsil" value="Karor" required></div>
           <div><label>Union council</label><input id="n_uc" value="Fateh Pur Urban" required></div>
         </div>
-        <p class="muted">Number of campaign days is worked out from the two dates.</p>
+        <p class="muted">Number of campaign days is worked out from the two dates. All staff, Area Incharges and teams carry over into the new campaign automatically.</p>
         <div class="error-text" id="newErr" style="display:none;"></div>
         <button class="btn" type="submit">Create campaign</button>
         <button class="btn ghost" type="button" onclick="document.getElementById('newCard').style.display='none'">Cancel</button>
@@ -72,6 +72,13 @@
         <h3>By union council</h3>
         <p class="muted">Open a union council to see its UCMO, Area Incharges, teams and active members.</p>
         <div id="ucList"></div>
+      </div>
+
+      <div class="card">
+        <h2>Saved rosters of this campaign</h2>
+        <p class="muted">Staff and teams carry over into the next campaign automatically. When a campaign is closed, its final roster is saved here so you can always look back at who worked in it.</p>
+        <button class="btn small" id="snapBtn">Save the current roster now</button>
+        <div id="snapList" style="margin-top:.6rem;"></div>
       </div>
     </div>
   </main>
@@ -124,7 +131,7 @@ async function openCampaign(id) {
   $("dTitle").textContent = data.name; $("e_name").value = data.name; $("e_type").value = data.campaign_type; $("e_status").value = data.status;
   $("e_start").value = data.start_date; $("e_end").value = data.end_date; refreshDays();
   $("detail").scrollIntoView({ behavior: "smooth" });
-  loadStructure();
+  loadStructure(); loadSnapshots();
 }
 function refreshDays() {
   const s = $("e_start").value, e = $("e_end").value; if (!s || !e || e < s) { $("e_days").value = "—"; $("dayChips").innerHTML = "<span>Check the dates</span>"; return; }
@@ -149,11 +156,30 @@ $("saveCamp").onclick = async () => {
       const n = (used?.daily_reports || 0) + (used?.team_targets || 0) + (used?.ddm_cards || 0);
       if (n) lines.push(`WARNING: ${used.daily_reports} daily report(s), ${used.team_targets} team target(s) and ${used.ddm_cards} DDM card(s) belong to days after the new last day. Nothing is deleted, but they will fall outside the campaign until you extend it again.`);
     }
+    if ($("e_status").value === "closed" && current.status !== "closed") lines.push("Closing the campaign saves a copy of its final roster. Staff and teams stay in the system and carry over to the next campaign.");
     if (lines.length && !confirm("Apply these changes to this campaign?\n\n" + lines.join("\n\n"))) return;
     const { data, error } = await supabaseClient.from("campaigns").update({ name, campaign_type: $("e_type").value, status: $("e_status").value, start_date: s, end_date: en, total_days: total }).eq("id", current.id).select().single();
     if (error) throw error;
     current = data; $("dTitle").textContent = data.name; await loadList(); alert("Campaign updated.");
   } catch (e) { showFormError(err, e); err.style.whiteSpace = "pre-line"; } finally { btn.disabled = false; }
+};
+
+/* ---- saved rosters (frozen copies, loaded only for the open campaign) ---- */
+async function loadSnapshots() {
+  const { data, error } = await supabaseClient.from("campaign_roster_snapshots").select("id, uc_id, reason, taken_at, planned_aics, planned_teams, data, union_councils(name)")
+    .eq("campaign_id", current.id).order("taken_at", { ascending: false }).limit(10);
+  if (error) { $("snapList").innerHTML = `<span class="muted">${esc(error.message)}</span>`; return; }
+  if (!data.length) { $("snapList").innerHTML = `<span class="muted">No roster saved yet for this campaign.</span>`; return; }
+  $("snapList").innerHTML = data.map(r => { const aics = r.data.aics || [], teams = aics.reduce((n, a) => n + (a.teams || []).length, 0);
+    return `<details class="uc"><summary>${esc(r.union_councils?.name)} — saved ${new Date(r.taken_at).toLocaleString("en-GB")} (${r.reason === "closed" ? "campaign closed" : "saved by hand"}) · ${aics.length} AICs · ${teams} teams</summary>
+      <p><b>UCMO:</b> ${esc(r.data.ucmo?.name || "—")}</p>
+      ${aics.map(a => `<div style="margin:.5rem 0;"><b>AIC ${a.aic_no}</b> — ${esc(a.name)}${a.driver ? " · driver " + esc(a.driver.name) : ""}
+        <div class="table-wrap"><table><thead><tr><th>Team</th><th>Type</th><th>Members</th></tr></thead><tbody>${(a.teams || []).map(t => `<tr><td>${t.team_no}</td><td>${t.type}</td><td>${(t.members || []).map(m => esc(m.name)).join(", ") || "—"}</td></tr>`).join("") || `<tr><td colspan="3">No teams</td></tr>`}</tbody></table></div></div>`).join("")}</details>`; }).join("");
+}
+$("snapBtn").onclick = async () => {
+  if (!current) return; if (!confirm("Save a copy of the current roster for this campaign?")) return;
+  const { error } = await supabaseClient.rpc("snapshot_campaign_roster", { p_campaign: current.id, p_reason: "manual" });
+  if (error) return alert(error.message); loadSnapshots();
 };
 
 /* ---- structure: counts only on open; per-UC detail loads when expanded ---- */
@@ -174,7 +200,8 @@ async function loadStructure() {
 }
 async function loadUc(d) {
   const uc = d.dataset.uc, body = d.querySelector(".body");
-  const [{ data: staff }, { data: teams }] = await Promise.all([
+  const [{ data: plan }, { data: staff }, { data: teams }] = await Promise.all([
+    supabaseClient.from("uc_plans").select("total_aics, total_teams").eq("uc_id", uc).maybeSingle(),
     supabaseClient.from("staff").select("id, full_name, designation, aic_no, can_have_driver, status").eq("uc_id", uc).in("designation", ["ucmo", "aic", "driver"]).eq("status", "active").order("aic_no"),
     supabaseClient.from("teams").select("id, team_no, team_type, aic_staff_id, team_members(active, member_no, staff(full_name))").eq("uc_id", uc).order("team_no")]);
   const ucmo = (staff || []).find(s => s.designation === "ucmo"), aics = (staff || []).filter(s => s.designation === "aic"), drivers = (staff || []).filter(s => s.designation === "driver");
@@ -182,7 +209,7 @@ async function loadUc(d) {
   const typ = (t) => ({ fixed: "Fixed", transit: "Transit", mobile: "Mobile" })[t];
   const unassigned = tl.filter(t => !t.aic_staff_id);
   body.classList.remove("muted");
-  body.innerHTML = `<p><b>UCMO:</b> ${ucmo ? esc(ucmo.full_name) : "<i>not assigned</i>"} &nbsp;·&nbsp; <b>AICs:</b> ${aics.length} &nbsp;·&nbsp; <b>Teams:</b> ${tl.length}</p>` +
+  body.innerHTML = `<p><b>UCMO:</b> ${ucmo ? esc(ucmo.full_name) : "<i>not assigned</i>"} &nbsp;·&nbsp; <b>AICs:</b> ${aics.length}${plan ? " of " + plan.total_aics + " planned" : ""} &nbsp;·&nbsp; <b>Teams:</b> ${tl.length}${plan ? " of " + plan.total_teams + " planned" : ""}</p>` +
     (aics.map(a => { const mine = tl.filter(t => t.aic_staff_id === a.id);
       return `<div style="margin:.6rem 0;"><b>AIC ${String(a.aic_no).padStart(2, "0")}</b> — ${esc(a.full_name)}${a.can_have_driver ? " · driver assigned" : ""} · ${mine.length} team(s)
         <div class="table-wrap"><table><thead><tr><th>Team No.</th><th>Type</th><th>Active members</th><th>Status</th></tr></thead><tbody>
