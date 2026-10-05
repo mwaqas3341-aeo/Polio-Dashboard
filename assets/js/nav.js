@@ -17,6 +17,7 @@ const NAV_LINKS = [
   { href: "pages/staff-pdf.html", label: "Staff PDF (CNIC, AIC)" },
   { href: "pages/ddm-cards.html", label: "DDM cards" },
   { href: "pages/audit-log.html", label: "Audit log" },
+  { href: "change-password.html", label: "Change password" },
 ];
 
 function renderSidebar(activeHref) {
