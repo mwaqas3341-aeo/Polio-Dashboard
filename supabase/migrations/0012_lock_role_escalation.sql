@@ -1,5 +1,4 @@
--- NOT YET APPLIED. Closes a hole: any signed-in user could insert/update their own
--- profile with role = 'admin'. Now only an existing admin can grant admin / district_coordinator.
+-- Applied to Supabase project zeqbepueevdnhlvoykvz on 2026-10-05. Closes self-service admin role escalation.
 drop policy if exists profiles_insert on profiles;
 create policy profiles_insert on profiles for insert with check (
   app_user_role() = 'admin'

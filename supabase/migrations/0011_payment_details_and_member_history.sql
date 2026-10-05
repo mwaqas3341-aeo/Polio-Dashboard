@@ -1,4 +1,4 @@
--- NOT YET APPLIED — Supabase connection timed out when this was written (2026-10-05).
+-- Applied to Supabase project zeqbepueevdnhlvoykvz on 2026-10-05.
 -- Payment account details per staff member (for payment lists, downloaded separately)
 alter table staff add column if not exists payment_number text;
 alter table staff add column if not exists payment_wallet text;
