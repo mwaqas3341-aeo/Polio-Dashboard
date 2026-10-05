@@ -98,7 +98,7 @@
         const teamId = document.getElementById("teamSelect").value;
         const { data: uc } = await supabaseClient.from("union_councils").select("name, tehsils(name, districts(name))").eq("id", ucId).single();
         let q = supabaseClient.from("teams")
-          .select(`id, team_no, team_members(member_no, member_role, staff(full_name, cnic, phone, cnic_pic_front_path, cnic_pic_back_path))`)
+          .select(`id, team_no, team_members(member_no, member_role, active, staff(full_name, cnic, phone, cnic_pic_front_path, cnic_pic_back_path))`)
           .eq("uc_id", ucId).order("team_no");
         if (teamId) q = q.eq("id", teamId);
         const { data: teams, error } = await q;
@@ -108,7 +108,7 @@
         let html = `<div class="sheet-head"><h2>Polio Campaign — Team Staff List with CNIC</h2>
           <p>District ${esc(uc.tehsils?.districts?.name)} · Tehsil ${esc(uc.tehsils?.name)} · UC ${esc(uc.name)}</p></div>`;
         for (const t of teams) {
-          const members = (t.team_members || []).slice().sort((a, b) => (a.member_no ?? 99) - (b.member_no ?? 99));
+          const members = (t.team_members || []).filter(m => m.active).slice().sort((a, b) => (a.member_no ?? 99) - (b.member_no ?? 99));
           html += `<div class="team-title">Team No. ${esc(t.team_no)}</div>`;
           if (!members.length) { html += `<p class="muted">No members assigned.</p>`; continue; }
           for (const m of members) {

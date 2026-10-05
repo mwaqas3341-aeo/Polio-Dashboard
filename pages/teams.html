@@ -18,6 +18,11 @@
             <div><label>Full name</label><input id="s_name" required></div>
             <div><label>CNIC</label><input id="s_cnic" placeholder="32202-XXXXXXX-X"></div>
             <div><label>Cell no.</label><input id="s_phone"></div>
+            <div><label>Payment account no. (Easypaisa / JazzCash)</label><input id="s_paynum" required placeholder="03XX-XXXXXXX"></div>
+            <div><label>Wallet type</label>
+              <select id="s_wallet" required><option value="">Select…</option><option value="easypaisa">Easypaisa</option><option value="jazzcash">JazzCash</option></select>
+            </div>
+            <div><label>IBAN no. (only if the member has one)</label><input id="s_iban" placeholder="PK00XXXX0000000000000000" maxlength="24"></div>
             <div><label>Designation</label><input id="s_designation" placeholder="Vaccinator / Mobilizer"></div>
             <div><label>Category</label><input id="s_category" placeholder="e.g. team leader"></div>
             <div><label>CNIC picture — front</label><input type="file" id="s_cnic_front" accept="image/*"></div>
@@ -26,6 +31,7 @@
             <div><label>Tehsil</label><input id="s_tehsil" value="Karor" required></div>
             <div><label>Union council</label><input id="s_uc" value="Fateh Pur Urban" required></div>
           </div>
+          <label class="muted" style="display:block;margin-top:0.5rem;"><input type="checkbox" id="s_same"> Payment account is the same as the cell no.</label>
           <p class="muted" style="margin-top:0.5rem;">CNIC photos are stored privately — only people scoped to this union council can view them.</p>
           <div class="error-text" id="staffError" style="display:none;"></div>
           <button class="btn" style="margin-top:0.5rem;" id="staffSubmitBtn">Add staff</button>
@@ -66,7 +72,23 @@
       </div>
 
       <div class="card">
+        <h2>Replace / swap a team member</h2>
+        <p class="muted">The outgoing member is kept in the team's history (with date and reason) and the new member takes the same member no.</p>
+        <form id="replaceForm">
+          <div class="form-grid">
+            <div><label>Team</label><select id="r_team"></select></div>
+            <div><label>Outgoing member</label><select id="r_old"></select></div>
+            <div><label>Incoming staff</label><select id="r_new"></select></div>
+            <div><label>Reason</label><input id="r_reason" placeholder="e.g. transferred, sick, replaced"></div>
+          </div>
+          <div class="error-text" id="replaceError" style="display:none;"></div>
+          <button class="btn" style="margin-top:1rem;">Replace member</button>
+        </form>
+      </div>
+
+      <div class="card">
         <h2>Teams &amp; their rosters</h2>
+        <label class="muted"><input type="checkbox" id="showPrev"> Show previous (replaced) members</label>
         <div class="table-wrap">
           <table id="teamsTable">
             <thead><tr><th>Team no.</th><th>Type</th><th>UC</th><th>#</th><th>Name</th><th>CNIC</th><th>Cell no.</th><th>Role</th><th>CNIC photos</th></tr></thead>
@@ -117,6 +139,9 @@
           full_name: document.getElementById("s_name").value.trim(),
           cnic: document.getElementById("s_cnic").value.trim() || null,
           phone: document.getElementById("s_phone").value.trim() || null,
+          payment_number: document.getElementById("s_paynum").value.trim() || null,
+          payment_wallet: document.getElementById("s_wallet").value || null,
+          iban: document.getElementById("s_iban").value.replace(/\s/g, "").toUpperCase() || null,
           designation: document.getElementById("s_designation").value.trim() || null,
           category: document.getElementById("s_category").value.trim() || null,
           uc_id,
@@ -146,6 +171,10 @@
       } finally {
         btn.disabled = false;
       }
+    });
+
+    document.getElementById("s_same").addEventListener("change", (e) => {
+      if (e.target.checked) document.getElementById("s_paynum").value = document.getElementById("s_phone").value;
     });
 
     document.getElementById("teamForm").addEventListener("submit", async (e) => {
@@ -189,6 +218,31 @@
       await loadTeamsTable();
     });
 
+    async function loadReplaceOldMembers() {
+      const teamId = document.getElementById("r_team").value;
+      if (!teamId) { document.getElementById("r_old").innerHTML = ""; return; }
+      const { data } = await supabaseClient.from("team_members")
+        .select("staff_id, member_no, staff(full_name)").eq("team_id", teamId).eq("active", true).order("member_no");
+      document.getElementById("r_old").innerHTML = (data || [])
+        .map(m => `<option value="${m.staff_id}">#${m.member_no ?? "—"} ${m.staff?.full_name ?? "?"}</option>`).join("");
+    }
+    document.getElementById("r_team").addEventListener("change", loadReplaceOldMembers);
+    document.getElementById("showPrev").addEventListener("change", loadTeamsTable);
+    document.getElementById("replaceForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("replaceError");
+      clearFormError(err);
+      const { error } = await supabaseClient.rpc("replace_team_member", {
+        p_team: document.getElementById("r_team").value,
+        p_old_staff: document.getElementById("r_old").value,
+        p_new_staff: document.getElementById("r_new").value,
+        p_reason: document.getElementById("r_reason").value.trim() || null,
+      });
+      if (error) return showFormError(err, error);
+      document.getElementById("replaceForm").reset();
+      await Promise.all([loadTeamsTable(), loadReplaceOldMembers()]);
+    });
+
     async function populateAssignDropdowns() {
       const [{ data: teams }, { data: staffList }] = await Promise.all([
         supabaseClient.from("teams").select("id, team_no").order("team_no"),
@@ -196,8 +250,12 @@
       ]);
       document.getElementById("a_team").innerHTML =
         (teams || []).map(t => `<option value="${t.id}">Team ${t.team_no}</option>`).join("");
-      document.getElementById("a_staff").innerHTML =
-        (staffList || []).map(s => `<option value="${s.id}">${s.full_name}</option>`).join("");
+      const staffOpts = (staffList || []).map(s => `<option value="${s.id}">${s.full_name}</option>`).join("");
+      document.getElementById("a_staff").innerHTML = staffOpts;
+      document.getElementById("r_new").innerHTML = staffOpts;
+      document.getElementById("r_team").innerHTML =
+        (teams || []).map(t => `<option value="${t.id}">Team ${t.team_no}</option>`).join("");
+      await loadReplaceOldMembers();
     }
 
     async function signedUrl(path) {
@@ -211,7 +269,7 @@
       const { data, error } = await supabaseClient
         .from("teams")
         .select(`id, team_no, team_type, union_councils(name),
-          team_members(member_no, member_role, staff(id, full_name, cnic, phone, cnic_pic_front_path, cnic_pic_back_path))`)
+          team_members(member_no, member_role, active, ended_on, end_reason, staff(id, full_name, cnic, phone, cnic_pic_front_path, cnic_pic_back_path))`)
         .order("team_no");
       const tbody = document.querySelector("#teamsTable tbody");
       if (error) {
@@ -225,7 +283,8 @@
 
       const rowsHtml = [];
       for (const t of data) {
-        const members = (t.team_members || []).slice().sort((a, b) => (a.member_no ?? 99) - (b.member_no ?? 99));
+        const showPrev = document.getElementById("showPrev").checked;
+        const members = (t.team_members || []).filter(m => showPrev || m.active).slice().sort((a, b) => (a.member_no ?? 99) - (b.member_no ?? 99));
         if (!members.length) {
           rowsHtml.push(`
             <tr>
@@ -249,7 +308,7 @@
               <td>${s.full_name ?? "?"}</td>
               <td>${s.cnic ?? "—"}</td>
               <td>${s.phone ?? "—"}</td>
-              <td>${m.member_role === "leader" ? `<span class="badge ok">Leader</span>` : "Member"}</td>
+              <td>${m.active ? (m.member_role === "leader" ? `<span class="badge ok">Leader</span>` : "Member") : `<span class="badge attention">Replaced ${m.ended_on ?? ""}${m.end_reason ? " — " + m.end_reason : ""}</span>`}</td>
               <td>${photoLinks}</td>
             </tr>`);
         }

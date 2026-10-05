@@ -146,6 +146,7 @@
           .from("team_members")
           .select("member_no, member_role, staff(full_name, cnic, phone)")
           .eq("team_id", currentTeamId)
+          .eq("active", true)
           .order("member_no");
         const rosterBody = document.getElementById("rosterBody");
         if (!roster || !roster.length) {

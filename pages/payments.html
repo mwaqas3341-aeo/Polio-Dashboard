@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment lists — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Payment lists (Easypaisa / JazzCash / IBAN)</h1></div>
+      <div class="card">
+        <div class="form-grid">
+          <div><label>Union council</label><select id="ucSelect"></select></div>
+          <div><label>Wallet</label>
+            <select id="walletSel"><option value="">All</option><option value="easypaisa">Easypaisa</option><option value="jazzcash">JazzCash</option><option value="iban">IBAN holders only</option></select>
+          </div>
+        </div>
+        <label class="muted"><input type="checkbox" id="prevChk"> Include previous (replaced) members</label><br>
+        <button class="btn" id="loadBtn" style="margin-top:0.5rem;">Show list</button>
+        <button class="btn secondary" id="xlsBtn" style="margin-top:0.5rem;">Download Excel</button>
+        <div class="error-text" id="err" style="display:none;"></div>
+      </div>
+      <div class="card"><div class="table-wrap">
+        <table id="tbl"><thead><tr><th>Team</th><th>#</th><th>Name</th><th>CNIC</th><th>Wallet</th><th>Payment no.</th><th>IBAN</th><th>Status</th></tr></thead>
+        <tbody><tr><td colspan="8" class="empty-state">Choose filters and click Show list.</td></tr></tbody></table>
+      </div></div>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script src="../assets/js/export.js"></script>
+  <script>
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    const WALLET = { easypaisa: "Easypaisa", jazzcash: "JazzCash" };
+    let rows = [];
+    (async () => {
+      const session = await requireAuth(); if (!session) return;
+      renderSidebar("payments.html");
+      const { data: ucs } = await supabaseClient.from("union_councils").select("id, name").order("name");
+      document.getElementById("ucSelect").innerHTML = (ucs || []).map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join("");
+    })();
+
+    async function load() {
+      const err = document.getElementById("err"); err.style.display = "none";
+      const ucId = document.getElementById("ucSelect").value;
+      const { data, error } = await supabaseClient.from("teams")
+        .select("team_no, team_members(member_no, active, ended_on, staff(full_name, cnic, payment_wallet, payment_number, iban))")
+        .eq("uc_id", ucId).order("team_no");
+      if (error) { err.textContent = error.message; err.style.display = "block"; return; }
+      const filt = document.getElementById("walletSel").value, prev = document.getElementById("prevChk").checked;
+      rows = [];
+      for (const t of data) for (const m of (t.team_members || [])) {
+        if (!m.active && !prev) continue;
+        const s = m.staff || {};
+        if (filt === "iban" ? !s.iban : filt && s.payment_wallet !== filt) continue;
+        rows.push([t.team_no, m.member_no ?? "", s.full_name ?? "", s.cnic ?? "", WALLET[s.payment_wallet] ?? "", s.payment_number ?? "", s.iban ?? "",
+                   m.active ? "Active" : `Replaced ${m.ended_on ?? ""}`]);
+      }
+      rows.sort((a, b) => a[0] - b[0] || (a[1] || 99) - (b[1] || 99));
+      document.querySelector("#tbl tbody").innerHTML = rows.length
+        ? rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")
+        : `<tr><td colspan="8" class="empty-state">No matching members.</td></tr>`;
+    }
+    document.getElementById("loadBtn").addEventListener("click", load);
+    document.getElementById("xlsBtn").addEventListener("click", async () => {
+      await load();
+      if (!rows.length) return;
+      const H = ["Team no.", "Member no.", "Name", "CNIC", "Wallet", "Payment no.", "IBAN", "Status"];
+      exportWorkbookToExcel("payment-list.xlsx", [
+        { name: "All", headers: H, rows },
+        { name: "Easypaisa", headers: H, rows: rows.filter(r => r[4] === "Easypaisa") },
+        { name: "JazzCash", headers: H, rows: rows.filter(r => r[4] === "JazzCash") },
+        { name: "IBAN", headers: H, rows: rows.filter(r => r[6]) },
+      ]);
+    });
+  </script>
+</body>
+</html>
