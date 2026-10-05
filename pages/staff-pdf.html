@@ -64,7 +64,7 @@
       const session = await requireAuth();
       if (!session) return;
       renderSidebar("staff-pdf.html");
-      const { data: ucs } = await supabaseClient.from("union_councils").select("id, name, district, tehsil").order("name");
+      const { data: ucs } = await supabaseClient.from("union_councils").select("id, name").order("name");
       document.getElementById("ucSelect").innerHTML = (ucs || []).map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join("");
       await loadTeams();
       document.getElementById("ucSelect").addEventListener("change", loadTeams);
@@ -96,7 +96,7 @@
       try {
         const ucId = document.getElementById("ucSelect").value;
         const teamId = document.getElementById("teamSelect").value;
-        const { data: uc } = await supabaseClient.from("union_councils").select("name, district, tehsil").eq("id", ucId).single();
+        const { data: uc } = await supabaseClient.from("union_councils").select("name, tehsils(name, districts(name))").eq("id", ucId).single();
         let q = supabaseClient.from("teams")
           .select(`id, team_no, team_members(member_no, member_role, staff(full_name, cnic, phone, cnic_pic_front_path, cnic_pic_back_path))`)
           .eq("uc_id", ucId).order("team_no");
@@ -106,7 +106,7 @@
         if (!teams.length) throw new Error("No teams found for this selection.");
 
         let html = `<div class="sheet-head"><h2>Polio Campaign — Team Staff List with CNIC</h2>
-          <p>District ${esc(uc.district)} · Tehsil ${esc(uc.tehsil)} · UC ${esc(uc.name)}</p></div>`;
+          <p>District ${esc(uc.tehsils?.districts?.name)} · Tehsil ${esc(uc.tehsils?.name)} · UC ${esc(uc.name)}</p></div>`;
         for (const t of teams) {
           const members = (t.team_members || []).slice().sort((a, b) => (a.member_no ?? 99) - (b.member_no ?? 99));
           html += `<div class="team-title">Team No. ${esc(t.team_no)}</div>`;
