@@ -13,6 +13,7 @@ const NAV_LINKS = [
   { href: "pages/daily-reports.html", label: "Daily reports (quick entry)" },
   { href: "pages/two-a-form.html", label: "2A form (generate & print)" },
   { href: "pages/supervision.html", label: "Supervision visits" },
+  { href: "pages/staff-pdf.html", label: "Staff PDF (CNIC, AIC)" },
   { href: "pages/ddm-cards.html", label: "DDM cards" },
   { href: "pages/audit-log.html", label: "Audit log" },
 ];

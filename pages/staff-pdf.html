@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff PDF (AIC) — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<style>
+  /* Pakistani CNIC = ID-1 card size (ISO/IEC 7810): 85.6 mm x 53.98 mm */
+  .cnic-box {
+    width: 85.6mm; height: 54mm; border: 0.3mm solid #444; border-radius: 3mm;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    background: #fafafa; flex: none;
+  }
+  .cnic-box img { width: 100%; height: 100%; object-fit: contain; }
+  .cnic-box.empty { color: #888; font-size: 9pt; border-style: dashed; }
+  .sheet-head { text-align: center; margin-bottom: 4mm; }
+  .sheet-head h2 { margin: 0; font-size: 14pt; }
+  .sheet-head p { margin: 1mm 0 0; font-size: 10pt; }
+  .team-title { background: #e8efed; padding: 1.5mm 3mm; font-weight: 700; font-size: 11pt; margin: 4mm 0 2mm; break-after: avoid; }
+  .member { break-inside: avoid; margin-bottom: 4mm; }
+  .member .info { font-size: 10pt; margin-bottom: 1.5mm; }
+  .member .info b { display: inline-block; min-width: 22mm; }
+  .cnic-row { display: flex; gap: 4mm; flex-wrap: wrap; }
+  @page { size: A4 portrait; margin: 10mm; }
+  @media print {
+    .app-shell > .sidebar, .no-print, .topbar { display: none !important; }
+    .main { padding: 0 !important; margin: 0 !important; }
+    body { background: #fff; }
+    #sheet { box-shadow: none; border: 0; padding: 0; }
+  }
+  #sheet { background: #fff; padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Staff PDF (for Area Incharge)</h1></div>
+
+      <div class="card no-print">
+        <div class="form-grid">
+          <div><label>Union council</label><select id="ucSelect"></select></div>
+          <div><label>Team (optional)</label><select id="teamSelect"><option value="">All teams</option></select></div>
+        </div>
+        <p class="muted" style="margin-top:0.5rem;">Each member's CNIC front and back are printed at the standard Pakistani CNIC card size (85.6 × 54 mm). Click <b>Generate PDF</b>, then choose <b>Save as PDF</b> in the print dialog (A4, scale 100%, margins default).</p>
+        <button class="btn" id="genBtn" style="margin-top:0.5rem;">Generate PDF</button>
+        <div class="error-text" id="err" style="display:none;"></div>
+      </div>
+
+      <div id="sheet"><p class="muted">Choose a union council and click Generate PDF.</p></div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/supabaseClient.js"></script>
+  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/crud.js"></script>
+  <script>
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    let allTeams = [];
+
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      renderSidebar("staff-pdf.html");
+      const { data: ucs } = await supabaseClient.from("union_councils").select("id, name, district, tehsil").order("name");
+      document.getElementById("ucSelect").innerHTML = (ucs || []).map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join("");
+      await loadTeams();
+      document.getElementById("ucSelect").addEventListener("change", loadTeams);
+    })();
+
+    async function loadTeams() {
+      const ucId = document.getElementById("ucSelect").value;
+      const { data } = await supabaseClient.from("teams").select("id, team_no").eq("uc_id", ucId).order("team_no");
+      allTeams = data || [];
+      document.getElementById("teamSelect").innerHTML = `<option value="">All teams</option>` +
+        allTeams.map(t => `<option value="${t.id}">Team ${t.team_no}</option>`).join("");
+    }
+
+    async function signed(path) {
+      if (!path) return null;
+      const { data, error } = await supabaseClient.storage.from("staff-documents").createSignedUrl(path, 3600);
+      return error ? null : data.signedUrl;
+    }
+
+    const imgBox = (url, label) => url
+      ? `<div class="cnic-box"><img src="${url}" alt="CNIC ${label}"></div>`
+      : `<div class="cnic-box empty">CNIC ${label} — not uploaded</div>`;
+
+    document.getElementById("genBtn").addEventListener("click", async () => {
+      const err = document.getElementById("err");
+      err.style.display = "none";
+      const btn = document.getElementById("genBtn");
+      btn.disabled = true; btn.textContent = "Preparing…";
+      try {
+        const ucId = document.getElementById("ucSelect").value;
+        const teamId = document.getElementById("teamSelect").value;
+        const { data: uc } = await supabaseClient.from("union_councils").select("name, district, tehsil").eq("id", ucId).single();
+        let q = supabaseClient.from("teams")
+          .select(`id, team_no, team_members(member_no, member_role, staff(full_name, cnic, phone, cnic_pic_front_path, cnic_pic_back_path))`)
+          .eq("uc_id", ucId).order("team_no");
+        if (teamId) q = q.eq("id", teamId);
+        const { data: teams, error } = await q;
+        if (error) throw error;
+        if (!teams.length) throw new Error("No teams found for this selection.");
+
+        let html = `<div class="sheet-head"><h2>Polio Campaign — Team Staff List with CNIC</h2>
+          <p>District ${esc(uc.district)} · Tehsil ${esc(uc.tehsil)} · UC ${esc(uc.name)}</p></div>`;
+        for (const t of teams) {
+          const members = (t.team_members || []).slice().sort((a, b) => (a.member_no ?? 99) - (b.member_no ?? 99));
+          html += `<div class="team-title">Team No. ${esc(t.team_no)}</div>`;
+          if (!members.length) { html += `<p class="muted">No members assigned.</p>`; continue; }
+          for (const m of members) {
+            const s = m.staff || {};
+            const [f, b] = await Promise.all([signed(s.cnic_pic_front_path), signed(s.cnic_pic_back_path)]);
+            html += `<div class="member">
+              <div class="info"><b>Member ${esc(m.member_no ?? "—")}</b> ${esc(s.full_name)}
+                &nbsp;|&nbsp; CNIC: ${esc(s.cnic || "—")} &nbsp;|&nbsp; Cell: ${esc(s.phone || "—")}</div>
+              <div class="cnic-row">${imgBox(f, "front")}${imgBox(b, "back")}</div></div>`;
+          }
+        }
+        const sheet = document.getElementById("sheet");
+        sheet.innerHTML = html;
+        // wait for every image so none are missing from the PDF
+        await Promise.all([...sheet.querySelectorAll("img")].map(img =>
+          img.complete ? null : new Promise(r => { img.onload = img.onerror = r; })));
+        window.print();
+      } catch (e) {
+        err.textContent = e.message || String(e); err.style.display = "block";
+      } finally {
+        btn.disabled = false; btn.textContent = "Generate PDF";
+      }
+    });
+  </script>
+</body>
+</html>
