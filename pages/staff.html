@@ -85,7 +85,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const PAGE = 15;
-let banks = [], ctx = null, B = null /* board data */, page = 0, selNum = null, selType = null, existingDriver = null, adjStaff = null, histScope = null, histPage = 0;
+let selTeams = new Map(), banks = [], ctx = null, B = null /* board data */, page = 0, selNum = null, selType = null, existingDriver = null, adjStaff = null, histScope = null, histPage = 0;
 
 /* ---------- small helpers ---------- */
 function friendly(err) {
@@ -229,6 +229,37 @@ function openTeamPicker(aicId) {
     closePanel(); await loadBoard(); } catch (e) { showErr(e); } };
 }
 
+/* ---------- teams assigned to an Area Incharge (inside the AIC form) ---------- */
+function renderTeamGrid(editing) {
+  const max = B.plan?.total_teams ?? 60, own = editing?.id;
+  $("tmGrid").innerHTML = Array.from({ length: max }, (_, i) => i + 1).map(n => {
+    const t = B.teams.find(x => x.team_no === n), other = t && t.aic_staff_id && t.aic_staff_id !== own, mine = t && t.aic_staff_id === own;
+    const who = other ? "AIC " + (B.aics.find(a => a.id === t.aic_staff_id)?.aic_no ?? "?") : "";
+    return `<button type="button" data-n="${n}" class="${other ? "taken" : ""} ${mine || selTeams.has(n) ? "sel" : ""}" ${other ? `title="${who}"` : ""} ${mine ? "disabled" : ""}>${n}</button>`; }).join("");
+  $("tmGrid").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.classList.contains("taken") || b.disabled) return; const n = Number(b.dataset.n);
+    if (selTeams.has(n)) selTeams.delete(n); else { const t = B.teams.find(x => x.team_no === n); selTeams.set(n, { id: t?.id || null, type: t?.team_type || "" }); }
+    b.classList.toggle("sel"); renderTeamTypes(); };
+  renderTeamTypes(editing);
+}
+function renderTeamTypes(editing) {
+  const own = B.teams.filter(t => editing && t.aic_staff_id === editing.id).map(t => t.team_no).sort((a, b) => a - b);
+  const chosen = [...selTeams.keys()].sort((a, b) => a - b);
+  $("tmTypes").innerHTML = (own.length ? `<p class="muted">Already his/hers: ${own.join(", ")}</p>` : "") + chosen.map(n => { const v = selTeams.get(n);
+    return `<div style="display:flex;gap:.6rem;align-items:center;margin:.25rem 0;"><b style="min-width:5.5rem;">Team ${n}</b>${v.id ? `<span class="muted">already exists (${typeName(v.type)})</span>`
+      : `<select data-tn="${n}"><option value="">Choose type…</option>${TEAM_TYPES.map(t => `<option value="${t[0]}" ${v.type === t[0] ? "selected" : ""}>${t[1]}</option>`).join("")}</select>`}</div>`; }).join("")
+    + (chosen.length ? `<p class="muted">${chosen.length} team(s) chosen: ${chosen.join(", ")}</p>` : `<p class="muted">No team chosen yet — you can also add teams later from the AIC card.</p>`);
+  $("tmTypes").querySelectorAll("select[data-tn]").forEach(sel => sel.onchange = () => { selTeams.get(Number(sel.dataset.tn)).type = sel.value; });
+}
+async function assignTeams(aicId, uc) {
+  const errs = [];
+  for (const [n, v] of [...selTeams.entries()].sort((a, b) => a[0] - b[0])) {
+    const { error } = v.id ? await supabaseClient.from("teams").update({ aic_staff_id: aicId }).eq("id", v.id)
+                           : await supabaseClient.from("teams").insert({ uc_id: uc, team_no: n, team_type: v.type, aic_staff_id: aicId });
+    if (error) errs.push(`Team ${n}: ${friendly(error)}`);
+  }
+  return errs.length ? "The Area Incharge was saved, but some teams could not be assigned — " + errs.join("; ") : null;
+}
+
 /* ---------- edit team (number, type, Area Incharge) ---------- */
 function openTeamEdit(teamId) {
   const t = B.teams.find(x => x.id === teamId), used = new Set(B.teams.filter(x => x.id !== teamId).map(x => x.team_no)), max = B.plan?.total_teams ?? 200;
@@ -357,13 +388,17 @@ async function openPerson(c) {
   let extra = "";
   if (c.kind === "ucmo" && !editing) extra += planFields(null, null);
   if (c.kind === "aic") extra += `<div class="sect"><h3>Does this Area Incharge have a driver?</h3><div class="radios"><label><input type="radio" name="hasDrv" value="no" checked> No</label><label><input type="radio" name="hasDrv" value="yes"> Yes</label></div>
-      <div id="drvBox" style="display:none;margin-top:.5rem;"><h3>Driver details</h3>${personFields("d")}</div></div>`;
+      <div id="drvBox" style="display:none;margin-top:.5rem;"><h3>Driver details</h3>${personFields("d")}</div></div>
+    <div class="sect"><h3>Which teams are assigned to this Area Incharge?</h3>
+      <p class="muted">Tap the team numbers (green = chosen, crossed out = already with another Area Incharge). New team numbers need a type.</p>
+      <div class="numgrid" id="tmGrid"></div><div id="tmTypes" style="margin-top:.6rem;"></div></div>`;
   if (c.kind === "member" && c.replace && !editing) extra += `<div class="sect"><b>This person will replace a member of Team ${team.team_no}.</b>${replaceBlock("nr")}</div>`;
   if (editing && c.kind !== "member") extra += `<div class="sect"><label>Status</label><select id="f_status"><option value="active">Active</option><option value="inactive">Inactive</option><option value="left_campaign">Left campaign</option></select></div>`;
   openPanel(title, `<div class="sect"><h3>Personal details</h3>${personFields("f")}</div>${extra}${errBox()}
     <div style="margin-top:1rem;"><button class="btn" id="saveBtn">Save</button> <button class="btn ghost" onclick="closePanel()">Cancel</button></div>`);
   wirePerson("f"); if (editing) { fillPerson("f", editing); if ($("f_status")) $("f_status").value = editing.status === "active" ? "active" : editing.status === "left_campaign" ? "left_campaign" : "inactive"; }
   if (c.kind === "aic") {
+    selTeams = new Map(); renderTeamGrid(editing);
     wirePerson("d"); existingDriver = null;
     document.querySelectorAll('input[name="hasDrv"]').forEach(r => r.onchange = () => { $("drvBox").style.display = r.value === "yes" ? "block" : "none"; });
     const drv = editing ? B.drivers.find(d => d.aic_staff_id === editing.id) : null;
@@ -383,6 +418,7 @@ async function savePerson() {
     if (c.kind === "ucmo" && !ed) plan = readPlan(errs);
     if (c.kind === "aic") { const yes = document.querySelector('input[name="hasDrv"]:checked').value === "yes"; p.can_have_driver = yes;
       if (yes) { const { _front: dF, _back: dB, ...dp } = readPerson("d", errs, "Driver"); drv = { payload: { uc_id: uc, designation: "driver", ...dp }, front: dF, back: dB }; } }
+    if (c.kind === "aic") for (const [n, v] of selTeams) if (!v.id && !v.type) errs.push(`Choose the type of Team ${n} (Fixed, Transit or Mobile)`);
     if (c.kind === "member" && c.replace && !ed) replace = readReplaceBlock("nr", errs);
     if (c.kind === "member" && !ed && !team?.aic_staff_id) errs.push("This team has no Area Incharge yet");
     if (errs.length) throw new Error(errs.join("\n"));
@@ -408,6 +444,7 @@ async function savePerson() {
       if (error) notes.push("The Area Incharge was saved, but the driver was not: " + friendly(error));
       else { const e2 = await saveCnic(dr, drv.front, drv.back); if (e2) notes.push("Driver: " + e2); }
     }
+    if (c.kind === "aic" && selTeams.size) { const tErr = await assignTeams(rec.id, uc); if (tErr) notes.push(tErr); }
     if (c.kind === "member" && !ed) {
       if (upErr) notes.push("The member is not on the team yet. Add the pictures (People not on a team → Edit), then put them on the team.");
       else {
