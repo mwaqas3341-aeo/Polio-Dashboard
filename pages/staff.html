@@ -98,6 +98,7 @@ function friendly(err) {
   if (/staff_cnic_format_check/i.test(m)) return "CNIC must look like XXXXX-XXXXXXX-X.";
   if (/teams_uc_id_team_no_key|duplicate key.*team_no/i.test(m)) return "That team number already exists in this union council.";
   if (/row-level security/i.test(m)) return "You are not allowed to do this for this union council.";
+  if (/update_team|PGRST202|schema cache/i.test(m)) return "Editing a team needs a database update that has not been applied yet (migration 0017). Ask the administrator to run it.";
   return m.replace(/^.*?TEAM_FULL: /, "");
 }
 const bankLabel = (b) => `${b.code} — ${b.name}`;

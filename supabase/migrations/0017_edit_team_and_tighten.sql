@@ -1,4 +1,4 @@
--- NOT YET APPLIED (Supabase tools were unavailable on 2026-10-06). Apply before merging the edit-team branch.
+-- NOT YET APPLIED. Paste this whole file into Supabase > SQL Editor and press Run (safe to run more than once).
 -- Edit a team (number, type, Area Incharge) with history for its members; tighten who may save roster snapshots; audit the plan table.
 create or replace function update_team(p_team uuid, p_team_no int, p_type text, p_aic uuid, p_campaign uuid default null) returns void
 language plpgsql set search_path = public as $$
