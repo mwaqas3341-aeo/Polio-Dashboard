@@ -105,6 +105,15 @@ const bankLabel = (b) => `${b.code} — ${b.name}`;
 const bankFromInput = (v) => { v = (v || "").trim(); if (!v) return null; const code = v.split(" — ")[0].trim().toUpperCase();
   return banks.find(b => b.code === code) || banks.find(b => b.name.toLowerCase() === v.toLowerCase()) || null; };
 const badge = (s) => `<span class="badge ${s === "active" ? "ok" : "attention"}">${STATUS_LABEL[s] || s}</span>`;
+function cnicLine(s) {
+  if (!s.cnic_pic_front_path || !s.cnic_pic_back_path) return `<b style="color:#9b1c1c">CNIC pictures missing</b>`;
+  if (s.cnic_lifetime) return "CNIC ✓ lifetime";
+  if (!s.cnic_expiry) return `<b style="color:#9b1c1c">CNIC expiry date missing</b>`;
+  const days = Math.round((new Date(s.cnic_expiry + "T00:00:00Z") - new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z")) / 864e5);
+  if (days < 0) return `<b style="color:#9b1c1c">CNIC EXPIRED on ${s.cnic_expiry}</b>`;
+  if (days <= 90) return `<b style="color:#a15c00">CNIC expires soon (${s.cnic_expiry})</b>`;
+  return `CNIC ✓ valid till ${s.cnic_expiry}`;
+}
 const typeName = (t) => (TEAM_TYPES.find(x => x[0] === t) || [, t])[1];
 const ucId = () => $("ucSel").value;
 const campId = () => $("campSel").value || null;
@@ -136,8 +145,8 @@ async function loadBoard() {
   const uc = ucId();
   const [{ data: plan }, { data: people }, { data: teams }] = await Promise.all([
     supabaseClient.from("uc_plans").select("total_aics, total_teams").eq("uc_id", uc).maybeSingle(),
-    supabaseClient.from("staff").select("id, uc_id, full_name, cnic, phone, designation, status, aic_no, aic_staff_id, can_have_driver").eq("uc_id", uc).in("designation", ["ucmo", "aic", "driver"]).order("aic_no"),
-    supabaseClient.from("teams").select("id, team_no, team_type, aic_staff_id, team_members(id, active, member_no, staff(id, full_name, phone, status, cnic_pic_front_path, cnic_pic_back_path))").eq("uc_id", uc).order("team_no")]);
+    supabaseClient.from("staff").select("id, uc_id, full_name, cnic, phone, designation, status, aic_no, aic_staff_id, can_have_driver, cnic_pic_front_path, cnic_pic_back_path, cnic_expiry, cnic_lifetime").eq("uc_id", uc).in("designation", ["ucmo", "aic", "driver"]).order("aic_no"),
+    supabaseClient.from("teams").select("id, team_no, team_type, aic_staff_id, team_members(id, active, member_no, staff(id, full_name, phone, status, cnic_pic_front_path, cnic_pic_back_path, cnic_expiry, cnic_lifetime))").eq("uc_id", uc).order("team_no")]);
   const ucmo = (people || []).find(p => p.designation === "ucmo" && p.status === "active") || null;
   const aics = (people || []).filter(p => p.designation === "aic");
   const drivers = (people || []).filter(p => p.designation === "driver" && p.status !== "inactive");
@@ -151,7 +160,7 @@ function renderBoard() {
   const nA = plan?.total_aics ?? Math.max(0, ...aics.map(a => a.aic_no)), nT = plan?.total_teams ?? Math.max(0, ...teams.map(t => t.team_no));
   const haveA = aics.length, haveT = teams.length, pc = (a, b) => b ? Math.min(100, Math.round(a * 100 / b)) : 0;
   let h = `<div class="card ucmo"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
-      <div><span class="tag">UCMO</span> <span class="big">${esc(ucmo.full_name)}</span><br><span class="muted">${esc(ucmo.phone)}</span></div>
+      <div><span class="tag">UCMO</span> <span class="big">${esc(ucmo.full_name)}</span><br><span class="muted">${esc(ucmo.phone)} · ${cnicLine(ucmo)}</span></div>
       <div><button class="btn small" onclick="openPerson({kind:'ucmo',staff:'${ucmo.id}'})">Edit</button> <button class="btn small ghost" onclick="openPlan()">Change numbers</button></div></div>
       <div style="margin-top:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
         <div>Area Incharges: <b>${haveA}</b> of ${nA}<div class="bar"><i style="width:${pc(haveA, nA)}%"></i></div></div>
@@ -162,7 +171,7 @@ function renderBoard() {
     if (!a) { h += `<div class="aic empty"><span><b>AIC ${n}</b> — not added yet</span><button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n}})">+ Add AIC ${n}</button></div>`; continue; }
     const drv = drivers.find(d => d.aic_staff_id === a.id), mine = teams.filter(t => t.aic_staff_id === a.id);
     h += `<div class="aic"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
-        <div><span class="tag">AIC ${n}</span> <span class="big">${esc(a.full_name)}</span> ${a.status !== "active" ? badge(a.status) : ""}<br><span class="muted">${esc(a.phone)}</span></div>
+        <div><span class="tag">AIC ${n}</span> <span class="big">${esc(a.full_name)}</span> ${a.status !== "active" ? badge(a.status) : ""}<br><span class="muted">${esc(a.phone)} · ${cnicLine(a)}</span></div>
         <div><button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n},staff:'${a.id}'})">Edit</button>
           <button class="btn small ghost" onclick="openTeamPicker('${a.id}')">+ Add team</button></div></div>
       <div style="margin-top:.3rem;">Driver: ${drv ? `${esc(drv.full_name)} <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n},staff:'${drv.id}'})">Edit</button>`
@@ -178,7 +187,7 @@ function teamHtml(t) {
     if (!m) return `<div class="slot free"><span>Member ${i} — empty</span><button class="btn small" onclick="openPerson({kind:'member',team:'${t.id}'})">+ Add</button></div>`;
     const s = m.staff, f = s.cnic_pic_front_path, b = s.cnic_pic_back_path;
     return `<div class="slot"><b>${esc(s.full_name)}</b><br><span class="muted">${esc(s.phone)}</span><br>
-      <span class="muted">CNIC: front ${f ? "✓" : "<b>missing</b>"} · back ${b ? "✓" : "<b>missing</b>"}</span><br>
+      <span class="muted">${cnicLine(s)}</span><br>
       <button class="btn small" onclick="openPerson({kind:'member',staff:'${s.id}',team:'${t.id}'})">Edit</button>
       <button class="btn small ghost" onclick="openAdjust('${s.id}')">Move / change</button>
       <button class="btn small ghost" onclick="openPerson({kind:'member',team:'${t.id}',replace:'${s.id}'})">Replace</button></div>`; };
@@ -258,7 +267,13 @@ function personFields(p) {
   <details class="more"><summary>Bank account (optional)</summary>
     <div class="form-grid" style="margin-top:.5rem;"><div><label>Bank (type to search)</label><input id="${p}_bank" list="bankList" placeholder="e.g. HBL"></div>
     <div><label>IBAN</label><input id="${p}_iban" placeholder="PK00XXXX0000000000000000" maxlength="29"></div></div>
-    <div class="chips" id="${p}_chips"></div></details>`;
+    <div class="chips" id="${p}_chips"></div></details>
+  <div class="sect"><h3>CNIC pictures and expiry — all required</h3>
+    <div class="form-grid">
+      <div><label>CNIC front picture</label><input type="file" id="${p}_ffile" accept="image/jpeg,image/png"><div class="muted" id="${p}_fst"></div><img id="${p}_fprev" alt="CNIC front" style="display:none;width:60mm;max-width:100%;border:1px solid #999;border-radius:3mm;margin-top:.3rem;"></div>
+      <div><label>CNIC back picture</label><input type="file" id="${p}_bfile" accept="image/jpeg,image/png"><div class="muted" id="${p}_bst"></div><img id="${p}_bprev" alt="CNIC back" style="display:none;width:60mm;max-width:100%;border:1px solid #999;border-radius:3mm;margin-top:.3rem;"></div>
+      <div><label>CNIC expiry date</label><input type="date" id="${p}_exp"></div></div>
+    <label class="muted" style="display:block;margin-top:.4rem;"><input type="checkbox" id="${p}_life"> Lifetime CNIC (no expiry date printed on it)</label></div>`;
 }
 function wirePerson(p) {
   $(`${p}_cnic`).oninput = (e) => e.target.value = Validate.formatCnic(e.target.value);
@@ -275,6 +290,13 @@ function wirePerson(p) {
     $(`${p}_chips`).innerHTML = h;
     if (!r.empty && r.format && r.bankCode && !$(`${p}_bank`).value) { const g = banks.find(b => b.iban_code === r.bankCode); if (g) $(`${p}_bank`).value = bankLabel(g); }
   };
+  for (const [side, f] of [["front", "f"], ["back", "b"]]) $(`${p}_${f}file`).onchange = (e) => {
+    const file = e.target.files[0], prev = $(`${p}_${f}prev`); if (!file) { prev.style.display = "none"; return; }
+    if (!/^image\/(jpeg|png)$/.test(file.type)) { alert("Only JPG or PNG pictures are allowed."); e.target.value = ""; return; }
+    if (file.size > 6 * 1024 * 1024) { alert("The picture is bigger than 6 MB — please use a smaller photo."); e.target.value = ""; return; }
+    prev.src = URL.createObjectURL(file); prev.style.display = "block"; $(`${p}_${f}st`).textContent = "New picture chosen ✓"; };
+  $(`${p}_life`).onchange = (e) => { $(`${p}_exp`).disabled = e.target.checked; if (e.target.checked) $(`${p}_exp`).value = ""; };
+  $(`${p}_ffile`).dataset.existing = ""; $(`${p}_bfile`).dataset.existing = ""; $(`${p}_fst`).textContent = "Required"; $(`${p}_bst`).textContent = "Required";
   $(`${p}_iban`).oninput = (e) => { e.target.value = Validate.normalizeIban(e.target.value); upd(); };
   $(`${p}_bank`).oninput = upd; $(`${p}_bank`).onchange = upd;
 }
@@ -284,7 +306,11 @@ function fillPerson(p, s) {
   $(`${p}_same`).checked = same; $(`${p}_payrow`).style.display = same ? "none" : "block"; $(`${p}_pay`).value = s.payment_number || "";
   const b = banks.find(x => x.code === s.bank_code); $(`${p}_bank`).value = b ? bankLabel(b) : ""; $(`${p}_iban`).value = s.iban || "";
   if (s.bank_code || s.iban) $(`${p}_bank`).closest("details").open = true; $(`${p}_iban`).dispatchEvent(new Event("input"));
+  $(`${p}_life`).checked = !!s.cnic_lifetime; $(`${p}_exp`).disabled = !!s.cnic_lifetime; $(`${p}_exp`).value = s.cnic_expiry || ""; $(`${p}_exp`).dataset.orig = s.cnic_expiry || "";
+  for (const [side, f] of [["front", "f"], ["back", "b"]]) { const path = s[`cnic_pic_${side}_path`]; $(`${p}_${f}file`).dataset.existing = path || "";
+    $(`${p}_${f}st`).innerHTML = path ? `Uploaded ✓ — choose a file only if you want to replace it. <a href="#" onclick="previewExisting('${p}','${f}','${path}');return false;">Preview</a>` : "Required"; }
 }
+async function previewExisting(p, f, path) { const u = await signedUrl(path); const img = $(`${p}_${f}prev`); if (u) { img.src = u; img.style.display = "block"; } }
 function readPerson(p, errs, label) {
   const v = (f) => $(`${p}_${f}`).value.trim();
   const name = v("name"), father = v("father"), cnic = v("cnic"), phone = v("phone"), wallet = v("wallet"), iban = Validate.normalizeIban(v("iban")), bank = bankFromInput(v("bank"));
@@ -300,8 +326,27 @@ function readPerson(p, errs, label) {
     if (!r.format) errs.push(`${label}: IBAN must be PK + 22 characters (24 in total)`);
     else if (!r.checksum) errs.push(`${label}: IBAN checksum is wrong — check for a typing mistake`);
     else if (r.bank === "mismatch") errs.push(`${label}: IBAN belongs to bank code ${r.bankCode}, not the selected bank`); }
-  return { full_name: name, father_name: father, cnic, phone, payment_number: pay, payment_wallet: wallet || null, bank_code: bank?.code || null, iban: iban || null };
+  const life = $(`${p}_life`).checked, exp = $(`${p}_exp`).value, today = new Date().toISOString().slice(0, 10);
+  const fF = $(`${p}_ffile`).files[0] || null, bF = $(`${p}_bfile`).files[0] || null;
+  if (!fF && !$(`${p}_ffile`).dataset.existing) errs.push(`${label}: CNIC front picture is required`);
+  if (!bF && !$(`${p}_bfile`).dataset.existing) errs.push(`${label}: CNIC back picture is required`);
+  if (!life) { if (!exp) errs.push(`${label}: CNIC expiry date is required (or tick "Lifetime CNIC")`);
+    else if (exp < today && exp !== $(`${p}_exp`).dataset.orig) errs.push(`${label}: this CNIC expired on ${exp} — a valid CNIC is needed`); }
+  return { full_name: name, father_name: father, cnic, phone, payment_number: pay, payment_wallet: wallet || null, bank_code: bank?.code || null, iban: iban || null,
+           cnic_expiry: life ? null : (exp || null), cnic_lifetime: life, _front: fF, _back: bF };
 }
+async function saveCnic(rec, front, back) {
+  const upd = {};
+  for (const [side, file] of [["front", front], ["back", back]]) { if (!file) continue;
+    const ext = file.type === "image/png" ? "png" : "jpg", col = `cnic_pic_${side}_path`, path = `${rec.uc_id}/${rec.id}/${side}.${ext}`;
+    if (rec[col] && rec[col] !== path) await supabaseClient.storage.from("staff-documents").remove([rec[col]]);
+    const { error } = await supabaseClient.storage.from("staff-documents").upload(path, file, { upsert: true, contentType: file.type });
+    if (error) return `The CNIC ${side} picture could not be uploaded (${error.message})`;
+    upd[col] = path; }
+  if (Object.keys(upd).length) { const { error } = await supabaseClient.from("staff").update(upd).eq("id", rec.id); if (error) return error.message; Object.assign(rec, upd); }
+  return null;
+}
+async function signedUrl(path) { const { data } = await supabaseClient.storage.from("staff-documents").createSignedUrl(path, 300); return data?.signedUrl || null; }
 
 async function openPerson(c) {
   ctx = c; let editing = null;
@@ -315,7 +360,6 @@ async function openPerson(c) {
       <div id="drvBox" style="display:none;margin-top:.5rem;"><h3>Driver details</h3>${personFields("d")}</div></div>`;
   if (c.kind === "member" && c.replace && !editing) extra += `<div class="sect"><b>This person will replace a member of Team ${team.team_no}.</b>${replaceBlock("nr")}</div>`;
   if (editing && c.kind !== "member") extra += `<div class="sect"><label>Status</label><select id="f_status"><option value="active">Active</option><option value="inactive">Inactive</option><option value="left_campaign">Left campaign</option></select></div>`;
-  if (c.kind === "member") extra += `<div class="sect"><h3>CNIC pictures (front and back)</h3><div id="docBox"></div></div>`;
   openPanel(title, `<div class="sect"><h3>Personal details</h3>${personFields("f")}</div>${extra}${errBox()}
     <div style="margin-top:1rem;"><button class="btn" id="saveBtn">Save</button> <button class="btn ghost" onclick="closePanel()">Cancel</button></div>`);
   wirePerson("f"); if (editing) { fillPerson("f", editing); if ($("f_status")) $("f_status").value = editing.status === "active" ? "active" : editing.status === "left_campaign" ? "left_campaign" : "inactive"; }
@@ -327,7 +371,6 @@ async function openPerson(c) {
       document.querySelector('input[name="hasDrv"][value="yes"]').checked = true; document.querySelectorAll('input[name="hasDrv"]').forEach(r => r.disabled = true); $("drvBox").style.display = "block"; fillPerson("d", data); }
   }
   if (c.kind === "member" && c.replace && !editing) { await loadReplaceBlock("nr", c.team); const r = document.querySelector(`input[name="nr_who"][value="${c.replace}"]`); if (r) r.checked = true; }
-  if (c.kind === "member") renderDocs();
   $("saveBtn").onclick = savePerson;
 }
 
@@ -335,39 +378,46 @@ async function savePerson() {
   const btn = $("saveBtn"); btn.disabled = true; $("pErr").style.display = "none";
   try {
     const c = ctx, ed = c.editing, errs = [], uc = ucId(), label = { ucmo: "UCMO", aic: "Area Incharge", driver: "Driver", member: "Team member" }[c.kind];
-    const p = readPerson("f", errs, label); let plan = null, drvPayload = null, replace = null, team = c.team ? B.teams.find(t => t.id === c.team) : null;
+    const { _front, _back, ...p } = readPerson("f", errs, label);
+    let plan = null, drv = null, replace = null; const team = c.team ? B.teams.find(t => t.id === c.team) : null;
     if (c.kind === "ucmo" && !ed) plan = readPlan(errs);
-    if (c.kind === "aic") { const yes = document.querySelector('input[name="hasDrv"]:checked').value === "yes"; p.can_have_driver = yes; if (yes) drvPayload = { uc_id: uc, designation: "driver", ...readPerson("d", errs, "Driver") }; }
+    if (c.kind === "aic") { const yes = document.querySelector('input[name="hasDrv"]:checked').value === "yes"; p.can_have_driver = yes;
+      if (yes) { const { _front: dF, _back: dB, ...dp } = readPerson("d", errs, "Driver"); drv = { payload: { uc_id: uc, designation: "driver", ...dp }, front: dF, back: dB }; } }
     if (c.kind === "member" && c.replace && !ed) replace = readReplaceBlock("nr", errs);
+    if (c.kind === "member" && !ed && !team?.aic_staff_id) errs.push("This team has no Area Incharge yet");
     if (errs.length) throw new Error(errs.join("\n"));
     if ($("f_status") && ed && $("f_status").value !== "active" && ed.status === "active" && !confirm("Make this person " + $("f_status").selectedOptions[0].text + "?")) return;
     const row = { uc_id: uc, ...p };
     if (c.kind === "ucmo") row.designation = "ucmo";
     if (c.kind === "aic") { row.designation = "aic"; row.aic_no = c.aicNo; }
     if (c.kind === "driver") { row.designation = "driver"; row.aic_staff_id = c.aic; await supabaseClient.from("staff").update({ can_have_driver: true }).eq("id", c.aic); }
-    if (c.kind === "member") { row.designation = "team_member"; row.aic_staff_id = team.aic_staff_id; }
-    if (!team?.aic_staff_id && c.kind === "member") throw new Error("This team has no Area Incharge yet.");
+    if (c.kind === "member") { row.designation = "team_member"; if (team) row.aic_staff_id = team.aic_staff_id; }
     if ($("f_status") && ed) row.status = $("f_status").value;
     if (plan) { const { error } = await supabaseClient.rpc("set_uc_plan", { p_uc: uc, p_aics: plan.a, p_teams: plan.t }); if (error) throw error; }
     let rec;
     if (ed) { const { uc_id, ...upd } = row; delete upd.designation; delete upd.aic_staff_id; delete upd.aic_no;
       const { data, error } = await supabaseClient.from("staff").update(upd).eq("id", ed.id).select().single(); if (error) throw error; rec = data; }
     else { const { data, error } = await supabaseClient.from("staff").insert(row).select().single(); if (error) throw error; rec = data; }
-    if (c.kind === "aic" && drvPayload) { drvPayload.aic_staff_id = rec.id;
-      const { error } = await (existingDriver ? supabaseClient.from("staff").update(drvPayload).eq("id", existingDriver.id) : supabaseClient.from("staff").insert(drvPayload));
-      if (error) throw new Error("The Area Incharge was saved, but the driver was not: " + friendly(error)); }
-    let note = "";
-    if (c.kind === "member" && !ed) {
-      const args = replace ? { p_action: "replace", p_staff: rec.id, p_reason: replace.reason, p_campaign: campId(), p_to_team: team.id, p_replace_staff: replace.who, p_old_disposition: replace.disp, p_old_to_team: replace.dest }
-                           : { p_action: "assign", p_staff: rec.id, p_campaign: campId(), p_to_team: team.id };
-      const { error } = await supabaseClient.rpc("adjust_team_member", args);
-      if (error) note = ` The person is saved but is not on the team yet: ${friendly(error)}`;
-      await loadBoard(); loadRows();
-      const { data: fresh } = await supabaseClient.from("staff").select("*").eq("id", rec.id).single(); ctx = { ...c, editing: fresh, replace: null };
-      $("panelTitle").textContent = "Saved ✓ — now add the CNIC pictures"; renderDocs(); $("saveBtn").textContent = "Save changes"; $("docBox").scrollIntoView({ block: "center" });
-      if (note) alert(note.trim()); return;
+
+    const notes = [];
+    const upErr = await saveCnic(rec, _front, _back);                       // pictures first, so the person is complete before joining a team
+    if (upErr) notes.push(`${upErr}. The person is saved — open them again and add the picture.`);
+    if (c.kind === "aic" && drv) {
+      drv.payload.aic_staff_id = rec.id;
+      const { data: dr, error } = await (existingDriver ? supabaseClient.from("staff").update(drv.payload).eq("id", existingDriver.id).select().single() : supabaseClient.from("staff").insert(drv.payload).select().single());
+      if (error) notes.push("The Area Incharge was saved, but the driver was not: " + friendly(error));
+      else { const e2 = await saveCnic(dr, drv.front, drv.back); if (e2) notes.push("Driver: " + e2); }
     }
-    closePanel(); await loadBoard(); loadRows();
+    if (c.kind === "member" && !ed) {
+      if (upErr) notes.push("The member is not on the team yet. Add the pictures (People not on a team → Edit), then put them on the team.");
+      else {
+        const args = replace ? { p_action: "replace", p_staff: rec.id, p_reason: replace.reason, p_campaign: campId(), p_to_team: team.id, p_replace_staff: replace.who, p_old_disposition: replace.disp, p_old_to_team: replace.dest }
+                             : { p_action: "assign", p_staff: rec.id, p_campaign: campId(), p_to_team: team.id };
+        const { error } = await supabaseClient.rpc("adjust_team_member", args);
+        if (error) notes.push(`The person is saved but is not on the team yet: ${friendly(error)}`);
+      }
+    }
+    closePanel(); await loadBoard(); loadRows(); if (notes.length) alert(notes.join("\n\n"));
   } catch (e) { showErr(e); } finally { btn.disabled = false; }
 }
 
@@ -395,36 +445,6 @@ function readReplaceBlock(id, errs) {
   if (!who) errs.push("Choose which member is being replaced"); if (!disp) errs.push("Choose what happens to the replaced member");
   if (disp === "transfer" && !dest) errs.push("Choose the team the replaced member moves to"); if (reason.length < 3) errs.push("A reason is required");
   return { who, disp, reason, dest };
-}
-
-/* ---------- CNIC pictures ---------- */
-async function signedUrl(path) { const { data } = await supabaseClient.storage.from("staff-documents").createSignedUrl(path, 300); return data?.signedUrl || null; }
-async function renderDocs() {
-  const box = $("docBox"); if (!box) return; const e = ctx?.editing;
-  if (!e) { box.innerHTML = `<p class="muted">Save the person first — then the front and back pictures can be added here.</p>`; return; }
-  const one = (side) => { const path = e[`cnic_pic_${side}_path`];
-    return `<div class="docbox"><b>CNIC ${side === "front" ? "front" : "back"}:</b> ${path ? "Uploaded ✓" : "<b>Missing</b>"}<div id="img_${side}"></div>
-      <input type="file" id="file_${side}" accept="image/jpeg,image/png" style="display:none">
-      <button class="btn small" type="button" onclick="$('file_${side}').click()">${path ? "Replace" : "Upload"}</button>
-      ${path ? `<button class="btn small ghost" type="button" onclick="previewDoc('${side}')">Preview</button><button class="btn small ghost" type="button" onclick="removeDoc('${side}')">Remove</button>` : ""}</div>`; };
-  box.innerHTML = one("front") + one("back");
-  for (const side of ["front", "back"]) $(`file_${side}`).onchange = (ev) => uploadDoc(side, ev.target.files[0]);
-}
-async function previewDoc(side) { const u = await signedUrl(ctx.editing[`cnic_pic_${side}_path`]); $(`img_${side}`).innerHTML = u ? `<img src="${u}" alt="CNIC ${side}">` : `<span class="error-text">Could not load the picture</span>`; }
-async function uploadDoc(side, file) {
-  if (!file) return; const e = ctx.editing;
-  if (!/^image\/(jpeg|png)$/.test(file.type)) return alert("Only JPG or PNG pictures are allowed.");
-  if (file.size > 6 * 1024 * 1024) return alert("The picture is bigger than 6 MB — please use a smaller photo.");
-  const ext = file.type === "image/png" ? "png" : "jpg", col = `cnic_pic_${side}_path`, path = `${e.uc_id}/${e.id}/${side}.${ext}`;
-  if (e[col] && e[col] !== path) await supabaseClient.storage.from("staff-documents").remove([e[col]]);
-  const { error } = await supabaseClient.storage.from("staff-documents").upload(path, file, { upsert: true, contentType: file.type }); if (error) return alert("Upload failed: " + error.message);
-  const { error: e2 } = await supabaseClient.from("staff").update({ [col]: path }).eq("id", e.id); if (e2) return alert(e2.message);
-  e[col] = path; await renderDocs(); await previewDoc(side); loadBoard(); loadRows();
-}
-async function removeDoc(side) {
-  if (!confirm(`Remove the CNIC ${side} picture? You can upload a new one afterwards.`)) return; const e = ctx.editing, col = `cnic_pic_${side}_path`;
-  await supabaseClient.storage.from("staff-documents").remove([e[col]]); await supabaseClient.from("staff").update({ [col]: null }).eq("id", e.id);
-  e[col] = null; await renderDocs(); loadBoard(); loadRows();
 }
 
 /* ---------- move / change a team member ---------- */
@@ -489,7 +509,7 @@ $("waitBox").addEventListener("toggle", async () => {
   if (!$("waitBox").open) return; $("waitList").textContent = "Loading…";
   const { data } = await supabaseClient.from("staff").select("id, full_name, cnic, phone, status, team_members(active)").eq("uc_id", ucId()).eq("designation", "team_member").order("full_name").limit(300);
   const idle = (data || []).filter(s => !(s.team_members || []).some(m => m.active));
-  $("waitList").innerHTML = idle.length ? `<div class="table-wrap"><table><tbody>${idle.map(s => `<tr><td>${esc(s.full_name)}</td><td>${esc(s.cnic)}</td><td>${badge(s.status)}</td><td><button class="btn small" onclick="openAdjust('${s.id}')">Put on a team</button></td></tr>`).join("")}</tbody></table></div>` : "Everyone is on a team.";
+  $("waitList").innerHTML = idle.length ? `<div class="table-wrap"><table><tbody>${idle.map(s => `<tr><td>${esc(s.full_name)}</td><td>${esc(s.cnic)}</td><td>${badge(s.status)}</td><td><button class="btn small ghost" onclick="openPerson({kind:'member',staff:'${s.id}'})">Edit / CNIC</button> <button class="btn small" onclick="openAdjust('${s.id}')">Put on a team</button></td></tr>`).join("")}</tbody></table></div>` : "Everyone is on a team.";
 });
 async function loadRows() {
   let q = supabaseClient.from("staff").select("id, full_name, cnic, phone, designation, status, aic_no, team_members(active, teams(team_no))", { count: "exact" }).eq("uc_id", ucId()).order("designation").order("full_name").range(page * PAGE, page * PAGE + PAGE - 1);
@@ -504,7 +524,7 @@ async function loadRows() {
 }
 async function findEdit(id) {
   const { data: s } = await supabaseClient.from("staff").select("id, designation, aic_no, aic_staff_id, team_members(active, team_id)").eq("id", id).single();
-  if (s.designation === "team_member") { const tm = (s.team_members || []).find(m => m.active); if (tm) return openPerson({ kind: "member", staff: id, team: tm.team_id }); return openAdjust(id); }
+  if (s.designation === "team_member") { const tm = (s.team_members || []).find(m => m.active); return openPerson({ kind: "member", staff: id, team: tm?.team_id }); }
   if (s.designation === "ucmo") return openPerson({ kind: "ucmo", staff: id });
   if (s.designation === "aic") return openPerson({ kind: "aic", aicNo: s.aic_no, staff: id });
   const a = B.aics.find(x => x.id === s.aic_staff_id); return openPerson({ kind: "driver", aic: s.aic_staff_id, aicNo: a?.aic_no ?? "", staff: id });

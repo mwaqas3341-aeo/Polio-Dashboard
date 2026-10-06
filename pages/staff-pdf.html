@@ -98,7 +98,7 @@
         const teamId = document.getElementById("teamSelect").value;
         const { data: uc } = await supabaseClient.from("union_councils").select("name, tehsils(name, districts(name))").eq("id", ucId).single();
         let q = supabaseClient.from("teams")
-          .select(`id, team_no, team_members(member_no, member_role, active, staff(full_name, cnic, phone, cnic_pic_front_path, cnic_pic_back_path))`)
+          .select(`id, team_no, team_members(member_no, member_role, active, staff(full_name, cnic, phone, cnic_expiry, cnic_lifetime, cnic_pic_front_path, cnic_pic_back_path))`)
           .eq("uc_id", ucId).order("team_no");
         if (teamId) q = q.eq("id", teamId);
         const { data: teams, error } = await q;
@@ -116,7 +116,7 @@
             const [f, b] = await Promise.all([signed(s.cnic_pic_front_path), signed(s.cnic_pic_back_path)]);
             html += `<div class="member">
               <div class="info"><b>Member ${esc(m.member_no ?? "—")}</b> ${esc(s.full_name)}
-                &nbsp;|&nbsp; CNIC: ${esc(s.cnic || "—")} &nbsp;|&nbsp; Cell: ${esc(s.phone || "—")}</div>
+                &nbsp;|&nbsp; CNIC: ${esc(s.cnic || "—")} &nbsp;|&nbsp; Cell: ${esc(s.phone || "—")} &nbsp;|&nbsp; CNIC expiry: ${s.cnic_lifetime ? "Lifetime" : esc(s.cnic_expiry || "—")}</div>
               <div class="cnic-row">${imgBox(f, "front")}${imgBox(b, "back")}</div></div>`;
           }
         }
