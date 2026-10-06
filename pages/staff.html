@@ -181,7 +181,7 @@ function teamHtml(t) {
       <button class="btn small" onclick="openPerson({kind:'member',staff:'${s.id}',team:'${t.id}'})">Edit</button>
       <button class="btn small ghost" onclick="openAdjust('${s.id}')">Move / change</button>
       <button class="btn small ghost" onclick="openPerson({kind:'member',team:'${t.id}',replace:'${s.id}'})">Replace</button></div>`; };
-  return `<div class="team"><b>Team ${t.team_no}</b> <span class="tag">${typeName(t.team_type)}</span> <span class="muted">${t.active.length}/2 members</span>
+  return `<div class="team"><b>Team ${t.team_no}</b> <span class="tag">${typeName(t.team_type)}</span> <span class="muted">${t.active.length}/2 members</span> <button class="btn small ghost" onclick="openTeamEdit('${t.id}')">Edit team</button>
     <div class="slots">${slot(1)}${slot(2)}</div></div>`;
 }
 
@@ -217,6 +217,30 @@ function openTeamPicker(aicId) {
   $("teamSave").onclick = async () => { try { if (!selNum) throw new Error("Choose the team number"); if (!selType) throw new Error("Choose the team type");
     const { error } = await supabaseClient.from("teams").insert({ uc_id: ucId(), team_no: selNum, team_type: selType, aic_staff_id: aicId }); if (error) throw error;
     closePanel(); await loadBoard(); } catch (e) { showErr(e); } };
+}
+
+/* ---------- edit team (number, type, Area Incharge) ---------- */
+function openTeamEdit(teamId) {
+  const t = B.teams.find(x => x.id === teamId), used = new Set(B.teams.filter(x => x.id !== teamId).map(x => x.team_no)), max = B.plan?.total_teams ?? 200;
+  selNum = t.team_no; selType = t.team_type;
+  openPanel(`Edit Team ${t.team_no}`, `<h3>Team number</h3><div class="numgrid" id="numGrid">${Array.from({ length: max }, (_, i) => i + 1).map(n => `<button type="button" data-n="${n}" class="${used.has(n) ? "taken" : ""} ${n === t.team_no ? "sel" : ""}">${n}</button>`).join("")}</div>
+    <h3>Team type</h3><div class="types" id="typeBtns">${TEAM_TYPES.map(x => `<button type="button" data-t="${x[0]}" class="${x[0] === t.team_type ? "sel" : ""}">${x[1]}</button>`).join("")}</div>
+    <h3>Area Incharge</h3><select id="teamAic">${B.aics.filter(a => a.status === "active").map(a => `<option value="${a.id}" ${a.id === t.aic_staff_id ? "selected" : ""}>AIC ${a.aic_no} — ${esc(a.full_name)}</option>`).join("")}</select>
+    <p class="muted">If you give the team to another Area Incharge, its members move with it and the change is recorded in the history.</p>
+    ${errBox()}<div style="margin-top:1rem;"><button class="btn" id="teamSave">Save</button> <button class="btn ghost" id="teamDel">Delete this team</button></div>`);
+  $("numGrid").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.classList.contains("taken")) return; selNum = Number(b.dataset.n); $("numGrid").querySelectorAll("button").forEach(x => x.classList.toggle("sel", x === b)); };
+  $("typeBtns").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; selType = b.dataset.t; $("typeBtns").querySelectorAll("button").forEach(x => x.classList.toggle("sel", x === b)); };
+  $("teamSave").onclick = async () => { try {
+    const aic = $("teamAic").value, moved = aic !== t.aic_staff_id && t.active.length;
+    if (moved && !confirm("The team's members will move to the new Area Incharge. Continue?")) return;
+    const { error } = await supabaseClient.rpc("update_team", { p_team: t.id, p_team_no: selNum, p_type: selType, p_aic: aic, p_campaign: campId() }); if (error) throw error;
+    closePanel(); await loadBoard(); } catch (e) { showErr(e); } };
+  $("teamDel").onclick = async () => { try {
+    if (t.active.length) throw new Error("This team still has members — move or remove them first.");
+    const { count } = await supabaseClient.from("team_members").select("id", { count: "exact", head: true }).eq("team_id", t.id);
+    if (count) throw new Error("This team has history, so it cannot be deleted. You can leave it empty or change its number.");
+    if (!confirm(`Delete empty Team ${t.team_no}?`)) return;
+    const { error } = await supabaseClient.from("teams").delete().eq("id", t.id); if (error) throw error; closePanel(); await loadBoard(); } catch (e) { showErr(e); } };
 }
 
 /* ---------- person form ---------- */
