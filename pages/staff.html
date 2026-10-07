@@ -544,10 +544,17 @@ async function loadHistory() {
 /* ---------- waiting list + search (load on demand) ---------- */
 $("waitBox").addEventListener("toggle", async () => {
   if (!$("waitBox").open) return; $("waitList").textContent = "Loading…";
-  const { data } = await supabaseClient.from("staff").select("id, full_name, cnic, phone, status, team_members(active)").eq("uc_id", ucId()).eq("designation", "team_member").order("full_name").limit(300);
+  const { data } = await supabaseClient.from("staff").select("id, full_name, cnic, phone, status, planned_team_no, planned_member_no, team_members(active)").eq("uc_id", ucId()).eq("designation", "team_member").order("full_name").limit(300);
   const idle = (data || []).filter(s => !(s.team_members || []).some(m => m.active));
-  $("waitList").innerHTML = idle.length ? `<div class="table-wrap"><table><tbody>${idle.map(s => `<tr><td>${esc(s.full_name)}</td><td>${esc(s.cnic)}</td><td>${badge(s.status)}</td><td><button class="btn small ghost" onclick="openPerson({kind:'member',staff:'${s.id}'})">Edit / CNIC</button> <button class="btn small" onclick="openAdjust('${s.id}')">Put on a team</button></td></tr>`).join("")}</tbody></table></div>` : "Everyone is on a team.";
+  $("waitList").innerHTML = idle.length ? `<div class="table-wrap"><table><tbody>${idle.map(s => `<tr><td>${esc(s.full_name)}</td><td>${esc(s.cnic)}</td><td>${badge(s.status)}</td><td>${s.planned_team_no ? `<span class="muted">Expected: Team ${s.planned_team_no}</span>` : ""}</td><td><button class="btn small ghost" onclick="openPerson({kind:'member',staff:'${s.id}'})">Edit / CNIC</button> ${s.planned_team_no ? `<button class="btn small" onclick="placePlanned('${s.id}', ${s.planned_team_no})">Put on Team ${s.planned_team_no}</button>` : `<button class="btn small" onclick="openAdjust('${s.id}')">Put on a team</button>`} <button class="btn small ghost" onclick="openAdjust('${s.id}')">Other…</button></td></tr>`).join("")}</tbody></table></div>` : "Everyone is on a team.";
 });
+async function placePlanned(id, teamNo) {
+  const t = B.teams.find(x => x.team_no === teamNo);
+  if (!t) return alert(`Team ${teamNo} does not exist yet. Create it first from its Area Incharge's card (+ Add team).`);
+  const { error } = await supabaseClient.rpc("adjust_team_member", { p_action: "assign", p_staff: id, p_campaign: campId(), p_to_team: t.id });
+  if (error) return alert(friendly(error));
+  await loadBoard(); loadRows(); $("waitBox").open = false; $("waitBox").open = true;
+}
 async function loadRows() {
   let q = supabaseClient.from("staff").select("id, full_name, cnic, phone, designation, status, aic_no, team_members(active, teams(team_no))", { count: "exact" }).eq("uc_id", ucId()).order("designation").order("full_name").range(page * PAGE, page * PAGE + PAGE - 1);
   if ($("fDes").value) q = q.eq("designation", $("fDes").value); if ($("fStatus").value) q = q.eq("status", $("fStatus").value);
