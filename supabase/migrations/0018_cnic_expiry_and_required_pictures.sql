@@ -1,4 +1,4 @@
--- NOT YET APPLIED. CNIC expiry date for every staff member; a person cannot join a team without both CNIC pictures and a valid expiry.
+-- Applied to Supabase project zeqbepueevdnhlvoykvz on 2026-10-07.
 alter table staff add column if not exists cnic_expiry date;
 alter table staff add column if not exists cnic_lifetime boolean not null default false;
 alter table staff drop constraint if exists staff_cnic_expiry_check;
