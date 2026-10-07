@@ -218,26 +218,32 @@ function openPlan() {
 function openTeamPicker(aicId) {
   const a = B.aics.find(x => x.id === aicId), used = new Set(B.teams.map(t => t.team_no)), max = B.plan?.total_teams ?? 200;
   selNum = null; selType = null;
-  openPanel(`Add a team for AIC ${a.aic_no}`, `<h3>Team number</h3><div class="numgrid" id="numGrid">${Array.from({ length: max }, (_, i) => i + 1).map(n => `<button type="button" data-n="${n}" class="${used.has(n) ? "taken" : ""}">${n}</button>`).join("")}</div>
+  openPanel(`Add a team for AIC ${a.aic_no}`, `<h3>1. What type of team is this?</h3>
+    <div class="types" id="typeBtns">${TEAM_TYPES.map(t => `<button type="button" data-t="${t[0]}">${t[1]}</button>`).join("")}</div>
+    <h3>2. Team number</h3><div class="numgrid" id="numGrid">${Array.from({ length: max }, (_, i) => i + 1).map(n => `<button type="button" data-n="${n}" class="${used.has(n) ? "taken" : ""}">${n}</button>`).join("")}</div>
     <p class="muted">Crossed-out numbers are already used.</p>
-    <h3>Team type</h3><div class="types" id="typeBtns">${TEAM_TYPES.map(t => `<button type="button" data-t="${t[0]}">${t[1]}</button>`).join("")}</div>
     ${errBox()}<button class="btn" style="margin-top:1rem;" id="teamSave">Create team</button>`);
   $("numGrid").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.classList.contains("taken")) return; selNum = Number(b.dataset.n); $("numGrid").querySelectorAll("button").forEach(x => x.classList.toggle("sel", x === b)); };
   $("typeBtns").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; selType = b.dataset.t; $("typeBtns").querySelectorAll("button").forEach(x => x.classList.toggle("sel", x === b)); };
-  $("teamSave").onclick = async () => { try { if (!selNum) throw new Error("Choose the team number"); if (!selType) throw new Error("Choose the team type");
+  $("teamSave").onclick = async () => { try { if (!selType) throw new Error("First choose the team type: Fixed, Transit or Mobile"); if (!selNum) throw new Error("Choose the team number");
     const { error } = await supabaseClient.from("teams").insert({ uc_id: ucId(), team_no: selNum, team_type: selType, aic_staff_id: aicId }); if (error) throw error;
     closePanel(); await loadBoard(); } catch (e) { showErr(e); } };
 }
 
 /* ---------- teams assigned to an Area Incharge (inside the AIC form) ---------- */
+let curType = "";
 function renderTeamGrid(editing) {
+  curType = ""; $("tmTypeBtns").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; curType = b.dataset.t; $("tmTypeBtns").querySelectorAll("button").forEach(x => x.classList.toggle("sel", x === b)); };
   const max = B.plan?.total_teams ?? 60, own = editing?.id;
   $("tmGrid").innerHTML = Array.from({ length: max }, (_, i) => i + 1).map(n => {
     const t = B.teams.find(x => x.team_no === n), other = t && t.aic_staff_id && t.aic_staff_id !== own, mine = t && t.aic_staff_id === own;
     const who = other ? "AIC " + (B.aics.find(a => a.id === t.aic_staff_id)?.aic_no ?? "?") : "";
     return `<button type="button" data-n="${n}" class="${other ? "taken" : ""} ${mine || selTeams.has(n) ? "sel" : ""}" ${other ? `title="${who}"` : ""} ${mine ? "disabled" : ""}>${n}</button>`; }).join("");
   $("tmGrid").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.classList.contains("taken") || b.disabled) return; const n = Number(b.dataset.n);
-    if (selTeams.has(n)) selTeams.delete(n); else { const t = B.teams.find(x => x.team_no === n); selTeams.set(n, { id: t?.id || null, type: t?.team_type || "" }); }
+    if (selTeams.has(n)) selTeams.delete(n);
+    else { const t = B.teams.find(x => x.team_no === n);
+      if (!t && !curType) return alert("First choose the team type (Fixed, Transit or Mobile) above, then tap the team number.");
+      selTeams.set(n, { id: t?.id || null, type: t?.team_type || curType }); }
     b.classList.toggle("sel"); renderTeamTypes(); };
   renderTeamTypes(editing);
 }
@@ -264,8 +270,8 @@ async function assignTeams(aicId, uc) {
 function openTeamEdit(teamId) {
   const t = B.teams.find(x => x.id === teamId), used = new Set(B.teams.filter(x => x.id !== teamId).map(x => x.team_no)), max = B.plan?.total_teams ?? 200;
   selNum = t.team_no; selType = t.team_type;
-  openPanel(`Edit Team ${t.team_no}`, `<h3>Team number</h3><div class="numgrid" id="numGrid">${Array.from({ length: max }, (_, i) => i + 1).map(n => `<button type="button" data-n="${n}" class="${used.has(n) ? "taken" : ""} ${n === t.team_no ? "sel" : ""}">${n}</button>`).join("")}</div>
-    <h3>Team type</h3><div class="types" id="typeBtns">${TEAM_TYPES.map(x => `<button type="button" data-t="${x[0]}" class="${x[0] === t.team_type ? "sel" : ""}">${x[1]}</button>`).join("")}</div>
+  openPanel(`Edit Team ${t.team_no}`, `<h3>1. Team type (Fixed, Transit or Mobile)</h3><div class="types" id="typeBtns">${TEAM_TYPES.map(x => `<button type="button" data-t="${x[0]}" class="${x[0] === t.team_type ? "sel" : ""}">${x[1]}</button>`).join("")}</div>
+    <h3>2. Team number</h3><div class="numgrid" id="numGrid">${Array.from({ length: max }, (_, i) => i + 1).map(n => `<button type="button" data-n="${n}" class="${used.has(n) ? "taken" : ""} ${n === t.team_no ? "sel" : ""}">${n}</button>`).join("")}</div>
     <h3>Area Incharge</h3><select id="teamAic">${B.aics.filter(a => a.status === "active").map(a => `<option value="${a.id}" ${a.id === t.aic_staff_id ? "selected" : ""}>AIC ${a.aic_no} — ${esc(a.full_name)}</option>`).join("")}</select>
     <p class="muted">If you give the team to another Area Incharge, its members move with it and the change is recorded in the history.</p>
     ${errBox()}<div style="margin-top:1rem;"><button class="btn" id="teamSave">Save</button> <button class="btn ghost" id="teamDel">Delete this team</button></div>`);
@@ -390,7 +396,9 @@ async function openPerson(c) {
   if (c.kind === "aic") extra += `<div class="sect"><h3>Does this Area Incharge have a driver?</h3><div class="radios"><label><input type="radio" name="hasDrv" value="no" checked> No</label><label><input type="radio" name="hasDrv" value="yes"> Yes</label></div>
       <div id="drvBox" style="display:none;margin-top:.5rem;"><h3>Driver details</h3>${personFields("d")}</div></div>
     <div class="sect"><h3>Which teams are assigned to this Area Incharge?</h3>
-      <p class="muted">Tap the team numbers (green = chosen, crossed out = already with another Area Incharge). New team numbers need a type.</p>
+      <p><b>First choose the team type</b>, then tap the team numbers of that type. Change the type and tap more numbers for the other kinds.</p>
+      <div class="types" id="tmTypeBtns">${TEAM_TYPES.map(t => `<button type="button" data-t="${t[0]}">${t[1]} team</button>`).join("")}</div>
+      <p class="muted" style="margin:.5rem 0;">Green = chosen, crossed out = already with another Area Incharge.</p>
       <div class="numgrid" id="tmGrid"></div><div id="tmTypes" style="margin-top:.6rem;"></div></div>`;
   if (c.kind === "member" && c.replace && !editing) extra += `<div class="sect"><b>This person will replace a member of Team ${team.team_no}.</b>${replaceBlock("nr")}</div>`;
   if (editing && c.kind !== "member") extra += `<div class="sect"><label>Status</label><select id="f_status"><option value="active">Active</option><option value="inactive">Inactive</option><option value="left_campaign">Left campaign</option></select></div>`;
