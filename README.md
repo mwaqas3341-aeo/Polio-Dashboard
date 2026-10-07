@@ -49,11 +49,16 @@ and whether the Google Form and 2A form are both live data-entry channels).
 ## Project structure
 
 ```
-index.html                   Login (Supabase email/password auth)
+index.html                   Login (CNIC or email + password, Supabase Auth)
+change-password.html          Change your own password
+setup-profile.html            First-login profile setup
 dashboard.html                KPI overview + campaign list
 pages/
-  campaigns.html               Create/list campaigns
-  teams.html                   Staff master + team rosters
+  campaigns.html               Campaign Details: edit dates/days, live UC → AIC → team structure, saved rosters
+  staff.html                   Staff Management: UCMO → AIC → teams → members, drivers, CNIC pictures/expiry, Team Adjustment + history
+  payments.html                Payment lists (EasyPaisa / JazzCash / IBAN) with Excel download
+  staff-pdf.html               Team staff PDF with CNIC front/back at card size
+  teams.html                   Old staff form (no longer in the menu; superseded by staff.html)
   schools.html                 School master + campaign team/day assignment
   mmp.html                     MMP/CNIC contact master + campaign assignment
   households.html               Door-to-door household census
@@ -73,6 +78,7 @@ assets/
   js/supabaseClient.js          Client init + auth helpers
   js/nav.js                     Shared sidebar
   js/crud.js                    Shared form helpers (campaign dropdowns, UC lookup)
+  js/validators.js              CNIC / mobile / IBAN (mod-97) validators, wallet and team-type lists
   js/export.js                  Shared Excel export (SheetJS) — used by team-plan/logistics/mmp/schools/area-summary
 supabase/migrations/
   0001_initial_schema.sql       Version-controlled copy of the applied schema
@@ -80,7 +86,7 @@ supabase/migrations/
 
 ## Database
 
-19 tables + 4 views + 4 helper functions, all with RLS enabled and
+Tables, views and helper functions, all with RLS enabled and
 role/UC-scoped as of migration `0004`. Schema in `supabase/migrations/`,
 applied in order:
 
@@ -94,6 +100,22 @@ applied in order:
 - `0008_staff_documents_storage_bucket.sql` — private Storage bucket for CNIC photos, scoped by UC via the object path
 - `0009_team_targets_table.sql` — adds `team_targets` (the AIC's manually-set plan numbers) and rebuilds `logistic_plan`/`area_incharge_summary` to roll up from it instead of the auto-computed register totals
 - `0010_include_school_and_mmp_in_targets.sql` — fixes a real gap: the register-totals reference never included MMP/HRMP counts, only School list + House registration. `team_targets` now has explicit `target_school_children`/`target_household_children`/`target_mmp_children` columns that always sum to `target_children` (a generated column), so none of the three can be silently left out
+
+Phase 1 (Campaign Details + Staff Management), applied in order after `0010`:
+
+- `0011_payment_details_and_member_history.sql` — payment wallet number/type and IBAN on staff; member start/end dates and reasons
+- `0012_lock_role_escalation.sql` — closes a hole where any signed-in user could make themselves admin; only an admin can grant roles
+- `0013_staff_hierarchy.sql` — designations (UCMO, AIC, team member, driver), AIC numbers, driver-to-AIC link, 2 members per team, one active team per person
+- `0014_phase1_staff_banking_adjustments.sql` — `banks` list, IBAN checksum, bank/IBAN match, father name, staff statuses, AIC numbers 1–20, append-only `staff_adjustment_history`, `adjust_team_member()` (leave / reserve / transfer / replace / swap)
+- `0015_team_type_mobile.sql` — team types are exactly fixed, transit, mobile
+- `0016_uc_plan_and_roster_snapshots.sql` — `uc_plans` (planned AIC/team counts per UC) and `campaign_roster_snapshots` (frozen roster saved when a campaign is closed)
+- `0017_edit_team_and_tighten.sql` — `update_team()`; roster snapshots limited to admin / district coordinator / UCMO; plan table audited
+- `0018_cnic_expiry_and_required_pictures.sql` — CNIC expiry (or lifetime flag); the database refuses to put a person on a team without both CNIC pictures and a valid expiry
+- `0019_planned_team_hint.sql` — remembers the team a person is expected to join, for one-click placement
+
+Notes: staff, AICs and teams are permanent records that carry over between campaigns. A keep-alive ping runs inside Supabase
+(`pg_cron` every 6 hours calling `public.heartbeat()`); `ops/heartbeat.yml` is an unused GitHub Actions alternative.
+Account-holder name verification is **not** implemented — no verification service is connected, and the screen says so.
 
 Key tables: `districts` → `tehsils` → `union_councils` (geography),
 `staff` (now includes `cnic_pic_front_path`/`cnic_pic_back_path`) /`teams`/
