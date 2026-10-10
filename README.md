@@ -56,6 +56,7 @@ dashboard.html                KPI overview + campaign list
 pages/
   campaigns.html               Campaign Details: edit dates/days, live UC → AIC → team structure, saved rosters
   staff.html                   Staff Management: UCMO → AIC → teams → members, drivers, CNIC pictures/expiry, Team Adjustment + history
+  operational-plan.html        Operational Plan: Mobile teams, Days 1–3, pictures, day maps, MMP list, automatic School List, Excel reports
   payments.html                Payment lists (EasyPaisa / JazzCash / IBAN) with Excel download
   staff-pdf.html               Team staff PDF with CNIC front/back at card size
   teams.html                   Old staff form (no longer in the menu; superseded by staff.html)
@@ -112,6 +113,7 @@ Phase 1 (Campaign Details + Staff Management), applied in order after `0010`:
 - `0017_edit_team_and_tighten.sql` — `update_team()`; roster snapshots limited to admin / district coordinator / UCMO; plan table audited
 - `0018_cnic_expiry_and_required_pictures.sql` — CNIC expiry (or lifetime flag); the database refuses to put a person on a team without both CNIC pictures and a valid expiry
 - `0019_planned_team_hint.sql` — remembers the team a person is expected to join, for one-click placement
+- `0020_operational_plan.sql` — Operational Plan for Mobile teams (Days 1–3, doses = children × 1.11 kept by trigger), plan pictures, day maps, AIC Area Map, school/MMP totals, and the Missed Children gate before a campaign can be closed
 
 Notes: staff, AICs and teams are permanent records that carry over between campaigns. A keep-alive ping runs inside Supabase
 (`pg_cron` every 6 hours calling `public.heartbeat()`); `ops/heartbeat.yml` is an unused GitHub Actions alternative.

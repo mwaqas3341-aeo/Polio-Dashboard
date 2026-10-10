@@ -1,4 +1,4 @@
--- NOT YET APPLIED. Operational Plan module (Mobile Teams, Campaign Days 1-3), AIC Area Map, day maps,
+-- Applied to Supabase project zeqbepueevdnhlvoykvz on 2026-10-10 (as operational_plan); verified there with rolled-back test data.
 -- plan pictures, trigger-maintained totals/doses, and the mandatory Missed Children step before a campaign can be closed.
 -- Source formats: During_Polio_April_2026.xlsx ('Operational Plan', 'Team Micro Plan Summaries'),
 -- MMP_Coverage_plan.xlsx, School_Student_list_Polio.xlsx, STILL_MISSED_CHILDREN_LAST_COMPAIGN.xlsx.
