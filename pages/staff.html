@@ -146,7 +146,7 @@ async function loadBoard() {
   const uc = ucId();
   const [{ data: plan }, { data: people }, { data: teams }] = await Promise.all([
     supabaseClient.from("uc_plans").select("total_aics, total_teams").eq("uc_id", uc).maybeSingle(),
-    supabaseClient.from("staff").select("id, uc_id, full_name, cnic, phone, designation, status, aic_no, aic_staff_id, can_have_driver, area_map_path, cnic_pic_front_path, cnic_pic_back_path, cnic_expiry, cnic_lifetime").eq("uc_id", uc).in("designation", ["ucmo", "aic", "driver"]).order("aic_no"),
+    supabaseClient.from("staff").select("id, uc_id, full_name, cnic, phone, designation, status, aic_no, aic_staff_id, can_have_driver, area_map_path, official_designation, department, place_of_posting, cnic_pic_front_path, cnic_pic_back_path, cnic_expiry, cnic_lifetime").eq("uc_id", uc).in("designation", ["ucmo", "aic", "driver"]).order("aic_no"),
     supabaseClient.from("teams").select("id, team_no, team_type, aic_staff_id, team_members(id, active, member_no, staff(id, full_name, phone, status, cnic_pic_front_path, cnic_pic_back_path, cnic_expiry, cnic_lifetime))").eq("uc_id", uc).order("team_no")]);
   const ucmo = (people || []).find(p => p.designation === "ucmo" && p.status === "active") || null;
   const aics = (people || []).filter(p => p.designation === "aic");
@@ -172,7 +172,7 @@ function renderBoard() {
     if (!a) { h += `<div class="aic empty"><span><b>AIC ${n}</b> — not added yet</span><button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n}})">+ Add AIC ${n}</button></div>`; continue; }
     const drv = drivers.find(d => d.aic_staff_id === a.id), mine = teams.filter(t => t.aic_staff_id === a.id);
     h += `<div class="aic"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
-        <div><span class="tag">AIC ${n}</span> <span class="big">${esc(a.full_name)}</span> ${a.status !== "active" ? badge(a.status) : ""}<br><span class="muted">${esc(a.phone)} · ${cnicLine(a)}</span><br><span class="muted">${a.area_map_path ? `Area map ✓ <a href="#" onclick="viewAreaMap('${a.area_map_path}');return false;">View</a>` : `<b style="color:#9b1c1c">Area map missing</b>`}</span></div>
+        <div><span class="tag">AIC ${n}</span> <span class="big">${esc(a.full_name)}</span> ${a.status !== "active" ? badge(a.status) : ""}<br><span class="muted">${esc([a.official_designation, a.department, a.place_of_posting].filter(Boolean).join(" · "))}</span><br><span class="muted">${esc(a.phone)} · ${cnicLine(a)}</span><br><span class="muted">${a.area_map_path ? `Area map ✓ <a href="#" onclick="viewAreaMap('${a.area_map_path}');return false;">View</a>` : `<b style="color:#9b1c1c">Area map missing</b>`}</span></div>
         <div><button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n},staff:'${a.id}'})">Edit</button>
           <button class="btn small ghost" onclick="openTeamPicker('${a.id}')">+ Add team</button></div></div>
       <div style="margin-top:.3rem;">Driver: ${drv ? `${esc(drv.full_name)} <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n},staff:'${drv.id}'})">Edit</button>`
@@ -299,6 +299,9 @@ function personFields(p) {
     <div><label>CNIC</label><input id="${p}_cnic" placeholder="XXXXX-XXXXXXX-X" inputmode="numeric" maxlength="15"></div>
     <div><label>Cell number</label><input id="${p}_phone" placeholder="03XX-XXXXXXX" inputmode="numeric" maxlength="12"></div>
     <div><label>Payment wallet</label><select id="${p}_wallet"><option value="">Select…</option>${WALLETS.map(w => `<option value="${w[0]}">${w[1]}</option>`).join("")}</select></div>
+    <div><label>Original designation (e.g. PST, LHS)</label><input id="${p}_odes"></div>
+    <div><label>Department (Health / Education / …)</label><input id="${p}_dept"></div>
+    <div><label>Place of posting</label><input id="${p}_post"></div>
     <div id="${p}_payrow" style="display:none;"><label>Wallet number</label><input id="${p}_pay" placeholder="03XX-XXXXXXX" inputmode="numeric" maxlength="12"></div>
   </div>
   <label class="muted" style="display:block;margin:.4rem 0;"><input type="checkbox" id="${p}_same" checked> Wallet number is the same as the cell number</label>
@@ -340,6 +343,7 @@ function wirePerson(p) {
 }
 function fillPerson(p, s) {
   $(`${p}_name`).value = s.full_name || ""; $(`${p}_father`).value = s.father_name || ""; $(`${p}_cnic`).value = s.cnic || ""; $(`${p}_phone`).value = s.phone || "";
+  $(`${p}_odes`).value = s.official_designation || ""; $(`${p}_dept`).value = s.department || ""; $(`${p}_post`).value = s.place_of_posting || "";
   $(`${p}_wallet`).value = s.payment_wallet || ""; const same = !s.payment_number || s.payment_number === s.phone;
   $(`${p}_same`).checked = same; $(`${p}_payrow`).style.display = same ? "none" : "block"; $(`${p}_pay`).value = s.payment_number || "";
   const b = banks.find(x => x.code === s.bank_code); $(`${p}_bank`).value = b ? bankLabel(b) : ""; $(`${p}_iban`).value = s.iban || "";
@@ -371,7 +375,8 @@ function readPerson(p, errs, label) {
   if (!life) { if (!exp) errs.push(`${label}: CNIC expiry date is required (or tick "Lifetime CNIC")`);
     else if (exp < today && exp !== $(`${p}_exp`).dataset.orig) errs.push(`${label}: this CNIC expired on ${exp} — a valid CNIC is needed`); }
   return { full_name: name, father_name: father, cnic, phone, payment_number: pay, payment_wallet: wallet || null, bank_code: bank?.code || null, iban: iban || null,
-           cnic_expiry: life ? null : (exp || null), cnic_lifetime: life, _front: fF, _back: bF };
+           cnic_expiry: life ? null : (exp || null), cnic_lifetime: life, _front: fF, _back: bF,
+           official_designation: v("odes") || null, department: v("dept") || null, place_of_posting: v("post") || null };
 }
 async function saveCnic(rec, front, back) {
   const upd = {};
