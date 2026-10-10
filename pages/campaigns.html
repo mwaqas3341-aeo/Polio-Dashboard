@@ -53,7 +53,7 @@
         <div class="form-grid">
           <div><label>Campaign name</label><input id="e_name"></div>
           <div><label>Type</label><select id="e_type"><option>NID</option><option>SNID</option></select></div>
-          <div><label>Status</label><select id="e_status"><option value="planning">Planning</option><option value="active">Active</option><option value="catchup">Catch-up</option><option value="closed">Closed</option></select></div>
+          <div><label>Status</label><select id="e_status"><option value="planning">Planning</option><option value="active">Active</option><option value="catchup">Catch-up</option><option value="completed">Completed (awaiting Missed Children)</option><option value="closed">Closed</option></select></div>
           <div><label>Start date</label><input type="date" id="e_start"></div>
           <div><label>End date</label><input type="date" id="e_end"></div>
           <div><label>Campaign year</label><input id="e_year" disabled></div>
@@ -72,6 +72,18 @@
         <h3>By union council</h3>
         <p class="muted">Open a union council to see its UCMO, Area Incharges, teams and active members.</p>
         <div id="ucList"></div>
+      </div>
+
+      <div class="card" id="completionCard" style="display:none;">
+        <h2>Campaign completion</h2>
+        <p class="muted">Campaign → Operational Plan → Day 1 → Day 2 → Day 3 → <b>Campaign completed</b> → <b>Missed Children</b> → Final closure.</p>
+        <p>Missed Children Report: <span id="mcBadge" class="badge attention">Pending</span> <span id="mcCount" class="muted"></span></p>
+        <p class="muted" id="mcNote"></p>
+        <a class="btn small" href="missed-children.html">Enter / review missed children</a>
+        <button class="btn small" id="mcSubmit">Submit the missed children list</button>
+        <button class="btn small ghost" id="mcNone">No children were missed…</button>
+        <p class="muted">The campaign cannot be set to <b>Closed</b> while this report is pending.</p>
+        <div class="error-text" id="mcErr" style="display:none;"></div>
       </div>
 
       <div class="card">
@@ -131,7 +143,7 @@ async function openCampaign(id) {
   $("dTitle").textContent = data.name; $("e_name").value = data.name; $("e_type").value = data.campaign_type; $("e_status").value = data.status;
   $("e_start").value = data.start_date; $("e_end").value = data.end_date; refreshDays();
   $("detail").scrollIntoView({ behavior: "smooth" });
-  loadStructure(); loadSnapshots();
+  loadStructure(); loadSnapshots(); loadCompletion();
 }
 function refreshDays() {
   const s = $("e_start").value, e = $("e_end").value; if (!s || !e || e < s) { $("e_days").value = "—"; $("dayChips").innerHTML = "<span>Check the dates</span>"; return; }
@@ -162,6 +174,28 @@ $("saveCamp").onclick = async () => {
     if (error) throw error;
     current = data; $("dTitle").textContent = data.name; await loadList(); alert("Campaign updated.");
   } catch (e) { showFormError(err, e); err.style.whiteSpace = "pre-line"; } finally { btn.disabled = false; }
+};
+
+/* ---- completion: Missed Children is mandatory before closure ---- */
+async function loadCompletion() {
+  const card = $("completionCard"); if (!current || current.missed_children_status === undefined) { card.style.display = "none"; return; }
+  card.style.display = "block"; const st = current.missed_children_status;
+  const { count } = await supabaseClient.from("missed_children").select("id", { count: "exact", head: true }).eq("campaign_id", current.id);
+  $("mcBadge").textContent = st === "pending" ? "Pending" : st === "submitted" ? "Submitted" : "None missed (confirmed)"; $("mcBadge").className = "badge " + (st === "pending" ? "attention" : "ok");
+  $("mcCount").textContent = `${count || 0} missed child record(s) entered`;
+  $("mcNote").textContent = current.missed_children_note ? "Note: " + current.missed_children_note : "";
+}
+$("mcSubmit").onclick = async () => {
+  const err = $("mcErr"); clearFormError(err);
+  if (!confirm("Submit the missed children list for this campaign as complete?")) return;
+  const { error } = await supabaseClient.rpc("submit_missed_children_report", { p_campaign: current.id, p_mode: "submitted" });
+  if (error) return showFormError(err, error); await openCampaign(current.id); alert("Missed Children Report submitted.");
+};
+$("mcNone").onclick = async () => {
+  const err = $("mcErr"); clearFormError(err);
+  const note = prompt("Write a short note confirming that no children were missed (for example: 'All tally sheets checked — none missed'):"); if (note === null) return;
+  const { error } = await supabaseClient.rpc("submit_missed_children_report", { p_campaign: current.id, p_mode: "none_reported", p_note: note });
+  if (error) return showFormError(err, error); await openCampaign(current.id); alert("Recorded: no missed children.");
 };
 
 /* ---- saved rosters (frozen copies, loaded only for the open campaign) ---- */

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operational Plan — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<style>
+  .crumb { font-size:.9rem; color:#555; margin:.4rem 0; } .crumb b { color:#1a7f5a; }
+  .tcard { border:1px solid var(--line); border-radius:var(--radius); background:#fff; padding:.7rem .9rem; margin:.7rem 0; }
+  .days { display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem; margin-top:.5rem; }
+  .day { border:1px solid var(--line); border-radius:8px; padding:.5rem; text-align:center; background:#fbfcfc; }
+  .day small { display:block; color:#666; margin:.2rem 0; }
+  .tag { display:inline-block; padding:.1rem .55rem; border-radius:99px; font-size:.78rem; background:#e8efed; }
+  .tag.ok { background:#dff3e8; color:#14633f; } .tag.warn { background:#fff0d6; color:#8a5a00; } .tag.bad { background:#fde2e1; color:#9b1c1c; }
+  .btn.small { padding:.25rem .65rem; font-size:.85rem; } .btn.ghost { background:#fff; color:inherit; border:1px solid var(--line); }
+  .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); overflow:auto; padding:.6rem; z-index:50; }
+  .panel { background:#fff; max-width:860px; margin:0 auto; padding:1rem 1.2rem 1.4rem; border-radius:12px; }
+  .tabs { display:flex; gap:.4rem; flex-wrap:wrap; margin:.6rem 0; } .tabs button { padding:.4rem .9rem; border:1px solid var(--line); border-radius:99px; background:#fff; cursor:pointer; }
+  .tabs button.on { background:#1a7f5a; color:#fff; border-color:transparent; }
+  .calc { background:#eef7f2; border:1px solid #bfe0cf; border-radius:10px; padding:.7rem; margin-top:.8rem; display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:.6rem; }
+  .calc div b { display:block; font-size:1.35rem; } .calc div span { font-size:.78rem; color:#555; }
+  .urdu { direction:rtl; font-size:.8rem; color:#666; display:block; }
+  .slot { display:inline-block; vertical-align:top; width:15rem; margin:.4rem .8rem .4rem 0; } .slot img { width:100%; border:1px solid #999; border-radius:6px; margin:.3rem 0; }
+  .grid3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:.6rem; }
+  table.mini { width:100%; border-collapse:collapse; font-size:.9rem; } table.mini td, table.mini th { border-bottom:1px solid #eee; padding:.3rem .4rem; text-align:left; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar-mount"></aside>
+  <main class="main">
+    <div class="topbar"><h1>Operational Plan — Mobile Teams</h1></div>
+    <div class="card">
+      <div class="form-grid">
+        <div><label>Campaign</label><select id="campSel"></select></div>
+        <div><label>Area Incharge</label><select id="aicSel"></select></div>
+      </div>
+      <div class="crumb" id="crumb"></div>
+      <div id="mcStatus" style="margin-top:.3rem;"></div>
+    </div>
+
+    <div class="card"><h2>Campaign-day maps</h2>
+      <p class="muted">One map picture for each campaign day, uploaded separately. These are different from the AIC Area Map added when the AIC was registered.</p>
+      <div class="days" id="dayMaps"></div></div>
+
+    <div id="teams"></div>
+
+    <div class="card"><h2>Reports (Excel)</h2>
+      <p class="muted">Download in the same layout as your workbooks. Managers can include all Area Incharges; an AIC gets their own.</p>
+      <label class="muted" id="allWrap" style="display:none;"><input type="checkbox" id="allAics"> All Area Incharges of this union council</label><br>
+      <button class="btn small" onclick="exportReport('plan')">Operational Plan</button>
+      <button class="btn small" onclick="exportReport('mmp')">MMP Coverage Plan</button>
+      <button class="btn small" onclick="exportReport('school')">School List</button>
+      <button class="btn small" onclick="exportReport('missed')">Missed Children</button>
+      <div class="error-text" id="repErr" style="display:none;"></div></div>
+  </main>
+</div>
+<div class="overlay" id="overlay"><div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;"><h2 id="pTitle" style="margin:0;"></h2><button class="btn ghost small" onclick="closeEditor()">✕ Close</button></div><div class="crumb" id="pCrumb"></div><div class="tabs" id="tabs"></div><div id="pBody"></div></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/supabaseClient.js"></script>
+<script src="../assets/js/nav.js"></script>
+<script src="../assets/js/crud.js"></script>
+<script src="../assets/js/validators.js"></script>
+<script src="../assets/js/images.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let me = null, camps = [], campaign = null, ucName = "", aics = [], aic = null, teams = [], plans = {}, picCounts = {}, dayMaps = {}, ed = null;
+const GROUPS = ["G1", "G2", "G3"];
+const MANAGER = () => ["admin", "district_coordinator", "ucmo"].includes(me.role);
+const num = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : 0; };
+function msg(e) { const m = e?.message || String(e); return m.replace(/^.*?(This plan|Village|Name of|At least|The Day|The Area|The Operational|The plan|Save the plan)/, "$1"); }
+
+(async () => {
+  const session = await requireAuth(); if (!session) return; renderSidebar("operational-plan.html");
+  const { data: p } = await supabaseClient.from("profiles").select("role, staff_id, uc_id").eq("id", session.user.id).single(); me = p || { role: "viewer" };
+  const { data: cs } = await supabaseClient.from("campaigns").select("id, name, status, uc_id, total_days, missed_children_status").order("start_date", { ascending: false }); camps = cs || [];
+  $("campSel").innerHTML = camps.map(c => `<option value="${c.id}">${esc(c.name)}${c.status === "closed" ? " (closed)" : ""}</option>`).join("") || `<option value="">No campaign yet</option>`;
+  $("campSel").onchange = loadCampaign; $("aicSel").onchange = loadAic;
+  $("allWrap").style.display = MANAGER() ? "inline" : "none";
+  if (camps.length) await loadCampaign();
+})();
+
+async function loadCampaign() {
+  campaign = camps.find(c => c.id === $("campSel").value); if (!campaign) return;
+  const { data: uc } = campaign.uc_id ? await supabaseClient.from("union_councils").select("name").eq("id", campaign.uc_id).single() : { data: null }; ucName = uc?.name || "";
+  const { data } = await supabaseClient.from("staff").select("id, full_name, aic_no, area_map_path, uc_id").eq("designation", "aic").eq("status", "active").order("aic_no");
+  aics = data || []; $("aicSel").innerHTML = aics.map(a => `<option value="${a.id}">AIC ${a.aic_no} — ${esc(a.full_name)}</option>`).join("") || `<option value="">No Area Incharge</option>`;
+  if (me.role === "aic" && me.staff_id) { $("aicSel").value = me.staff_id; $("aicSel").disabled = true; }
+  const s = campaign.missed_children_status;
+  $("mcStatus").innerHTML = `Missed Children Report: <span class="tag ${s === "pending" ? "warn" : "ok"}">${s === "pending" ? "Pending" : s === "submitted" ? "Submitted" : "None missed (confirmed)"}</span> <span class="muted">— completed under Campaign Details.</span>`;
+  await loadAic();
+}
+async function loadAic() {
+  aic = aics.find(a => a.id === $("aicSel").value) || null;
+  $("crumb").innerHTML = `<b>${esc(campaign?.name || "")}</b> → ${esc(ucName)} → ${aic ? `AIC ${aic.aic_no} (${esc(aic.full_name)})` : "—"}`;
+  if (!aic) { $("teams").innerHTML = `<div class="card"><p>No Area Incharge available.</p></div>`; $("dayMaps").innerHTML = ""; return; }
+  const { data: ts } = await supabaseClient.from("teams").select("id, team_no, team_type, team_members(active, member_no, staff(full_name))").eq("aic_staff_id", aic.id).eq("team_type", "mobile").order("team_no");
+  teams = (ts || []).map(t => ({ ...t, active: (t.team_members || []).filter(m => m.active).sort((a, b) => a.member_no - b.member_no) }));
+  const ids = teams.map(t => t.id);
+  const [{ data: pl }, { data: dm }] = await Promise.all([
+    ids.length ? supabaseClient.from("operational_plans").select("*").eq("campaign_id", campaign.id).in("team_id", ids) : { data: [] },
+    supabaseClient.from("operational_day_maps").select("campaign_day, storage_path").eq("campaign_id", campaign.id).eq("aic_staff_id", aic.id)]);
+  plans = {}; (pl || []).forEach(p => plans[p.team_id + "|" + p.campaign_day] = p);
+  dayMaps = {}; (dm || []).forEach(m => dayMaps[m.campaign_day] = m.storage_path);
+  picCounts = {}; const pids = (pl || []).map(p => p.id);
+  if (pids.length) { const { data: pc } = await supabaseClient.from("operational_plan_pictures").select("plan_id").in("plan_id", pids); (pc || []).forEach(x => picCounts[x.plan_id] = (picCounts[x.plan_id] || 0) + 1); }
+  renderDayMaps(); renderTeams();
+}
+
+function renderDayMaps() {
+  $("dayMaps").innerHTML = [1, 2, 3].map(d => { const has = dayMaps[d];
+    return `<div class="day"><b>Day ${d} Map</b><small>${has ? '<span class="tag ok">Uploaded ✓</span>' : '<span class="tag bad">Not uploaded</span>'}</small>
+      <input type="file" id="map${d}" accept="image/jpeg,image/png" style="display:none" onchange="uploadDayMap(${d}, this.files[0])">
+      <button class="btn small" onclick="$('map${d}').click()">${has ? "Replace" : "Upload"}</button> ${has ? `<button class="btn small ghost" onclick="openFile('${has}')">View</button>` : ""}</div>`; }).join("");
+}
+async function uploadDayMap(d, file) {
+  if (!file) return;
+  try { const f = await compressImage(file); const path = `${aic.uc_id}/${campaign.id}/maps/${aic.id}/day${d}.${fileExt(f)}`;
+    const up = await supabaseClient.storage.from("operational-plans").upload(path, f, { upsert: true, contentType: f.type }); if (up.error) throw up.error;
+    const { error } = await supabaseClient.from("operational_day_maps").upsert({ campaign_id: campaign.id, aic_staff_id: aic.id, campaign_day: d, storage_path: path, updated_at: new Date().toISOString() }, { onConflict: "campaign_id,aic_staff_id,campaign_day" }); if (error) throw error;
+    dayMaps[d] = path; renderDayMaps(); } catch (e) { alert("Map not saved: " + msg(e)); }
+}
+async function openFile(path, bucket = "operational-plans") { const { data } = await supabaseClient.storage.from(bucket).createSignedUrl(path, 300); if (data?.signedUrl) window.open(data.signedUrl, "_blank"); else alert("Could not open the picture"); }
+
+function dayCell(t, d) {
+  const p = plans[t.id + "|" + d], pics = p ? (picCounts[p.id] || 0) : 0;
+  const st = !p ? '<span class="tag">Not started</span>' : p.status === "submitted" ? '<span class="tag ok">Submitted ✓</span>' : '<span class="tag warn">Draft</span>';
+  return `<div class="day"><b>Day ${d}</b><small>${st}</small><small>${p ? `Doses ${Math.round(p.required_doses)} · Pictures ${pics}/3` : ""}</small><button class="btn small" onclick="openEditor('${t.id}', ${d})">${p ? "Open" : "Start"}</button></div>`;
+}
+function renderTeams() {
+  if (!teams.length) { $("teams").innerHTML = `<div class="card"><p>This Area Incharge has no <b>Mobile</b> team yet. Fixed and Transit teams do not need an Operational Plan. Add Mobile teams in Staff.</p></div>`; return; }
+  $("teams").innerHTML = teams.map(t => `<div class="tcard"><b>Team ${t.team_no}</b> <span class="tag">Mobile</span> <span class="muted">${t.active.map(m => esc(m.staff.full_name)).join(", ") || "no members yet"}</span>
+    <div class="days">${[1, 2, 3].map(d => dayCell(t, d)).join("")}</div></div>`).join("");
+}
+
+/* ---------------- editor ---------------- */
+async function openEditor(teamId, day) {
+  const t = teams.find(x => x.id === teamId); ed = { t, day, tab: "plan", plan: plans[teamId + "|" + day] || null, pics: [], schools: [], mmp: [], carried: 0 };
+  $("overlay").style.display = "block"; document.body.style.overflow = "hidden";
+  $("pTitle").textContent = `Team ${t.team_no} — Campaign Day ${day}`;
+  $("pCrumb").innerHTML = `<b>${esc(campaign.name)}</b> → ${esc(ucName)} → AIC ${aic.aic_no} → Team ${t.team_no} (Mobile) → <b>Day ${day}</b>`;
+  await reloadEd(); showTab("plan");
+}
+function closeEditor() { $("overlay").style.display = "none"; document.body.style.overflow = ""; ed = null; loadAic(); }
+async function reloadEd() {
+  const { t, day } = ed;
+  const [{ data: plan }, { data: sc }, { data: mm }, { data: carried }] = await Promise.all([
+    supabaseClient.from("operational_plans").select("*").eq("campaign_id", campaign.id).eq("team_id", t.id).eq("campaign_day", day).maybeSingle(),
+    supabaseClient.from("school_assignments").select("id, target_children, schools(id, name, head_teacher_name, head_teacher_phone)").eq("campaign_id", campaign.id).eq("team_no", t.team_no).eq("campaign_day", day),
+    supabaseClient.from("mmp_assignments").select("id, house_count, child_count, mmp_contacts(id, full_name, cnic, phone, location, area_of_origin)").eq("campaign_id", campaign.id).eq("team_no", t.team_no).eq("campaign_day", day),
+    supabaseClient.from("missed_children").select("id", { count: "exact", head: true }).eq("campaign_id", campaign.id).eq("team_no", t.team_no).eq("campaign_day", day).not("carried_from_campaign_id", "is", null)]);
+  ed.plan = plan || null; ed.schools = sc || []; ed.mmp = mm || [];
+  if (plan) { plans[t.id + "|" + day] = plan; const { data: pics } = await supabaseClient.from("operational_plan_pictures").select("id, slot, storage_path").eq("plan_id", plan.id).order("slot"); ed.pics = pics || []; picCounts[plan.id] = ed.pics.length; } else ed.pics = [];
+  const { count } = await supabaseClient.from("missed_children").select("id", { count: "exact", head: true }).eq("campaign_id", campaign.id).eq("team_no", t.team_no).eq("campaign_day", day).not("carried_from_campaign_id", "is", null); ed.carried = count || 0;
+}
+function showTab(tab) {
+  ed.tab = tab; const names = { plan: "1. Plan", pics: "2. Plan pictures", mmp: "3. MMP list", school: "4. School list (automatic)" };
+  $("tabs").innerHTML = Object.entries(names).map(([k, v]) => `<button class="${k === tab ? "on" : ""}" onclick="showTab('${k}')">${v}</button>`).join("");
+  ({ plan: tabPlan, pics: tabPics, mmp: tabMmp, school: tabSchool })[tab]();
+}
+const locked = () => ed.plan?.status === "submitted" && !MANAGER();
+
+function totalsHtml() {
+  const p = ed.plan, sch = ed.schools.reduce((n, s) => n + s.target_children, 0), mmp = ed.mmp.reduce((n, m) => n + m.child_count, 0);
+  const hh = p ? p.children_households_1_5 : 0, u1 = p ? p.children_under_1 : 0, total = hh + u1 + sch, doses = Math.round(total * 111) / 100;
+  return `<div class="calc" id="calc"><div><b id="cTotal">${total}</b><span>Total children under 5<span class="urdu">5 سال سے کم عمر بچوں کی کل تعداد</span></span></div>
+    <div><b id="cDoses">${Math.round(doses)}</b><span>Polio doses required (children × 1.11 = ${doses.toFixed(2)})<span class="urdu">پولیو ویکسین خوراکیں</span></span></div>
+    <div><b>${sch}</b><span>School / madrasa children (from School list)<span class="urdu">سکول / مدرسہ کے بچے</span></span></div>
+    <div><b>${mmp}</b><span>MMP children (from MMP list)</span></div>
+    <div><b>${ed.carried}</b><span>Missed from last campaign<span class="urdu">گزشتہ مہم میں رہ جانے والے بچے</span></span></div></div>`;
+}
+function tabPlan() {
+  const p = ed.plan || {}, ro = locked() ? "disabled" : "";
+  $("pBody").innerHTML = `${ed.plan?.status === "submitted" ? `<p><span class="tag ok">Submitted ${new Date(ed.plan.submitted_at).toLocaleString("en-GB")}</span> ${MANAGER() ? "" : "— read only. Ask your UCMO to reopen it for corrections."}</p>` : ""}
+    <div class="grid3">
+      <div><label>Village / area name <span class="urdu">گاوں / علاقہ کا نام</span></label><input id="f_village" value="${esc(p.village_area || "")}" ${ro}></div>
+      <div><label>Community vaccination place <span class="urdu">کمیونیٹی ویکسینیشن کی جگہ</span></label><input id="f_place" value="${esc(p.community_vaccination_place || "")}" ${ro}></div>
+      <div><label>Group G1 / G2 / G3</label><select id="f_group" ${ro}><option value="">—</option>${GROUPS.map(g => `<option ${p.team_group === g ? "selected" : ""}>${g}</option>`).join("")}</select></div>
+      <div><label>Team working order (as per map) <span class="urdu">ٹیم کے کام کرنے کی ترتیب: نقشہ کے حساب سے</span></label><input id="f_order" value="${esc(p.working_order || "")}" ${ro}></div>
+      <div><label>Name of Head of 1st Family <span class="urdu">پہلے گھر کے سربراہ کا نام</span></label><input id="f_first" value="${esc(p.head_first_family || "")}" ${ro}></div>
+      <div><label>Name of Head of Last Family <span class="urdu">آخری گھر کے سربراہ کا نام</span></label><input id="f_last" value="${esc(p.head_last_family || "")}" ${ro}></div>
+      <div><label>Total households <span class="urdu">کل گھرانے</span></label><input type="number" min="0" id="f_hh" value="${p.total_households ?? 0}" ${ro}></div>
+      <div><label>Children in households, 1–5 years <span class="urdu">گھروں کے بچے: 1 تا 5 سال</span></label><input type="number" min="0" id="f_c15" value="${p.children_households_1_5 ?? 0}" ${ro}></div>
+      <div><label>Children under 1 year <span class="urdu">1 سال سے کم</span></label><input type="number" min="0" id="f_u1" value="${p.children_under_1 ?? 0}" ${ro}></div></div>
+    ${totalsHtml()}
+    <p class="muted">Doses = total children × 1.11, shown to the nearest whole dose like your workbook. School and MMP numbers come from tabs 3 and 4 — you do not type them here. Doses cannot be edited by hand.</p>
+    <div class="error-text" id="pErr" style="display:none;white-space:pre-line;"></div>
+    <div style="margin-top:.8rem;">${ro ? "" : `<button class="btn" onclick="savePlan()">Save</button> <button class="btn" style="background:#14633f;" onclick="submitPlan()">Submit plan</button>`}
+      ${ed.plan?.status === "submitted" && MANAGER() ? `<button class="btn ghost" onclick="reopenPlan()">Reopen for corrections</button>` : ""}</div>`;
+  ["f_c15", "f_u1"].forEach(i => { const el = $(i); if (el) el.oninput = refreshCalc; });
+}
+function refreshCalc() { const sch = ed.schools.reduce((n, s) => n + s.target_children, 0), total = num($("f_c15").value) + num($("f_u1").value) + sch; $("cTotal").textContent = total; $("cDoses").textContent = Math.round(total * 111 / 100); }
+function readPlan() { return { village_area: $("f_village").value.trim() || null, community_vaccination_place: $("f_place").value.trim() || null, team_group: $("f_group").value || null, working_order: $("f_order").value.trim() || null,
+  head_first_family: $("f_first").value.trim() || null, head_last_family: $("f_last").value.trim() || null, total_households: num($("f_hh").value), children_households_1_5: num($("f_c15").value), children_under_1: num($("f_u1").value) }; }
+async function savePlan(silent) {
+  const err = $("pErr"); err.style.display = "none";
+  try { const body = readPlan();
+    const q = ed.plan ? supabaseClient.from("operational_plans").update(body).eq("id", ed.plan.id).select().single()
+                      : supabaseClient.from("operational_plans").insert({ ...body, campaign_id: campaign.id, team_id: ed.t.id, campaign_day: ed.day }).select().single();
+    const { data, error } = await q; if (error) throw error; ed.plan = data; plans[ed.t.id + "|" + ed.day] = data; await reloadEd(); if (!silent) { showTab("plan"); } return true;
+  } catch (e) { err.textContent = msg(e); err.style.display = "block"; return false; }
+}
+async function submitPlan() {
+  if (!(await savePlan(true))) return;
+  const err = $("pErr");
+  const { error } = await supabaseClient.from("operational_plans").update({ status: "submitted" }).eq("id", ed.plan.id);
+  if (error) { err.textContent = msg(error); err.style.display = "block"; return; }
+  await reloadEd(); showTab("plan"); alert("Operational Plan submitted.");
+}
+async function reopenPlan() { if (!confirm("Reopen this plan so the AIC can correct it?")) return; const { error } = await supabaseClient.from("operational_plans").update({ status: "draft" }).eq("id", ed.plan.id); if (error) return alert(msg(error)); await reloadEd(); showTab("plan"); }
+
+/* ---- pictures: at least 3 required (5 places) ---- */
+function tabPics() {
+  if (!ed.plan) { $("pBody").innerHTML = `<p>Save the plan first (tab 1), then add its pictures here.</p>`; return; }
+  const ro = locked();
+  $("pBody").innerHTML = `<p class="muted">At least 3 pictures of the Operational Plan are needed before it can be submitted. Large photos are shrunk automatically.</p>
+    ${[1, 2, 3, 4, 5].map(n => { const p = ed.pics.find(x => x.slot === n);
+      return `<div class="slot"><b>Picture ${n}${n > 3 ? " (optional)" : ""}</b> ${p ? '<span class="tag ok">Uploaded ✓</span>' : n <= 3 ? '<span class="tag bad">Missing</span>' : ""}<div id="pv${n}"></div>
+        <input type="file" id="pf${n}" accept="image/jpeg,image/png" style="display:none" onchange="uploadPic(${n}, this.files[0])">
+        ${ro ? "" : `<button class="btn small" onclick="$('pf${n}').click()">${p ? "Replace" : "Upload"}</button>`} ${p ? `<button class="btn small ghost" onclick="previewPic(${n})">Preview</button>` : ""} ${p && !ro ? `<button class="btn small ghost" onclick="removePic(${n})">Remove</button>` : ""}</div>`; }).join("")}`;
+}
+async function previewPic(n) { const p = ed.pics.find(x => x.slot === n); const { data } = await supabaseClient.storage.from("operational-plans").createSignedUrl(p.storage_path, 300); $(`pv${n}`).innerHTML = data?.signedUrl ? `<img src="${data.signedUrl}" alt="plan picture ${n}">` : "Could not load"; }
+async function uploadPic(n, file) {
+  if (!file) return;
+  try { const f = await compressImage(file); const path = `${aic.uc_id}/${campaign.id}/plans/${ed.plan.id}/pic${n}.${fileExt(f)}`;
+    const old = ed.pics.find(x => x.slot === n); if (old && old.storage_path !== path) await supabaseClient.storage.from("operational-plans").remove([old.storage_path]);
+    const up = await supabaseClient.storage.from("operational-plans").upload(path, f, { upsert: true, contentType: f.type }); if (up.error) throw up.error;
+    const { error } = await supabaseClient.from("operational_plan_pictures").upsert({ plan_id: ed.plan.id, slot: n, storage_path: path }, { onConflict: "plan_id,slot" }); if (error) throw error;
+    await reloadEd(); showTab("pics"); } catch (e) { alert("Picture not saved: " + msg(e)); }
+}
+async function removePic(n) { if (!confirm(`Remove picture ${n}?`)) return; const p = ed.pics.find(x => x.slot === n);
+  await supabaseClient.storage.from("operational-plans").remove([p.storage_path]); const { error } = await supabaseClient.from("operational_plan_pictures").delete().eq("id", p.id); if (error) return alert(msg(error)); await reloadEd(); showTab("pics"); }
+
+/* ---- MMP list (workbook: MMP Coverage Plan) ---- */
+function tabMmp() {
+  const ro = locked();
+  $("pBody").innerHTML = `<table class="mini"><thead><tr><th>Sr</th><th>Location</th><th>Name</th><th>CNIC</th><th>Phone</th><th>Houses</th><th>Children</th><th>Area of origin</th><th></th></tr></thead><tbody>
+    ${ed.mmp.map((m, i) => { const c = m.mmp_contacts; return `<tr><td>${i + 1}</td><td>${esc(c.location)}</td><td>${esc(c.full_name)}</td><td>${esc(c.cnic)}</td><td>${esc(c.phone)}</td><td>${m.house_count}</td><td>${m.child_count}</td><td>${esc(c.area_of_origin)}</td><td>${ro ? "" : `<button class="btn small ghost" onclick="delMmp('${m.id}')">Remove</button>`}</td></tr>`; }).join("") || `<tr><td colspan="9" class="muted">No MMP entries for this team and day.</td></tr>`}
+    <tr><td></td><td colspan="4"><b>Total</b></td><td><b>${ed.mmp.reduce((n, m) => n + m.house_count, 0)}</b></td><td><b>${ed.mmp.reduce((n, m) => n + m.child_count, 0)}</b></td><td colspan="2"></td></tr></tbody></table>
+    ${ro ? "" : `<div class="sect" style="margin-top:.8rem;"><b>Add an MMP entry</b><div class="grid3">
+      <div><label>Location</label><input id="m_loc"></div><div><label>Name (community elder)</label><input id="m_name"></div>
+      <div><label>CNIC</label><input id="m_cnic" placeholder="XXXXX-XXXXXXX-X" maxlength="15"></div><div><label>Phone no.</label><input id="m_phone" placeholder="03XX-XXXXXXX" maxlength="12"></div>
+      <div><label>Total houses</label><input type="number" min="0" id="m_house" value="0"></div><div><label>No. of children</label><input type="number" min="0" id="m_kids" value="0"></div>
+      <div><label>Area of origin</label><input id="m_origin"></div></div>
+      <div class="error-text" id="mErr" style="display:none;"></div><button class="btn small" style="margin-top:.6rem;" onclick="addMmp()">Add to MMP list</button></div>`}`;
+  if (!ro) { $("m_cnic").oninput = (e) => e.target.value = Validate.formatCnic(e.target.value); $("m_phone").oninput = (e) => e.target.value = Validate.formatMobile(e.target.value); }
+}
+async function addMmp() {
+  const err = $("mErr"); err.style.display = "none";
+  try { const name = $("m_name").value.trim(), cnic = $("m_cnic").value.trim(), phone = $("m_phone").value.trim(), loc = $("m_loc").value.trim();
+    if (!name) throw new Error("Name is required"); if (cnic && !Validate.isCnic(cnic)) throw new Error("CNIC must be 13 digits (XXXXX-XXXXXXX-X)"); if (phone && !Validate.isMobile(phone)) throw new Error("Phone must look like 03XX-XXXXXXX");
+    if (!num($("m_kids").value)) throw new Error("Enter the number of children");
+    let q = supabaseClient.from("mmp_contacts").select("id").eq("uc_id", aic.uc_id); q = cnic ? q.eq("cnic", cnic) : q.eq("full_name", name).eq("phone", phone || "");
+    const { data: found } = await q.limit(1); let id = found?.[0]?.id;
+    const row = { full_name: name, cnic: cnic || null, phone: phone || null, location: loc || null, area_of_origin: $("m_origin").value.trim() || null, uc_id: aic.uc_id };
+    if (id) await supabaseClient.from("mmp_contacts").update(row).eq("id", id); else { const { data, error } = await supabaseClient.from("mmp_contacts").insert(row).select("id").single(); if (error) throw error; id = data.id; }
+    const { error } = await supabaseClient.from("mmp_assignments").insert({ campaign_id: campaign.id, mmp_contact_id: id, team_no: ed.t.team_no, campaign_day: ed.day, house_count: num($("m_house").value), child_count: num($("m_kids").value) });
+    if (error) throw new Error(/duplicate|unique/i.test(error.message) ? "This person is already in the MMP list of this campaign (another team or day)." : error.message);
+    await reloadEd(); showTab("mmp"); } catch (e) { err.textContent = msg(e); err.style.display = "block"; }
+}
+async function delMmp(id) { if (!confirm("Remove this MMP entry?")) return; const { error } = await supabaseClient.from("mmp_assignments").delete().eq("id", id); if (error) return alert(msg(error)); await reloadEd(); showTab("mmp"); }
+
+/* ---- School list: filled from the plan's school entries, never typed twice ---- */
+async function tabSchool() {
+  const ro = locked(); const { data: master } = await supabaseClient.from("schools").select("name, head_teacher_name, head_teacher_phone").eq("uc_id", aic.uc_id).order("name");
+  window._schoolMaster = master || [];
+  $("pBody").innerHTML = `<p class="muted">Add each school this team covers on this day. The School List for the report is built from these entries automatically, and their children add up into the plan's school-children total. A school can appear only once in a campaign.</p>
+    <table class="mini"><thead><tr><th>Sr</th><th>Team</th><th>Day</th><th>Name of school</th><th>Head teacher</th><th>Cell</th><th>Children &lt; 5</th><th></th></tr></thead><tbody>
+    ${ed.schools.map((s, i) => `<tr><td>${i + 1}</td><td>${ed.t.team_no}</td><td>${ed.day}</td><td>${esc(s.schools.name)}</td><td>${esc(s.schools.head_teacher_name)}</td><td>${esc(s.schools.head_teacher_phone)}</td><td>${s.target_children}</td><td>${ro ? "" : `<button class="btn small ghost" onclick="delSchool('${s.id}')">Remove</button>`}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">No schools yet.</td></tr>`}
+    <tr><td colspan="6"><b>Total school children</b></td><td><b>${ed.schools.reduce((n, s) => n + s.target_children, 0)}</b></td><td></td></tr></tbody></table>
+    ${ro ? "" : `<div class="sect" style="margin-top:.8rem;"><b>Add a school</b><datalist id="schoolDl">${(master || []).map(m => `<option value="${esc(m.name)}">`).join("")}</datalist><div class="grid3">
+      <div><label>Name of school</label><input id="s_name" list="schoolDl"></div><div><label>Head teacher name</label><input id="s_head"></div>
+      <div><label>Head teacher cell</label><input id="s_phone" placeholder="03XX-XXXXXXX" maxlength="12"></div><div><label>Total children less than 5 years</label><input type="number" min="0" id="s_kids" value="0"></div></div>
+      <div class="error-text" id="sErr" style="display:none;"></div><button class="btn small" style="margin-top:.6rem;" onclick="addSchool()">Add school</button></div>`}`;
+  if (!ro) { $("s_phone").oninput = (e) => e.target.value = Validate.formatMobile(e.target.value);
+    $("s_name").onchange = () => { const m = window._schoolMaster.find(x => x.name.toLowerCase() === $("s_name").value.trim().toLowerCase()); if (m) { if (!$("s_head").value) $("s_head").value = m.head_teacher_name || ""; if (!$("s_phone").value) $("s_phone").value = m.head_teacher_phone || ""; } }; }
+}
+async function addSchool() {
+  const err = $("sErr"); err.style.display = "none";
+  try { const name = $("s_name").value.trim().replace(/\s+/g, " "), phone = $("s_phone").value.trim(); if (!name) throw new Error("Name of school is required");
+    if (phone && !Validate.isMobile(phone)) throw new Error("Cell must look like 03XX-XXXXXXX");
+    const { data: found } = await supabaseClient.from("schools").select("id").eq("uc_id", aic.uc_id).ilike("name", name.replace(/[%_]/g, m => "\\" + m)).limit(1); let id = found?.[0]?.id;
+    const info = { head_teacher_name: $("s_head").value.trim() || null, head_teacher_phone: phone || null };
+    if (id) await supabaseClient.from("schools").update(Object.fromEntries(Object.entries(info).filter(([, v]) => v))).eq("id", id);
+    else { const { data, error } = await supabaseClient.from("schools").insert({ uc_id: aic.uc_id, name, ...info }).select("id").single(); if (error) throw error; id = data.id; }
+    const { error } = await supabaseClient.from("school_assignments").insert({ campaign_id: campaign.id, school_id: id, team_no: ed.t.team_no, campaign_day: ed.day, target_children: num($("s_kids").value) });
+    if (error) throw new Error(/duplicate|unique/i.test(error.message) ? "This school is already in the School List of this campaign (another team or day)." : error.message);
+    await reloadEd(); showTab("school"); } catch (e) { err.textContent = msg(e); err.style.display = "block"; }
+}
+async function delSchool(id) { if (!confirm("Remove this school?")) return; const { error } = await supabaseClient.from("school_assignments").delete().eq("id", id); if (error) return alert(msg(error)); await reloadEd(); showTab("school"); }
+
+/* ---------------- Excel reports in the workbook layouts ---------------- */
+function saveXlsx(file, sheets) {
+  const wb = XLSX.utils.book_new();
+  for (const s of sheets) { const ws = XLSX.utils.aoa_to_sheet(s.rows); ws["!cols"] = (s.widths || []).map(w => ({ wch: w })); if (s.merges) ws["!merges"] = s.merges; XLSX.utils.book_append_sheet(wb, ws, s.name.slice(0, 31)); }
+  XLSX.writeFile(wb, file);
+}
+async function exportReport(kind) {
+  const err = $("repErr"); err.style.display = "none";
+  try {
+    const all = MANAGER() && $("allAics").checked, who = all ? aics : [aic]; if (!who[0]) throw new Error("Choose an Area Incharge");
+    const aicIds = who.map(a => a.id), aicName = (id) => aics.find(a => a.id === id)?.full_name || "";
+    const { data: tm } = await supabaseClient.from("teams").select("id, team_no, aic_staff_id, team_members(active, member_no, staff(full_name))").in("aic_staff_id", aicIds).eq("team_type", "mobile").order("team_no");
+    const nos = (tm || []).map(t => t.team_no), byNo = Object.fromEntries((tm || []).map(t => [t.team_no, t]));
+    const title = `${campaign.name}`, aicLabel = all ? "All Area Incharges" : `${aic.full_name} AIC No.${aic.aic_no}`;
+    if (!nos.length) throw new Error("No Mobile teams found for this selection");
+    if (kind === "plan") {
+      const { data: pl } = await supabaseClient.from("operational_plans").select("*").eq("campaign_id", campaign.id).in("team_id", (tm || []).map(t => t.id)).order("campaign_day");
+      const { data: mc } = await supabaseClient.from("missed_children").select("team_no, campaign_day").eq("campaign_id", campaign.id).not("carried_from_campaign_id", "is", null).in("team_no", nos);
+      const carried = (t, d) => (mc || []).filter(x => x.team_no === t && x.campaign_day === d).length;
+      const head = ["Missed children from last campaign / گزشتہ مہم میں رہ جانے والے بچے", "Polio vaccine doses / پولیو ویکسین خوراکیں", "Total children under 5 / 5 سال سے کم عمر بچوں کی کل تعداد", "Household children 1-5 yrs / گھروں کے بچے 1 تا 5 سال", "Under 1 year / 1 سال سے کم", "School/madrasa children / سکول /مدرسہ کے بچے", "MMP", "Total households / کل گھرانے", "Community vaccination place / کمیونیٹی ویکسینیشن کی جگہ", "G1/G2/G3", "Team working order / ٹیم کے کام کرنے کی ترتیب", "Village / area name / گاوں علاقہ کا نام", "Campaign day / مہم کا دن", "Team workers and designation / نام ٹیم کارکن اور عہدہ", "Team no. / ٹیم نمبر", "Head of 1st family / پہلے گھر کے سربراہ", "Head of last family / آخری گھر کے سربراہ", "Status"];
+      const rows = (pl || []).sort((a, b) => a.campaign_day - b.campaign_day || byNo2(a) - byNo2(b)).map(p => { const t = (tm || []).find(x => x.id === p.team_id);
+        return [carried(t.team_no, p.campaign_day), Math.round(p.required_doses), p.total_children, p.children_households_1_5, p.children_under_1, p.school_children, p.mmp_children, p.total_households, p.community_vaccination_place || "", p.team_group || "", p.working_order || "", p.village_area || "", p.campaign_day,
+          (t.team_members || []).filter(m => m.active).sort((x, y) => x.member_no - y.member_no).map(m => m.staff.full_name + (m.member_no === 1 ? " (Team Leader)" : " (Member)")).join(" / "), t.team_no, p.head_first_family || "", p.head_last_family || "", p.status === "submitted" ? "Submitted" : "Draft"]; });
+      function byNo2(p) { return (tm || []).find(x => x.id === p.team_id)?.team_no || 0; }
+      const sum = (i) => rows.reduce((n, r) => n + (Number(r[i]) || 0), 0);
+      saveXlsx(`Operational_Plan_${campaign.name.replace(/\W+/g, "_")}.xlsx`, [{ name: "Operational Plan", widths: [16, 14, 16, 16, 12, 16, 8, 12, 24, 10, 24, 24, 10, 44, 9, 26, 26, 11], rows: [[title + " — Operational Plan / مائیکرو پلان شیٹ/آپریشنل پلان"], [`UC ${ucName}`, "", `AIC: ${aicLabel}`], head, ...rows, ["Total", sum(1), sum(2), sum(3), sum(4), sum(5), sum(6), sum(7)]] }]);
+    } else if (kind === "mmp") {
+      const { data } = await supabaseClient.from("mmp_assignments").select("team_no, campaign_day, house_count, child_count, mmp_contacts(full_name, cnic, phone, location, area_of_origin)").eq("campaign_id", campaign.id).in("team_no", nos).order("campaign_day").order("team_no");
+      const rows = (data || []).map((m, i) => [i + 1, m.mmp_contacts.location || "", m.mmp_contacts.full_name, m.mmp_contacts.cnic || "", m.mmp_contacts.phone || "", m.house_count, m.child_count, m.mmp_contacts.area_of_origin || "", m.campaign_day, m.team_no]);
+      saveXlsx(`MMP_Coverage_Plan_${campaign.name.replace(/\W+/g, "_")}.xlsx`, [{ name: "MMP Coverage Plan", widths: [7, 24, 24, 18, 15, 11, 13, 18, 12, 9], rows: [["MMP Coverage Plan"], ["AIC Name", aicLabel, "Community Elder Details"], ["Sr No.", "Location", "Name", "CNIC", "Phone No.", "Total House", "No of Children", "Area Of Origin", "Compaig Day", "Team No"], ...rows, ["Total", "", "", "", "", rows.reduce((n, r) => n + r[5], 0), rows.reduce((n, r) => n + r[6], 0)]] }]);
+    } else if (kind === "school") {
+      const { data } = await supabaseClient.from("school_assignments").select("team_no, campaign_day, target_children, schools(name, head_teacher_name, head_teacher_phone)").eq("campaign_id", campaign.id).in("team_no", nos).order("campaign_day").order("team_no");
+      const rows = (data || []).map((s, i) => [i + 1, s.team_no, s.campaign_day, s.schools.name, s.schools.head_teacher_name || "", s.schools.head_teacher_phone || "", s.target_children, ""]);
+      saveXlsx(`School_List_${campaign.name.replace(/\W+/g, "_")}.xlsx`, [{ name: "School List", widths: [7, 9, 7, 34, 26, 16, 18, 22], rows: [[`School Registration Form UC ${ucName}`], ["AIC Name", "", "", aicLabel], [], ["Sr No.", "Team NO.", "Day", "Name of School", "Head Teacher Name", "Head Teacher Cell No.", "Total Children Less than 5 Years", "Head Teacher Signature"], ...rows, ["Total", "", "", "", "", "", rows.reduce((n, r) => n + r[6], 0)]] }]);
+    } else if (kind === "missed") {
+      const { data } = await supabaseClient.from("missed_children").select("child_name, age_months, father_name, address, team_no, campaign_day, house_no, covered_this_round").eq("campaign_id", campaign.id).in("team_no", nos).order("team_no").order("campaign_day");
+      const rows = (data || []).map((m, i) => [i + 1, ucName, m.child_name, m.age_months ?? "", m.father_name || "", m.address || "", aicName(byNo[m.team_no]?.aic_staff_id), m.team_no, m.campaign_day ?? "", m.house_no ?? "", m.covered_this_round ? "Yes" : "No"]);
+      saveXlsx(`Missed_Children_${campaign.name.replace(/\W+/g, "_")}.xlsx`, [{ name: "Missed Children", widths: [7, 18, 22, 12, 22, 28, 22, 9, 12, 14, 13], rows: [["MISSED CHILDREN AT THE END OF THIS CAMPAIGN"], [], ["Sr No.", "UC Name", "Name of Child", "Age of Child in Months", "Father's Name", "Address of Child", "Area Incharge Name", "Team Number", "Day of Campaign (eg 1,2,3)", "House Number as per Tally Sheet", "Covered in current Yes/No"], ...rows] }]);
+    }
+  } catch (e) { err.textContent = msg(e); err.style.display = "block"; }
+}
+</script>
+</body>
+</html>

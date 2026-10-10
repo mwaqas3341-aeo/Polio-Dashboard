@@ -2,6 +2,7 @@ const NAV_LINKS = [
   { href: "dashboard.html", label: "Dashboard" },
   { href: "pages/campaigns.html", label: "Campaign Details" },
   { href: "pages/staff.html", label: "Staff Management" },
+  { href: "pages/operational-plan.html", label: "Operational Plan" },
   { href: "pages/schools.html", label: "School list" },
   { href: "pages/mmp.html", label: "MMP / CNIC list" },
   { href: "pages/households.html", label: "House registration" },
