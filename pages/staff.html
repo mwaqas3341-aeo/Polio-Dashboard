@@ -115,7 +115,7 @@ function cnicLine(s) {
   if (days <= 90) return `<b style="color:#a15c00">CNIC expires soon (${s.cnic_expiry})</b>`;
   return `CNIC ✓ valid till ${s.cnic_expiry}`;
 }
-const typeName = (t) => (TEAM_TYPES.find(x => x[0] === t) || [, t])[1];
+const typeName = (t) => t ? (TEAM_TYPES.find(x => x[0] === t) || [, t])[1] : "Type not set";
 const ucId = () => $("ucSel").value;
 const campId = () => $("campSel").value || null;
 function openPanel(title, html) { $("panelTitle").textContent = title; $("panelBody").innerHTML = html; $("overlay").style.display = "block"; document.body.style.overflow = "hidden"; $("overlay").scrollTop = 0; }
@@ -166,6 +166,8 @@ function renderBoard() {
       <div style="margin-top:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
         <div>Area Incharges: <b>${haveA}</b> of ${nA}<div class="bar"><i style="width:${pc(haveA, nA)}%"></i></div></div>
         <div>Teams: <b>${haveT}</b> of ${nT}<div class="bar"><i style="width:${pc(haveT, nT)}%"></i></div></div></div></div>`;
+  const untyped = teams.filter(t => !t.team_type);
+  if (untyped.length) h += `<div class="card" style="border-color:#e0a0a0;"><b>${untyped.length} team(s) still need a type</b> (Fixed, Transit or Mobile). <button class="btn small" onclick="openBulkTypes()">Set team types</button></div>`;
   if (!plan) h += `<div class="card"><b>Tell the system how many Area Incharges and teams this union council will have.</b> <button class="btn small" onclick="openPlan()">Set the numbers</button></div>`;
   for (let n = 1; n <= nA; n++) {
     const a = aics.find(x => x.aic_no === n);
@@ -192,7 +194,7 @@ function teamHtml(t) {
       <button class="btn small" onclick="openPerson({kind:'member',staff:'${s.id}',team:'${t.id}'})">Edit</button>
       <button class="btn small ghost" onclick="openAdjust('${s.id}')">Move / change</button>
       <button class="btn small ghost" onclick="openPerson({kind:'member',team:'${t.id}',replace:'${s.id}'})">Replace</button></div>`; };
-  return `<div class="team"><b>Team ${t.team_no}</b> <span class="tag">${typeName(t.team_type)}</span> <span class="muted">${t.active.length}/2 members</span> <button class="btn small ghost" onclick="openTeamEdit('${t.id}')">Edit team</button>
+  return `<div class="team"><b>Team ${t.team_no}</b> ${t.team_type ? `<span class="tag">${typeName(t.team_type)}</span>` : `<span class="tag" style="background:#fde2e1;color:#9b1c1c;">Type not set</span>`} <span class="muted">${t.active.length}/2 members</span> <button class="btn small ghost" onclick="openTeamEdit('${t.id}')">Edit team</button>
     <div class="slots">${slot(1)}${slot(2)}</div></div>`;
 }
 
@@ -266,6 +268,24 @@ async function assignTeams(aicId, uc) {
   }
   return errs.length ? "The Area Incharge was saved, but some teams could not be assigned — " + errs.join("; ") : null;
 }
+
+/* ---------- set the type of many teams at once ---------- */
+function openBulkTypes() {
+  const rows = B.teams.filter(t => !t.team_type).sort((a, b) => a.team_no - b.team_no);
+  const aicOf = (t) => B.aics.find(a => a.id === t.aic_staff_id);
+  openPanel("Set team types", `<p class="muted">Choose Fixed, Transit or Mobile for each team, then Save. Nothing is guessed — teams you leave blank stay "Type not set".</p>
+    <p><b>Quick fill (you can still change each row):</b> ${TEAM_TYPES.map(x => `<button class="btn small ghost" type="button" onclick="bulkFill('${x[0]}')">All ${x[1]}</button>`).join(" ")} <button class="btn small ghost" type="button" onclick="bulkFill('')">Clear</button></p>
+    <div class="table-wrap"><table class="mini"><thead><tr><th>Team</th><th>AIC</th>${TEAM_TYPES.map(x => `<th>${x[1]}</th>`).join("")}</tr></thead><tbody>
+    ${rows.map(t => `<tr><td><b>${t.team_no}</b></td><td>${aicOf(t) ? "AIC " + aicOf(t).aic_no : "—"}</td>${TEAM_TYPES.map(x => `<td><input type="radio" name="bt_${t.id}" value="${x[0]}"></td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    ${errBox()}<div style="margin-top:1rem;"><button class="btn" id="btSave">Save types</button> <button class="btn ghost" onclick="closePanel()">Cancel</button></div>`);
+  window._bulkRows = rows;
+  $("btSave").onclick = async () => { try {
+    const chosen = rows.map(t => ({ t, v: document.querySelector(`input[name="bt_${t.id}"]:checked`)?.value })).filter(x => x.v);
+    if (!chosen.length) throw new Error("Choose a type for at least one team");
+    for (const x of chosen) { const { error } = await supabaseClient.from("teams").update({ team_type: x.v }).eq("id", x.t.id); if (error) throw new Error(`Team ${x.t.team_no}: ${friendly(error)}`); }
+    closePanel(); await loadBoard(); alert(`${chosen.length} team type(s) saved.`); } catch (e) { showErr(e); } };
+}
+function bulkFill(v) { (window._bulkRows || []).forEach(t => document.querySelectorAll(`input[name="bt_${t.id}"]`).forEach(r => r.checked = !!v && r.value === v)); }
 
 /* ---------- edit team (number, type, Area Incharge) ---------- */
 function openTeamEdit(teamId) {
