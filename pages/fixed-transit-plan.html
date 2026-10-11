@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fixed &amp; Transit plan — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<style>
+  .grp { margin-top:1.2rem; } .grp > h2 { border-bottom:2px solid #1a7f5a; padding-bottom:.25rem; }
+  .tcard { border:1px solid var(--line); border-radius:8px; padding:.7rem .9rem; margin:.7rem 0; background:#fff; }
+  .tcard h3 { margin:0 0 .4rem; } .tag { display:inline-block; padding:.1rem .5rem; border-radius:99px; background:#e8f3ee; font-size:.8rem; }
+  .dayrow { display:grid; grid-template-columns:5.5rem 1.4fr 1.6fr 8rem 8rem 5.5rem; gap:.4rem; align-items:center; margin:.25rem 0; }
+  .dayrow input { width:100%; box-sizing:border-box; } .dayhead { font-weight:bold; font-size:.85rem; color:#555; }
+  .st { font-size:.8rem; } .st.sub { color:#1a7f5a; font-weight:bold; } .st.dr { color:#a66a00; }
+  .btn.small { padding:.3rem .8rem; } .msg { font-size:.85rem; margin-left:.5rem; }
+  @media (max-width:760px){ .dayrow { grid-template-columns:1fr 1fr; } .dayhead { display:none; } }
+  @media print { .sidebar, .topbar .noprint, .noprint, .btn { display:none !important; } .tcard { break-inside:avoid; } }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar-mount"></aside>
+  <main class="main">
+    <div class="topbar"><h1>Fixed &amp; Transit team plan</h1></div>
+    <p class="muted">Transit teams: enter the <b>adda / area</b> assigned for each day. Fixed teams: enter the <b>hospital</b>. No maps are needed. Leave a field blank if it is not known yet — blank is saved as "not answered", not as zero. You can save a draft any time.</p>
+    <div class="card noprint">
+      <div class="form-grid">
+        <div><label>Campaign</label><select id="campSel"></select></div>
+        <div><label>Show</label><select id="typeSel"><option value="">Fixed and Transit</option><option value="fixed">Fixed only</option><option value="transit">Transit only</option></select></div>
+      </div>
+      <button class="btn small ghost" id="printBtn" style="margin-top:.6rem;">Print</button>
+    </div>
+    <div id="board"><div class="card"><div class="empty-state">Select a campaign above.</div></div></div>
+  </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/supabaseClient.js"></script>
+<script src="../assets/js/nav.js"></script>
+<script src="../assets/js/crud.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const DAYS = [1, 2, 3, 4, 5];
+let S = { campaign: null, teams: [], aics: new Map(), plans: new Map() };   // plans: "teamId|day" -> row
+
+(async () => {
+  const session = await requireAuth(); if (!session) return;
+  renderSidebar("fixed-transit-plan.html");
+  const list = await populateCampaignSelect($("campSel"));
+  const pre = new URLSearchParams(location.search).get("campaign");
+  if (pre) { $("campSel").value = pre; load(); }
+  $("campSel").onchange = load; $("typeSel").onchange = render; $("printBtn").onclick = () => window.print();
+})();
+
+async function load() {
+  const id = $("campSel").value; if (!id) { $("board").innerHTML = `<div class="card"><div class="empty-state">Select a campaign above.</div></div>`; return; }
+  $("board").innerHTML = `<div class="card">Loading…</div>`;
+  const { data: camp, error: ce } = await supabaseClient.from("campaigns").select("id, name, uc_id, status").eq("id", id).single();
+  if (ce) { $("board").innerHTML = `<div class="card error-text">${esc(ce.message)}</div>`; return; }
+  S.campaign = camp;
+  let tq = supabaseClient.from("teams").select("id, team_no, team_type, aic_staff_id, uc_id").in("team_type", ["fixed", "transit"]);
+  if (camp.uc_id) tq = tq.eq("uc_id", camp.uc_id);
+  const [{ data: teams, error: te }, { data: plans, error: pe }] = await Promise.all([tq, supabaseClient.from("fixed_transit_plans").select("*").eq("campaign_id", id)]);
+  if (te || pe) { $("board").innerHTML = `<div class="card error-text">${esc((te || pe).message)}</div>`; return; }
+  const aicIds = [...new Set((teams || []).map(t => t.aic_staff_id).filter(Boolean))];
+  S.aics = new Map();
+  if (aicIds.length) { const { data: a } = await supabaseClient.from("staff").select("id, full_name, aic_no").in("id", aicIds); (a || []).forEach(x => S.aics.set(x.id, x)); }
+  S.teams = teams || []; S.plans = new Map((plans || []).map(p => [p.team_id + "|" + p.campaign_day, p]));
+  render();
+}
+
+const nat = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+
+function render() {
+  const f = $("typeSel").value, teams = S.teams.filter(t => !f || t.team_type === f);
+  if (!teams.length) { $("board").innerHTML = `<div class="card"><div class="empty-state">No Fixed or Transit teams found for this campaign's union council. Set team types on the Staff Management page.</div></div>`; return; }
+  const groups = new Map();
+  teams.forEach(t => { const k = t.aic_staff_id || "none"; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); });
+  const keys = [...groups.keys()].sort((a, b) => nat(S.aics.get(a)?.aic_no ?? "zzz", S.aics.get(b)?.aic_no ?? "zzz"));
+  $("board").innerHTML = keys.map(k => {
+    const a = S.aics.get(k), ts = groups.get(k).sort((x, y) => nat(x.team_no, y.team_no));
+    return `<div class="grp"><h2>${a ? `AIC ${esc(a.aic_no)} — ${esc(a.full_name)}` : "No Area Incharge assigned"}</h2>${ts.map(card).join("")}</div>`;
+  }).join("");
+}
+
+function card(t) {
+  const fixed = t.team_type === "fixed", lbl = fixed ? "Hospital" : "Adda / area";
+  const rows = DAYS.map(d => { const p = S.plans.get(t.id + "|" + d) || {}; const sub = p.status === "submitted";
+    return `<div class="dayrow" data-team="${t.id}" data-day="${d}">
+      <span><b>Day ${d}</b></span>
+      <input class="f-place" placeholder="${lbl} name" value="${esc(p.place_name)}">
+      <input class="f-addr" placeholder="Full address" value="${esc(p.full_address)}">
+      <input class="f-prev" type="number" min="0" placeholder="Last campaign children" value="${p.prev_campaign_children ?? ""}">
+      <input class="f-exp" type="number" min="0" placeholder="Expected children" value="${p.expected_children ?? ""}">
+      <span class="st ${sub ? "sub" : "dr"}">${sub ? "Submitted" : p.id ? "Draft" : ""}</span></div>`; }).join("");
+  return `<div class="tcard" id="tc_${t.id}"><h3>Team ${esc(t.team_no)} <span class="tag">${fixed ? "Fixed site" : "Transit point"}</span></h3>
+    <div class="dayrow dayhead"><span>Day</span><span>${lbl} name</span><span>Full address (جگہ کا نام و مکمل پتہ)</span><span>Last campaign children</span><span>Expected children</span><span>Status</span></div>
+    ${rows}<div class="noprint" style="margin-top:.5rem;"><button class="btn small" onclick="saveTeam('${t.id}', false)">Save draft</button>
+    <button class="btn small ghost" onclick="saveTeam('${t.id}', true)">Submit</button><span class="msg" id="m_${t.id}"></span></div></div>`;
+}
+
+const numOrNull = (v) => { v = String(v).trim(); return v === "" ? null : Math.max(0, Math.floor(Number(v))); };
+
+async function saveTeam(teamId, submit) {
+  const msg = $("m_" + teamId), rows = [];
+  document.querySelectorAll(`#tc_${teamId} .dayrow[data-day]`).forEach(r => {
+    const d = Number(r.dataset.day), old = S.plans.get(teamId + "|" + d);
+    const row = { campaign_id: S.campaign.id, team_id: teamId, campaign_day: d, place_name: r.querySelector(".f-place").value, full_address: r.querySelector(".f-addr").value,
+      prev_campaign_children: numOrNull(r.querySelector(".f-prev").value), expected_children: numOrNull(r.querySelector(".f-exp").value) };
+    const has = (row.place_name || "").trim() || (row.full_address || "").trim() || row.prev_campaign_children !== null || row.expected_children !== null;
+    if (!has && !old) return;                          // untouched blank day: nothing to save
+    if (old?.status === "submitted" && !submit) return; // a submitted day is only changed by an explicit submit/reopen
+    row.status = submit ? "submitted" : "draft"; rows.push(row);
+  });
+  if (!rows.length) { msg.textContent = "Nothing to save yet."; return; }
+  msg.textContent = "Saving…";
+  const { data, error } = await supabaseClient.from("fixed_transit_plans").upsert(rows, { onConflict: "campaign_id,team_id,campaign_day" }).select();
+  if (error) { msg.textContent = ""; alert(error.message); return; }
+  (data || []).forEach(p => S.plans.set(p.team_id + "|" + p.campaign_day, p));
+  render(); const m2 = $("m_" + teamId); if (m2) m2.textContent = (submit ? "Submitted ✓ " : "Draft saved ✓ ") + new Date().toLocaleTimeString();
+}
+</script>
+</body>
+</html>
