@@ -6,6 +6,7 @@ const NAV_LINKS = [
   { href: "pages/operational-plan.html", label: "Operational Plan" },
   { href: "pages/fixed-transit-plan.html", label: "Fixed & Transit plan" },
   { href: "pages/microplan.html", label: "Microplan (auto)" },
+  { href: "pages/maps.html", label: "Maps (UC / AIC / day) — print" },
   { href: "pages/schools.html", label: "School list" },
   { href: "pages/mmp.html", label: "MMP / CNIC list" },
   { href: "pages/households.html", label: "House registration" },
