@@ -48,6 +48,10 @@ Deno.serve(async (req) => {
     if (action === "create") {
       if (prof) { fail("Already has a login", s.full_name); continue; }
       if (s.status !== "active") { fail("Staff member is not active", s.full_name); continue; }
+      if (role === "team_member") {   // only the team leader of a team gets a login
+        const { data: lead } = await admin.from("team_members").select("id").eq("staff_id", id).eq("member_role", "leader").eq("active", true).limit(1);
+        if (!lead?.length) { fail("Only a team leader gets a login — this person is not the active leader of a team", s.full_name); continue; }
+      }
       const { data: created, error: ce } = await admin.auth.admin.createUser({ email, password: digits, email_confirm: true });
       if (ce || !created?.user) { fail(/already|registered|exists/i.test(ce?.message ?? "") ? "This CNIC already belongs to another login account" : (ce?.message ?? "Could not create the login"), s.full_name); continue; }
       const { error: pe } = await admin.from("profiles").insert({ id: created.user.id, full_name: s.full_name, phone: s.phone ?? null, role, uc_id: s.uc_id, staff_id: s.id, must_change_password: true });

@@ -16,12 +16,12 @@
 <div class="app-shell">
   <aside class="sidebar" id="sidebar-mount"></aside>
   <main class="main">
-    <div class="topbar"><h1>Login accounts — Area Incharges &amp; team members</h1></div>
-    <p class="muted">Each person signs in with their <b>13-digit CNIC</b> as the username and the <b>same CNIC as the first password</b>. At the first sign-in they must choose a new password (it cannot be their CNIC). Only an administrator or the UCMO of the union council can create, reset or disable these logins. A login needs a valid 13-digit CNIC in Staff Management.</p>
+    <div class="topbar"><h1>Login accounts — Area Incharges &amp; team leaders</h1></div>
+    <p class="muted">Each person signs in with their <b>13-digit CNIC</b> as the username and the <b>same CNIC as the first password</b>. At the first sign-in they must choose a new password (it cannot be their CNIC). Only an administrator or the UCMO of the union council can create, reset or disable these logins. Each team has <b>one login only — its team leader</b> (the leader set in Staff Management); other team members do not get logins. If a team's leader is changed, disable the old leader's login and create one for the new leader. A login needs a valid 13-digit CNIC in Staff Management.</p>
     <div class="card">
       <div class="form-grid">
         <div><label>Union council</label><select id="ucSel"></select></div>
-        <div><label>Show</label><select id="kindSel"><option value="">Area Incharges and team members</option><option value="ucmo">UCMO (administrators only)</option><option value="aic">Area Incharges</option><option value="team_member">Team members</option></select></div>
+        <div><label>Show</label><select id="kindSel"><option value="">Area Incharges and team leaders</option><option value="ucmo">UCMO (administrators only)</option><option value="aic">Area Incharges</option><option value="team_member">Team leaders</option></select></div>
         <div><label>Login status</label><select id="stSel"><option value="">All</option><option value="none">No login yet</option><option value="has">Has a login</option><option value="must">Has not changed the first password</option><option value="off">Disabled</option></select></div>
         <div><label>Search name or CNIC</label><input id="q" placeholder="type to filter"></div>
       </div>
@@ -70,17 +70,18 @@ async function load() {
   const ids = (staff || []).map(s => s.id);
   const [{ data: profs }, { data: tms }, { data: aics }] = await Promise.all([
     ids.length ? supabaseClient.from("profiles").select("staff_id, must_change_password, login_disabled").in("staff_id", ids) : { data: [] },
-    ids.length ? supabaseClient.from("team_members").select("staff_id, active, teams(team_no)").in("staff_id", ids).eq("active", true) : { data: [] },
+    ids.length ? supabaseClient.from("team_members").select("staff_id, active, member_role, teams(team_no)").in("staff_id", ids).eq("active", true) : { data: [] },
     supabaseClient.from("staff").select("id, full_name, aic_no").eq("uc_id", uc).eq("designation", "aic")]);
-  const pm = new Map((profs || []).map(p => [p.staff_id, p])), tm = new Map((tms || []).map(t => [t.staff_id, t.teams?.team_no]));
+  const pm = new Map((profs || []).map(p => [p.staff_id, p])), tm = new Map((tms || []).map(t => [t.staff_id, t.teams?.team_no])), lead = new Set((tms || []).filter(t => t.member_role === "leader").map(t => t.staff_id));
   const am = new Map((aics || []).map(a => [a.id, a]));
-  P = (staff || []).map(s => { const a = s.designation === "aic" ? s : s.designation === "ucmo" ? null : am.get(s.aic_staff_id);
+  P = (staff || []).map(s => ({ ...s, isLeader: lead.has(s.id) })).filter(s => s.designation !== "team_member" || s.isLeader || pm.has(s.id)).map(s => { const a = s.designation === "aic" ? s : s.designation === "ucmo" ? null : am.get(s.aic_staff_id);
     return { ...s, prof: pm.get(s.id) || null, team: tm.get(s.id), aicLabel: s.designation === "ucmo" ? "Union council in-charge" : a ? `AIC ${a.aic_no ?? ""} — ${a.full_name}` : "—", aicKey: s.designation === "ucmo" ? "" : (a?.aic_no ?? "zzz") }; })
     .sort((x, y) => nat(x.aicKey, y.aicKey) || (x.designation === "aic" ? -1 : 1) - (y.designation === "aic" ? -1 : 1) || nat(x.team ?? 0, y.team ?? 0) || nat(x.full_name, y.full_name));
   draw();
 }
 
 function status(p) { const f = p.prof; if (!f) return ["none", `<span class="badge2 warn">No login</span>`];
+  if (p.designation === "team_member" && !p.isLeader) return ["off", `<span class="badge2 off">Has a login but is no longer a team leader — disable it</span>`];
   if (f.login_disabled) return ["off", `<span class="badge2 off">Disabled</span>`];
   return f.must_change_password ? ["must", `<span class="badge2 warn">Created — first password not changed yet</span>`] : ["has", `<span class="badge2 ok">Active</span>`]; }
 
@@ -90,7 +91,7 @@ function draw() {
     && (!st || (st === "has" ? p.prof && !p.prof.login_disabled : status(p)[0] === st)));
   $("rows").innerHTML = rows.length ? rows.map(p => `<tr><td><input type="checkbox" class="pick" value="${p.id}"></td><td>${esc(p.full_name)}</td>
     <td>${/^\d{13}$/.test(String(p.cnic || "").replace(/\D/g, "")) ? esc(p.cnic) : `<span class="badge2 off">CNIC missing / invalid</span>`}</td>
-    <td>${{ ucmo: "UCMO", aic: "Area Incharge", team_member: "Team member" }[p.designation]}</td><td>${esc(p.aicLabel)}${p.team ? ` — Team ${esc(p.team)}` : ""}</td><td>${status(p)[1]}</td></tr>`).join("")
+    <td>${{ ucmo: "UCMO", aic: "Area Incharge", team_member: "Team leader" }[p.designation]}</td><td>${esc(p.aicLabel)}${p.team ? ` — Team ${esc(p.team)}` : ""}</td><td>${status(p)[1]}</td></tr>`).join("")
     : `<tr><td colspan="6" class="empty-state">No people match.</td></tr>`;
 }
 
