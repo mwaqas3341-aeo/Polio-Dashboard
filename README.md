@@ -57,7 +57,7 @@ pages/
   campaigns.html               Campaign Details: edit dates/days, live UC → AIC → team structure, saved rosters
   staff.html                   Staff Management: UCMO → AIC → teams → members, drivers, CNIC pictures/expiry, Team Adjustment + history
   operational-plan.html        Operational Plan: Mobile teams, Days 1–3, pictures, day maps, MMP list, automatic School List, Excel reports
-  microplan.html               Microplan (auto): AIC summary + a sheet for every team (Mobile, Fixed, Transit) built from the AIC's entries; print/PDF + Excel
+  microplan.html               Microplan (auto): prints the official 'New Polio Microplan format 2026' AIC Summary MP + Operational Plan 5MP sheets (Urdu, A4 landscape) for every AIC and team (Mobile, Fixed, Transit), filled from the AIC's entries; AIC-level extra figures form; PDF + Excel data
   cnic-lists.html              CNIC lists (PDF): Area Incharges, Drivers, Team members by AIC and team; preview + download
   payments.html                Payment lists (EasyPaisa / JazzCash / IBAN) with Excel download
   staff-pdf.html               Team staff PDF with CNIC front/back at card size
@@ -122,6 +122,7 @@ Phase 1 (Campaign Details + Staff Management), applied in order after `0010`:
 - `0020_operational_plan.sql` — Operational Plan for Mobile teams (Days 1–3, doses = children × 1.11 kept by trigger), plan pictures, day maps, AIC Area Map, school/MMP totals, and the Missed Children gate before a campaign can be closed
 
 - `0028_school_mmp_move_guard.sql` — **pending, run once**: moving a school/MMP row to another team or day now also respects a submitted plan at the old position
+- `0029_aic_microplan_figures.sql` — **pending, run once (after 0028)**: `aic_microplan_figures` (one row per campaign x AIC) for the AIC Summary MP fields stored nowhere else (DDM cards, supplies, refusals, zero-dose, madaris, ...); RLS: an AIC only sees/edits their own
 
 Notes: staff, AICs and teams are permanent records that carry over between campaigns. A keep-alive ping runs inside Supabase
 (`pg_cron` every 6 hours calling `public.heartbeat()`); `ops/heartbeat.yml` is an unused GitHub Actions alternative.
