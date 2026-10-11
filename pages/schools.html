@@ -45,13 +45,14 @@
 
       <div class="card">
         <h2>Assignments for a campaign</h2>
+        <p class="muted">Tap <b>Edit</b> on any row to change the school name, head teacher, cell, team, day or children. A school's name / head teacher / cell is shared by every campaign; team, day and children belong to this campaign only. A submitted Operational Plan stays locked until the UCMO reopens it.</p>
         <label>Show campaign</label>
         <select id="filterCampaign" style="max-width:320px;"></select>
         <button class="btn secondary" id="exportBtn" style="margin-left:0.75rem;">Export to Excel</button>
         <div class="table-wrap" style="margin-top:0.75rem;">
           <table id="table">
-            <thead><tr><th>Team</th><th>Day</th><th>School</th><th>Head teacher</th><th>Target children</th></tr></thead>
-            <tbody><tr><td colspan="5" class="empty-state">Select a campaign above.</td></tr></tbody>
+            <thead><tr><th>Team</th><th>Day</th><th>School</th><th>Head teacher</th><th>Cell</th><th>Target children</th><th></th></tr></thead>
+            <tbody><tr><td colspan="7" class="empty-state">Select a campaign above.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -138,38 +139,89 @@
 
     document.getElementById("exportBtn").addEventListener("click", () => {
       if (!currentSchoolRows.length) return;
-      const headers = ["SR NO.", "TEAM NO.", "DAY", "SCHOOL NAME", "HEAD TEACHER", "TARGET CHILDREN"];
+      const headers = ["SR NO.", "TEAM NO.", "DAY", "SCHOOL NAME", "HEAD TEACHER", "HEAD TEACHER CELL", "TARGET CHILDREN"];
       const rows = currentSchoolRows.map((r, i) => [
-        i + 1, r.team_no, r.campaign_day, r.schools.name, r.schools.head_teacher_name ?? "", r.target_children,
+        i + 1, r.team_no, r.campaign_day, r.schools.name, r.schools.head_teacher_name ?? "", r.schools.head_teacher_phone ?? "", r.target_children,
       ]);
       exportSheetToExcel(`School_List_${currentCampaignName.replace(/\s+/g, "_")}.xlsx`, "School List", headers, rows);
     });
 
+    const escH = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const COLS = 7;
+
     async function loadTable(campaignId) {
       const tbody = document.querySelector("#table tbody");
       if (!campaignId) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Select a campaign above.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${COLS}" class="empty-state">Select a campaign above.</td></tr>`;
         return;
       }
       const { data, error } = await supabaseClient
         .from("school_assignments")
-        .select("team_no, campaign_day, target_children, schools(name, head_teacher_name)")
+        .select("id, school_id, team_no, campaign_day, target_children, schools(id, name, head_teacher_name, head_teacher_phone, uc_id)")
         .eq("campaign_id", campaignId)
         .order("team_no").order("campaign_day");
       if (error) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${COLS}" class="empty-state">${escH(error.message)}</td></tr>`;
         return;
       }
-      if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No schools assigned to this campaign yet.</td></tr>`;
-        currentSchoolRows = [];
+      currentSchoolRows = data || [];
+      if (!currentSchoolRows.length) {
+        tbody.innerHTML = `<tr><td colspan="${COLS}" class="empty-state">No schools assigned to this campaign yet.</td></tr>`;
         return;
       }
-      currentSchoolRows = data;
-      tbody.innerHTML = data.map(r => `
-        <tr><td>${r.team_no}</td><td>${r.campaign_day}</td><td>${r.schools.name}</td>
-        <td>${r.schools.head_teacher_name ?? "—"}</td><td>${r.target_children}</td></tr>
-      `).join("");
+      tbody.innerHTML = currentSchoolRows.map(viewRow).join("") +
+        `<tr><td colspan="5"><b>Total children</b></td><td><b>${currentSchoolRows.reduce((n, r) => n + (r.target_children || 0), 0)}</b></td><td></td></tr>`;
+    }
+
+    function viewRow(r) {
+      return `<tr id="r_${r.id}"><td>${r.team_no}</td><td>${r.campaign_day}</td><td>${escH(r.schools.name)}</td>
+        <td>${escH(r.schools.head_teacher_name) || "—"}</td><td>${escH(r.schools.head_teacher_phone) || "—"}</td><td>${r.target_children}</td>
+        <td style="white-space:nowrap;"><button class="btn secondary" style="padding:.2rem .6rem;" onclick="editRow('${r.id}')">Edit</button>
+        <button class="btn secondary" style="padding:.2rem .6rem;" onclick="delRow('${r.id}')">Remove</button></td></tr>`;
+    }
+
+    function editRow(id) {
+      const r = currentSchoolRows.find(x => x.id === id); if (!r) return;
+      document.getElementById("r_" + id).innerHTML = `
+        <td><input type="number" min="1" id="e_team" value="${r.team_no}" style="width:4.5rem;"></td>
+        <td><input type="number" min="1" id="e_day" value="${r.campaign_day}" style="width:4rem;"></td>
+        <td><input id="e_name" value="${escH(r.schools.name)}"></td>
+        <td><input id="e_head" value="${escH(r.schools.head_teacher_name)}"></td>
+        <td><input id="e_phone" value="${escH(r.schools.head_teacher_phone)}" style="width:8rem;"></td>
+        <td><input type="number" min="0" id="e_kids" value="${r.target_children}" style="width:5rem;"></td>
+        <td style="white-space:nowrap;"><button class="btn" style="padding:.2rem .6rem;" onclick="saveRow('${id}')">Save</button>
+        <button class="btn secondary" style="padding:.2rem .6rem;" onclick="loadTable(document.getElementById('filterCampaign').value)">Cancel</button>
+        <div class="error-text" id="e_err" style="display:none;"></div></td>`;
+    }
+
+    async function saveRow(id) {
+      const r = currentSchoolRows.find(x => x.id === id), err = document.getElementById("e_err");
+      const show = (m) => { err.textContent = m; err.style.display = "block"; };
+      const name = document.getElementById("e_name").value.trim().replace(/\s+/g, " ");
+      const team = parseInt(document.getElementById("e_team").value, 10), day = parseInt(document.getElementById("e_day").value, 10);
+      const kidsRaw = document.getElementById("e_kids").value.trim(), kids = kidsRaw === "" ? 0 : parseInt(kidsRaw, 10);
+      if (!name) return show("School name is required.");
+      if (!(team >= 1) || !(day >= 1)) return show("Team and day must be 1 or more.");
+      if (!(kids >= 0)) return show("Children cannot be negative.");
+      // same name in the same UC would create a duplicate school
+      if (name.toLowerCase() !== r.schools.name.trim().toLowerCase()) {
+        const { data: dup } = await supabaseClient.from("schools").select("id").eq("uc_id", r.schools.uc_id).ilike("name", name.replace(/[%_]/g, m => "\\" + m)).neq("id", r.school_id).limit(1);
+        if (dup && dup.length) return show("Another school with this name already exists in this union council.");
+      }
+      const si = { name, head_teacher_name: document.getElementById("e_head").value.trim() || null, head_teacher_phone: document.getElementById("e_phone").value.trim() || null };
+      const changedInfo = si.name !== r.schools.name || si.head_teacher_name !== (r.schools.head_teacher_name || null) || si.head_teacher_phone !== (r.schools.head_teacher_phone || null);
+      if (changedInfo) { const { error } = await supabaseClient.from("schools").update(si).eq("id", r.school_id); if (error) return show(error.message); }
+      const { error: e2 } = await supabaseClient.from("school_assignments").update({ team_no: team, campaign_day: day, target_children: kids }).eq("id", id);
+      if (e2) return show(e2.message);
+      await loadTable(document.getElementById("filterCampaign").value); await populateSchoolSelect();
+    }
+
+    async function delRow(id) {
+      const r = currentSchoolRows.find(x => x.id === id); if (!r) return;
+      if (!confirm(`Remove "${r.schools.name}" from Team ${r.team_no} Day ${r.campaign_day}? The school itself stays in the master list.`)) return;
+      const { error } = await supabaseClient.from("school_assignments").delete().eq("id", id);
+      if (error) return alert(error.message);
+      await loadTable(document.getElementById("filterCampaign").value);
     }
   </script>
 </body>

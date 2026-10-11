@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Microplan — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<style>
+  .urdu { direction:rtl; display:block; font-size:.78em; color:#555; }
+  .tag { display:inline-block; padding:.1rem .55rem; border-radius:99px; font-size:.78rem; background:#e8efed; }
+  .tag.ok { background:#dff3e8; color:#14633f; } .tag.warn { background:#fff0d6; color:#8a5a00; } .tag.bad { background:#fde2e1; color:#9b1c1c; }
+  .sheet { background:#fff; border:1px solid var(--line); border-radius:10px; padding:.8rem 1rem; margin:.9rem 0; }
+  .sheet h2, .sheet h3 { margin:.1rem 0 .3rem; }
+  .meta { display:flex; flex-wrap:wrap; gap:.3rem 1.4rem; font-size:.9rem; margin:.3rem 0 .5rem; }
+  .meta b { color:#1a7f5a; }
+  .scroll { overflow-x:auto; }
+  table.mp { border-collapse:collapse; width:100%; font-size:.82rem; }
+  table.mp th, table.mp td { border:1px solid #999; padding:.25rem .35rem; text-align:center; vertical-align:middle; }
+  table.mp th { background:#eef3f1; font-weight:600; }
+  table.mp td.l { text-align:left; } table.mp tr.tot td { font-weight:bold; background:#f3f7f5; }
+  td.blank { color:#999; }
+  .miss { font-size:.82rem; color:#8a5a00; background:#fff7e6; border:1px solid #f0d9a8; border-radius:6px; padding:.3rem .5rem; margin:.4rem 0; }
+  .note { font-size:.8rem; color:#555; margin:.3rem 0; }
+  .btn.small { padding:.3rem .8rem; } .btn.ghost { background:#fff; color:inherit; border:1px solid var(--line); }
+  @media print {
+    @page { size: A4 landscape; margin: 8mm; }
+    .sidebar, .noprint, .topbar { display:none !important; }
+    .main { margin:0 !important; padding:0 !important; } .app-shell { display:block !important; }
+    .sheet { border:none; padding:0; margin:0 0 6mm; break-inside:avoid; }
+    .sheet.pb { break-before:page; } .sheet.first { break-before:auto; }
+    table.mp { font-size:8.5pt; } thead { display:table-header-group; } tr { break-inside:avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar-mount"></aside>
+  <main class="main">
+    <div class="topbar"><h1>Microplan — AIC summary &amp; team plans</h1></div>
+    <p class="muted noprint">Built automatically from what the Area Incharge has already entered: Operational Plan (Mobile), Fixed &amp; Transit plan, School list, MMP list and Missed children. Nothing is typed here. A blank figure shows as “—” (not answered); only a real 0 shows as 0.</p>
+
+    <div class="card noprint">
+      <div class="form-grid">
+        <div><label>Campaign</label><select id="campSel"></select></div>
+        <div><label>Area Incharge</label><select id="aicSel"></select></div>
+        <div><label>Team</label><select id="teamSel"><option value="">All teams</option></select></div>
+      </div>
+      <div style="margin-top:.7rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+        <button class="btn small" id="printBtn">Print / Save as PDF</button>
+        <button class="btn small ghost" id="xlsBtn">Download Excel</button>
+      </div>
+      <div class="note">PDF: choose “Save as PDF” in the print window (A4 landscape is set automatically). With one team selected you get that team’s sheet only.</div>
+      <div class="error-text" id="err" style="display:none;"></div>
+    </div>
+    <div id="board"><div class="card"><div class="empty-state">Select a campaign above.</div></div></div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/supabaseClient.js"></script>
+<script src="../assets/js/nav.js"></script>
+<script src="../assets/js/crud.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const nat = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+const MANAGER = () => ["admin", "district_coordinator", "ucmo"].includes(me.role);
+const MDAYS = [1, 2, 3], FDAYS = [1, 2, 3, 4, 5], TYPE = { mobile: "Mobile", fixed: "Fixed site", transit: "Transit point" };
+let me = {}, camps = [], campaign = null, ucName = "", aics = [], D = null;   // D = loaded data for the current selection
+
+(async () => {
+  const session = await requireAuth(); if (!session) return; renderSidebar("microplan.html");
+  const { data: p } = await supabaseClient.from("profiles").select("role, staff_id, uc_id").eq("id", session.user.id).single(); me = p || { role: "viewer" };
+  const { data: cs } = await supabaseClient.from("campaigns").select("id, name, status, uc_id, start_date, end_date, total_days").order("start_date", { ascending: false }); camps = cs || [];
+  $("campSel").innerHTML = camps.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("") || `<option value="">No campaign yet</option>`;
+  $("campSel").onchange = loadCampaign; $("aicSel").onchange = load; $("teamSel").onchange = render;
+  $("printBtn").onclick = doPrint; $("xlsBtn").onclick = doExcel;
+  if (camps.length) await loadCampaign();
+})();
+
+async function loadCampaign() {
+  campaign = camps.find(c => c.id === $("campSel").value); if (!campaign) return;
+  const { data: uc } = campaign.uc_id ? await supabaseClient.from("union_councils").select("name").eq("id", campaign.uc_id).single() : { data: null }; ucName = uc?.name || "";
+  let q = supabaseClient.from("staff").select("id, full_name, aic_no, area_map_path, uc_id, phone").eq("designation", "aic").eq("status", "active").order("aic_no");
+  if (campaign.uc_id) q = q.eq("uc_id", campaign.uc_id);
+  const { data, error } = await q; if (error) return showErr(error);
+  aics = data || [];
+  $("aicSel").innerHTML = (MANAGER() && aics.length > 1 ? `<option value="*">All Area Incharges</option>` : "") + aics.map(a => `<option value="${a.id}">AIC ${a.aic_no} — ${esc(a.full_name)}</option>`).join("") || `<option value="">No Area Incharge</option>`;
+  if (me.role === "aic" && me.staff_id) { $("aicSel").value = me.staff_id; $("aicSel").disabled = true; }
+  await load();
+}
+
+function showErr(e) { const el = $("err"); el.textContent = e ? (e.message || String(e)) : ""; el.style.display = e ? "block" : "none"; }
+
+async function load() {
+  showErr(null); $("board").innerHTML = `<div class="card">Loading…</div>`;
+  const sel = $("aicSel").value, who = sel === "*" ? aics : aics.filter(a => a.id === sel);
+  if (!who.length) { $("board").innerHTML = `<div class="card"><div class="empty-state">No Area Incharge available.</div></div>`; return; }
+  const ids = who.map(a => a.id);
+  const { data: tm, error: te } = await supabaseClient.from("teams").select("id, team_no, team_type, aic_staff_id, team_members(active, member_no, staff(full_name))").in("aic_staff_id", ids);
+  if (te) { $("board").innerHTML = ""; return showErr(te); }
+  const teams = (tm || []).sort((a, b) => nat(a.team_no, b.team_no)).map(t => ({ ...t, workers: (t.team_members || []).filter(m => m.active).sort((a, b) => a.member_no - b.member_no) }));
+  const tids = teams.map(t => t.id), nos = teams.map(t => t.team_no), cid = campaign.id;
+  const none = { data: [] };
+  const r = await Promise.all([
+    tids.length ? supabaseClient.from("operational_plans").select("*").eq("campaign_id", cid).in("team_id", tids) : none,
+    tids.length ? supabaseClient.from("fixed_transit_plans").select("*").eq("campaign_id", cid).in("team_id", tids) : none,
+    nos.length ? supabaseClient.from("school_assignments").select("team_no, campaign_day, target_children, schools(name, head_teacher_name, head_teacher_phone)").eq("campaign_id", cid).in("team_no", nos) : none,
+    nos.length ? supabaseClient.from("mmp_assignments").select("team_no, campaign_day, house_count, child_count, mmp_contacts(full_name, phone, location)").eq("campaign_id", cid).in("team_no", nos) : none,
+    nos.length ? supabaseClient.from("missed_children").select("team_no, campaign_day").eq("campaign_id", cid).not("carried_from_campaign_id", "is", null).in("team_no", nos) : none,
+  ]);
+  const bad = r.find(x => x.error); if (bad) { $("board").innerHTML = ""; return showErr(bad.error); }
+  const [pl, ft, sc, mm, mc] = r.map(x => x.data || []);
+  D = { who, teams, plans: new Map(pl.map(p => [p.team_id + "|" + p.campaign_day, p])), ft: new Map(ft.map(p => [p.team_id + "|" + p.campaign_day, p])), schools: sc, mmp: mm, missed: mc };
+  const cur = $("teamSel").value;
+  $("teamSel").innerHTML = `<option value="">All teams</option>` + teams.map(t => `<option value="${t.id}">Team ${esc(t.team_no)} (${TYPE[t.team_type] || "type not set"})</option>`).join("");
+  if (teams.some(t => t.id === cur)) $("teamSel").value = cur;
+  render();
+}
+
+/* ---------- helpers ---------- */
+const val = (v) => v === null || v === undefined || v === "" ? `<td class="blank">—</td>` : `<td>${esc(v)}</td>`;
+const valL = (v) => v === null || v === undefined || v === "" ? `<td class="blank">—</td>` : `<td class="l">${esc(v)}</td>`;
+const sumN = (arr) => { const f = arr.filter(v => v !== null && v !== undefined && v !== ""); return f.length ? f.reduce((n, v) => n + Number(v), 0) : null; };
+const doses = (v) => v === null || v === undefined ? null : Math.round(Number(v));
+const carried = (no, d) => D.missed.filter(x => x.team_no === no && x.campaign_day === d).length;
+const schoolsOf = (no, d) => D.schools.filter(x => x.team_no === no && (d == null || x.campaign_day === d));
+const mmpOf = (no, d) => D.mmp.filter(x => x.team_no === no && (d == null || x.campaign_day === d));
+const workers = (t) => t.workers.map(m => `${m.staff.full_name} (${m.member_no === 1 ? "Team Leader" : "Member"})`).join(" / ");
+const aicOf = (t) => aics.find(a => a.id === t.aic_staff_id);
+function bi(en, ur) { return `${en}<span class="urdu">${ur}</span>`; }
+
+/* the plan numbers a team still has to fill in, so incomplete teams are easy to spot */
+function missingFor(t) {
+  const out = [];
+  if (t.team_type === "mobile") {
+    MDAYS.forEach(d => { const p = D.plans.get(t.id + "|" + d), m = [];
+      if (!p) { out.push(`Day ${d}: plan not started`); return; }
+      if (!p.village_area) m.push("village / area"); if (!p.head_first_family) m.push("head of 1st family"); if (!p.head_last_family) m.push("head of last family");
+      if (p.total_households == null) m.push("households"); if (p.children_households_1_5 == null) m.push("household children 1–5"); if (p.children_under_1 == null) m.push("under 1");
+      if (m.length) out.push(`Day ${d}: ${m.join(", ")}`); });
+  } else if (t.team_type === "fixed" || t.team_type === "transit") {
+    FDAYS.forEach(d => { const p = D.ft.get(t.id + "|" + d); if (!p) out.push(`Day ${d}: not entered`); else if (!p.place_name) out.push(`Day ${d}: ${t.team_type === "fixed" ? "hospital" : "adda / area"} name`); });
+  } else out.push("Team type not set (Staff Management)");
+  return out;
+}
+const stTag = (p) => !p ? `<span class="tag bad">Not started</span>` : p.status === "submitted" ? `<span class="tag ok">Submitted</span>` : `<span class="tag warn">Draft</span>`;
+
+/* ---------- per-AIC summary (totals come from the team plans; each figure is summed once) ---------- */
+function summaryRows(aicId) {
+  const ts = D.teams.filter(t => t.aic_staff_id === aicId && t.team_type === "mobile");
+  return MDAYS.map(d => {
+    const ps = ts.map(t => D.plans.get(t.id + "|" + d)).filter(Boolean);
+    const miss = ts.reduce((n, t) => n + carried(t.team_no, d), 0);
+    return { d, teams: ps.length, hh: sumN(ps.map(p => p.total_households)), c15: sumN(ps.map(p => p.children_households_1_5)), u1: sumN(ps.map(p => p.children_under_1)),
+      sch: sumN(ps.map(p => p.school_children)), mmp: sumN(ps.map(p => p.mmp_children)), tot: sumN(ps.map(p => p.total_children)), dos: sumN(ps.map(p => p.required_doses)), miss };
+  });
+}
+function ftSummary(aicId) {
+  const ts = D.teams.filter(t => t.aic_staff_id === aicId && (t.team_type === "fixed" || t.team_type === "transit"));
+  return FDAYS.map(d => { const ps = ts.map(t => ({ t, p: D.ft.get(t.id + "|" + d) })).filter(x => x.p);
+    const f = ps.filter(x => x.t.team_type === "fixed"), tr = ps.filter(x => x.t.team_type === "transit");
+    return { d, fixed: sumN(f.map(x => x.p.expected_children)), transit: sumN(tr.map(x => x.p.expected_children)), prev: sumN(ps.map(x => x.p.prev_campaign_children)), n: ps.length }; });
+}
+function summaryHtml(a, first) {
+  const mine = D.teams.filter(t => t.aic_staff_id === a.id), cnt = (k) => mine.filter(t => t.team_type === k).length, unset = mine.filter(t => !t.team_type).length;
+  const rows = summaryRows(a.id), ft = ftSummary(a.id);
+  const T = (k) => sumN(rows.map(r => r[k]));
+  const head = `<tr><th>${bi("Day", "مہم کا دن")}</th><th>${bi("Mobile teams with plan", "ٹیمیں")}</th><th>${bi("Total households", "کل گھرانے")}</th><th>${bi("Household children 1–5", "گھروں کے بچے 1 تا 5 سال")}</th><th>${bi("Under 1 year", "1 سال سے کم")}</th><th>${bi("School / madrasa children", "سکول / مدرسہ کے بچے")}</th><th>${bi("MMP children", "ایم ایم پی")}</th><th>${bi("Total children under 5", "5 سال سے کم عمر بچوں کی کل تعداد")}</th><th>${bi("Polio vaccine doses", "پولیو ویکسین خوراکیں")}</th><th>${bi("Missed from last campaign", "گزشتہ مہم میں رہ جانے والے بچے")}</th></tr>`;
+  const body = rows.map(r => `<tr><td>Day ${r.d}</td>${val(r.teams)}${val(r.hh)}${val(r.c15)}${val(r.u1)}${val(r.sch)}${val(r.mmp)}${val(r.tot)}${val(doses(r.dos))}${val(r.miss)}</tr>`).join("") +
+    `<tr class="tot"><td>Total</td><td></td>${val(T("hh"))}${val(T("c15"))}${val(T("u1"))}${val(T("sch"))}${val(T("mmp"))}${val(T("tot"))}${val(doses(T("dos")))}${val(T("miss"))}</tr>`;
+  const ftBody = ft.map(r => `<tr><td>Day ${r.d}</td>${val(r.n || null)}${val(r.fixed)}${val(r.transit)}${val(r.prev)}</tr>`).join("");
+  const allMissing = mine.reduce((n, t) => n + missingFor(t).length, 0);
+  return `<div class="sheet ${first ? "first" : "pb"}"><h2>${bi("AIC Summary Microplan", "ایریا انچارج مائیکرو پلان خلاصہ")}</h2>
+    <div class="meta"><span>Campaign: <b>${esc(campaign.name)}</b></span><span>${campaign.start_date ? `Dates: <b>${esc(campaign.start_date)}${campaign.end_date ? " → " + esc(campaign.end_date) : ""}</b>` : ""}</span><span>UC: <b>${esc(ucName)}</b></span>
+      <span>Area Incharge: <b>${esc(a.full_name)}</b> (AIC ${esc(a.aic_no)})</span><span>Cell: <b>${esc(a.phone || "—")}</b></span><span>Area map: ${a.area_map_path ? `<span class="tag ok">uploaded</span>` : `<span class="tag bad">not uploaded</span>`}</span></div>
+    <div class="meta"><span>Teams: <b>${mine.length}</b> (Mobile ${cnt("mobile")}, Fixed ${cnt("fixed")}, Transit ${cnt("transit")}${unset ? `, type not set ${unset}` : ""})</span><span>Schools listed: <b>${D.schools.filter(s => mine.some(t => t.team_no === s.team_no)).length}</b></span><span>MMP entries: <b>${D.mmp.filter(s => mine.some(t => t.team_no === s.team_no)).length}</b></span></div>
+    ${allMissing ? `<div class="miss">${allMissing} item(s) still missing across this AIC’s teams — shown on each team sheet below.</div>` : ""}
+    <h3>Mobile teams — Days 1 to 3</h3><div class="scroll"><table class="mp"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+    ${cnt("fixed") + cnt("transit") ? `<h3>Fixed &amp; Transit points — expected children</h3><div class="scroll"><table class="mp"><thead><tr><th>Day</th><th>Points entered</th><th>Fixed sites (expected)</th><th>Transit points (expected)</th><th>Last campaign children</th></tr></thead><tbody>${ftBody}</tbody></table></div>` : ""}
+    <div class="note">Total children = household 1–5 + under 1 + school/madrasa + MMP, and doses = total × 1.11 (rounded), exactly as saved by the Operational Plan. Fixed/transit expected children are shown separately and are not added to the mobile totals.</div></div>`;
+}
+
+/* ---------- per-team sheet ---------- */
+function teamHtml(t) {
+  const a = aicOf(t), miss = missingFor(t), type = TYPE[t.team_type] || "Type not set";
+  let body = "";
+  if (t.team_type === "mobile") {
+    const rows = MDAYS.map(d => { const p = D.plans.get(t.id + "|" + d);
+      return p ? `<tr><td>${d}</td>${valL(p.village_area)}${val(p.working_order)}${val(p.team_group)}${valL(p.community_vaccination_place)}${valL(p.head_first_family)}${valL(p.head_last_family)}${val(p.total_households)}${val(p.children_households_1_5)}${val(p.children_under_1)}${val(p.school_children)}${val(p.mmp_children)}${val(p.total_children)}${val(doses(p.required_doses))}${val(carried(t.team_no, d))}<td>${stTag(p)}</td></tr>`
+        : `<tr><td>${d}</td><td class="blank l" colspan="13">Plan not started</td>${val(carried(t.team_no, d))}<td>${stTag(null)}</td></tr>`; }).join("");
+    const ps = MDAYS.map(d => D.plans.get(t.id + "|" + d)).filter(Boolean), S = (k) => sumN(ps.map(p => p[k]));
+    body = `<div class="scroll"><table class="mp"><thead><tr><th>${bi("Day", "دن")}</th><th>${bi("Village / area", "گاوں / علاقہ")}</th><th>${bi("Working order", "کام کرنے کی ترتیب")}</th><th>G1/G2/G3</th><th>${bi("Community vaccination place", "کمیونیٹی ویکسینیشن کی جگہ")}</th><th>${bi("Head of 1st family", "پہلے گھر کے سربراہ")}</th><th>${bi("Head of last family", "آخری گھر کے سربراہ")}</th><th>${bi("Households", "کل گھرانے")}</th><th>${bi("Children 1–5", "1 تا 5 سال")}</th><th>${bi("Under 1", "1 سال سے کم")}</th><th>${bi("School", "سکول / مدرسہ")}</th><th>MMP</th><th>${bi("Total &lt; 5", "کل بچے")}</th><th>${bi("Doses", "خوراکیں")}</th><th>${bi("Missed (last)", "رہ جانے والے")}</th><th>Status</th></tr></thead><tbody>${rows}
+      <tr class="tot"><td colspan="7" style="text-align:right">Total</td>${val(S("total_households"))}${val(S("children_households_1_5"))}${val(S("children_under_1"))}${val(S("school_children"))}${val(S("mmp_children"))}${val(S("total_children"))}${val(doses(S("required_doses")))}${val(MDAYS.reduce((n, d) => n + carried(t.team_no, d), 0))}<td></td></tr></tbody></table></div>`;
+  } else if (t.team_type === "fixed" || t.team_type === "transit") {
+    const lbl = t.team_type === "fixed" ? "Hospital" : "Adda / area";
+    const rows = FDAYS.map(d => { const p = D.ft.get(t.id + "|" + d); return `<tr><td>${d}</td>${valL(p?.place_name)}${valL(p?.full_address)}${val(p?.prev_campaign_children)}${val(p?.expected_children)}<td>${stTag(p)}</td></tr>`; }).join("");
+    const ps = FDAYS.map(d => D.ft.get(t.id + "|" + d)).filter(Boolean);
+    body = `<div class="scroll"><table class="mp"><thead><tr><th>Day</th><th>${lbl} name</th><th>${bi("Place name &amp; full address", "جگہ کا نام و مکمل پتہ")}</th><th>Last campaign children</th><th>Expected children</th><th>Status</th></tr></thead><tbody>${rows}
+      <tr class="tot"><td colspan="3" style="text-align:right">Total</td>${val(sumN(ps.map(p => p.prev_campaign_children)))}${val(sumN(ps.map(p => p.expected_children)))}<td></td></tr></tbody></table></div>`;
+  }
+  const sch = schoolsOf(t.team_no).sort((x, y) => x.campaign_day - y.campaign_day), mp = mmpOf(t.team_no).sort((x, y) => x.campaign_day - y.campaign_day);
+  const schHtml = sch.length ? `<h3>${bi("School list", "سکول لسٹ")}</h3><div class="scroll"><table class="mp"><thead><tr><th>Sr</th><th>Day</th><th>Name of school</th><th>Head teacher</th><th>Cell</th><th>Children &lt; 5</th></tr></thead><tbody>${sch.map((s, i) => `<tr><td>${i + 1}</td><td>${s.campaign_day}</td>${valL(s.schools.name)}${valL(s.schools.head_teacher_name)}${val(s.schools.head_teacher_phone)}${val(s.target_children)}</tr>`).join("")}<tr class="tot"><td colspan="5" style="text-align:right">Total</td>${val(sumN(sch.map(s => s.target_children)))}</tr></tbody></table></div>` : "";
+  const mmHtml = mp.length ? `<h3>MMP coverage</h3><div class="scroll"><table class="mp"><thead><tr><th>Sr</th><th>Day</th><th>Name</th><th>Location</th><th>Cell</th><th>Houses</th><th>Children</th></tr></thead><tbody>${mp.map((m, i) => `<tr><td>${i + 1}</td><td>${m.campaign_day}</td>${valL(m.mmp_contacts.full_name)}${valL(m.mmp_contacts.location)}${val(m.mmp_contacts.phone)}${val(m.house_count)}${val(m.child_count)}</tr>`).join("")}<tr class="tot"><td colspan="5" style="text-align:right">Total</td>${val(sumN(mp.map(m => m.house_count)))}${val(sumN(mp.map(m => m.child_count)))}</tr></tbody></table></div>` : "";
+  return `<div class="sheet pb"><h2>${bi(`Team ${esc(t.team_no)} — Operational Plan`, "ٹیم آپریشنل پلان / مائیکرو پلان شیٹ")}</h2>
+    <div class="meta"><span>Campaign: <b>${esc(campaign.name)}</b></span><span>UC: <b>${esc(ucName)}</b></span><span>AIC: <b>${a ? esc(a.full_name) + " (AIC " + esc(a.aic_no) + ")" : "—"}</b></span><span>Team type: <b>${type}</b></span></div>
+    <div class="meta"><span>Team workers: <b>${esc(workers(t)) || "no members yet"}</b></span></div>
+    ${miss.length ? `<div class="miss"><b>Still to fill in:</b> ${miss.map(esc).join(" · ")}</div>` : ""}
+    ${body}${schHtml}${mmHtml}</div>`;
+}
+
+function selectedTeams() { const id = $("teamSel").value; return D.teams.filter(t => !id || t.id === id); }
+function render() {
+  if (!D) return; const id = $("teamSel").value;
+  if (!D.teams.length) { $("board").innerHTML = `<div class="card"><div class="empty-state">No teams found for this selection. Add teams on Staff Management.</div></div>`; return; }
+  let html = ""; const ts = selectedTeams();
+  if (!id) D.who.forEach((a, i) => { html += summaryHtml(a, i === 0); ts.filter(t => t.aic_staff_id === a.id).forEach(t => html += teamHtml(t)); });
+  else html = ts.map((t, i) => teamHtml(t).replace('sheet pb', i === 0 ? 'sheet first' : 'sheet pb')).join("");
+  $("board").innerHTML = html;
+}
+
+/* ---------- file names ---------- */
+const safe = (s) => String(s ?? "").replace(/[^\w\u0600-\u06FF-]+/g, "_").replace(/^_+|_+$/g, "");
+function baseName() {
+  const id = $("teamSel").value, t = id ? D.teams.find(x => x.id === id) : null, a = D.who.length === 1 ? D.who[0] : null;
+  return [safe(campaign.name), safe(ucName), a ? "AIC" + a.aic_no : "All_AICs", t ? "Team" + safe(t.team_no) : null, id ? "Operational_Plan" : "Microplan"].filter(Boolean).join("_");
+}
+function doPrint() { if (!D) return; const old = document.title; document.title = baseName(); window.print(); setTimeout(() => document.title = old, 1500); }
+
+/* ---------- Excel (same figures as the screen; blanks stay blank) ---------- */
+const cell = (v) => v === null || v === undefined ? "" : v;
+function doExcel() {
+  if (!D) return; showErr(null);
+  try {
+    const ts = selectedTeams(), id = $("teamSel").value, wb = XLSX.utils.book_new();
+    const add = (name, rows, widths) => { const ws = XLSX.utils.aoa_to_sheet(rows); ws["!cols"] = widths.map(w => ({ wch: w })); XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31)); };
+    if (!id) {
+      const rows = [[`${campaign.name} — AIC Summary Microplan / ایریا انچارج مائیکرو پلان خلاصہ`], [`UC ${ucName}`], []];
+      D.who.forEach(a => { const sr = summaryRows(a.id), T = (k) => sumN(sr.map(r => r[k]));
+        rows.push([`AIC ${a.aic_no} — ${a.full_name}`, `Cell: ${a.phone || ""}`], ["Day", "Mobile teams with plan", "Total households", "Household children 1-5", "Under 1 year", "School/madrasa children", "MMP children", "Total children under 5", "Polio vaccine doses", "Missed from last campaign"]);
+        sr.forEach(r => rows.push([r.d, cell(r.teams), cell(r.hh), cell(r.c15), cell(r.u1), cell(r.sch), cell(r.mmp), cell(r.tot), cell(doses(r.dos)), r.miss]));
+        rows.push(["Total", "", cell(T("hh")), cell(T("c15")), cell(T("u1")), cell(T("sch")), cell(T("mmp")), cell(T("tot")), cell(doses(T("dos"))), cell(T("miss"))], []);
+        const fs = ftSummary(a.id); if (fs.some(r => r.n)) { rows.push(["Fixed & Transit", "Points entered", "Fixed expected", "Transit expected", "Last campaign children"]); fs.forEach(r => rows.push([r.d, cell(r.n || null), cell(r.fixed), cell(r.transit), cell(r.prev)])); rows.push([]); } });
+      add("AIC Summary", rows, [18, 16, 16, 18, 12, 18, 12, 18, 16, 20]);
+    }
+    const mob = ts.filter(t => t.team_type === "mobile"), fx = ts.filter(t => t.team_type === "fixed" || t.team_type === "transit");
+    if (mob.length) {
+      const head = ["Team no.", "Team type", "Team workers and designation", "Campaign day", "Village / area", "Team working order", "G1/G2/G3", "Community vaccination place", "Head of 1st family", "Head of last family", "Total households", "Household children 1-5", "Under 1 year", "School/madrasa children", "MMP", "Total children under 5", "Polio vaccine doses", "Missed from last campaign", "Status"];
+      const rows = [[`${campaign.name} — Operational Plan / مائیکرو پلان شیٹ / آپریشنل پلان`], [`UC ${ucName}`], head];
+      mob.forEach(t => MDAYS.forEach(d => { const p = D.plans.get(t.id + "|" + d); rows.push([t.team_no, "Mobile", workers(t), d, cell(p?.village_area), cell(p?.working_order), cell(p?.team_group), cell(p?.community_vaccination_place), cell(p?.head_first_family), cell(p?.head_last_family), cell(p?.total_households), cell(p?.children_households_1_5), cell(p?.children_under_1), cell(p?.school_children), cell(p?.mmp_children), cell(p?.total_children), cell(doses(p?.required_doses)), carried(t.team_no, d), p ? (p.status === "submitted" ? "Submitted" : "Draft") : "Not started"]); }));
+      add("Operational Plan", rows, [9, 10, 44, 8, 22, 12, 9, 24, 24, 24, 11, 13, 10, 13, 8, 13, 12, 14, 12]);
+    }
+    if (fx.length) {
+      const rows = [[`${campaign.name} — Fixed & Transit plan`], [`UC ${ucName}`], ["Team no.", "Team type", "Team workers", "Day", "Hospital / adda / area", "Full address", "Last campaign children", "Expected children", "Status"]];
+      fx.forEach(t => FDAYS.forEach(d => { const p = D.ft.get(t.id + "|" + d); rows.push([t.team_no, TYPE[t.team_type], workers(t), d, cell(p?.place_name), cell(p?.full_address), cell(p?.prev_campaign_children), cell(p?.expected_children), p ? (p.status === "submitted" ? "Submitted" : "Draft") : "Not entered"]); }));
+      add("Fixed & Transit", rows, [9, 12, 40, 6, 28, 36, 14, 14, 12]);
+    }
+    const nos = new Set(ts.map(t => t.team_no)), sch = D.schools.filter(s => nos.has(s.team_no)).sort((x, y) => nat(x.team_no, y.team_no) || x.campaign_day - y.campaign_day);
+    if (sch.length) add("School List", [[`School Registration Form UC ${ucName}`], [], ["Sr No.", "Team NO.", "Day", "Name of School", "Head Teacher Name", "Head Teacher Cell No.", "Total Children Less than 5 Years"], ...sch.map((s, i) => [i + 1, s.team_no, s.campaign_day, s.schools.name, s.schools.head_teacher_name || "", s.schools.head_teacher_phone || "", s.target_children]), ["Total", "", "", "", "", "", sumN(sch.map(s => s.target_children)) ?? ""]], [7, 9, 6, 34, 26, 18, 20]);
+    const mp = D.mmp.filter(m => nos.has(m.team_no)).sort((x, y) => nat(x.team_no, y.team_no) || x.campaign_day - y.campaign_day);
+    if (mp.length) add("MMP Coverage", [["MMP Coverage Plan"], [], ["Sr No.", "Team No", "Day", "Name", "Location", "Phone No.", "Total House", "No of Children"], ...mp.map((m, i) => [i + 1, m.team_no, m.campaign_day, m.mmp_contacts.full_name, m.mmp_contacts.location || "", m.mmp_contacts.phone || "", cell(m.house_count), cell(m.child_count)])], [7, 9, 6, 26, 24, 16, 12, 14]);
+    if (!wb.SheetNames.length) throw new Error("Nothing to export for this selection yet.");
+    XLSX.writeFile(wb, baseName() + ".xlsx");
+  } catch (e) { showErr(e); }
+}
+</script>
+</body>
+</html>

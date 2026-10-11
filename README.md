@@ -57,11 +57,12 @@ pages/
   campaigns.html               Campaign Details: edit dates/days, live UC → AIC → team structure, saved rosters
   staff.html                   Staff Management: UCMO → AIC → teams → members, drivers, CNIC pictures/expiry, Team Adjustment + history
   operational-plan.html        Operational Plan: Mobile teams, Days 1–3, pictures, day maps, MMP list, automatic School List, Excel reports
+  microplan.html               Microplan (auto): AIC summary + a sheet for every team (Mobile, Fixed, Transit) built from the AIC's entries; print/PDF + Excel
   cnic-lists.html              CNIC lists (PDF): Area Incharges, Drivers, Team members by AIC and team; preview + download
   payments.html                Payment lists (EasyPaisa / JazzCash / IBAN) with Excel download
   staff-pdf.html               Team staff PDF with CNIC front/back at card size
   teams.html                   Old staff form (no longer in the menu; superseded by staff.html)
-  schools.html                 School master + campaign team/day assignment
+  schools.html                 School master + campaign team/day assignment; rows are editable (name, head teacher, cell, team, day, children)
   mmp.html                     MMP/CNIC contact master + campaign assignment
   households.html               Door-to-door household census
   missed-children.html         Missed-children carry-forward register
@@ -119,6 +120,8 @@ Phase 1 (Campaign Details + Staff Management), applied in order after `0010`:
 - `0021`–`0022` — official designation / department / place of posting on staff; a team may exist before its type is set
 - `0023_partial_data_allowed.sql` — partial records allowed (no CNIC pictures needed to save or to join a team); unanswered figures are NULL, not 0
 - `0020_operational_plan.sql` — Operational Plan for Mobile teams (Days 1–3, doses = children × 1.11 kept by trigger), plan pictures, day maps, AIC Area Map, school/MMP totals, and the Missed Children gate before a campaign can be closed
+
+- `0028_school_mmp_move_guard.sql` — **pending, run once**: moving a school/MMP row to another team or day now also respects a submitted plan at the old position
 
 Notes: staff, AICs and teams are permanent records that carry over between campaigns. A keep-alive ping runs inside Supabase
 (`pg_cron` every 6 hours calling `public.heartbeat()`); `ops/heartbeat.yml` is an unused GitHub Actions alternative.

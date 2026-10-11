@@ -270,7 +270,7 @@ async function tabSchool() {
   window._schoolMaster = master || [];
   $("pBody").innerHTML = `<p class="muted">Add each school this team covers on this day. The School List for the report is built from these entries automatically, and their children add up into the plan's school-children total. A school can appear only once in a campaign.</p>
     <table class="mini"><thead><tr><th>Sr</th><th>Team</th><th>Day</th><th>Name of school</th><th>Head teacher</th><th>Cell</th><th>Children &lt; 5</th><th></th></tr></thead><tbody>
-    ${ed.schools.map((s, i) => `<tr><td>${i + 1}</td><td>${ed.t.team_no}</td><td>${ed.day}</td><td>${esc(s.schools.name)}</td><td>${esc(s.schools.head_teacher_name)}</td><td>${esc(s.schools.head_teacher_phone)}</td><td>${s.target_children}</td><td>${ro ? "" : `<button class="btn small ghost" onclick="delSchool('${s.id}')">Remove</button>`}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">No schools yet.</td></tr>`}
+    ${ed.schools.map((s, i) => `<tr id="sr_${s.id}"><td>${i + 1}</td><td>${ed.t.team_no}</td><td>${ed.day}</td><td>${esc(s.schools.name)}</td><td>${esc(s.schools.head_teacher_name)}</td><td>${esc(s.schools.head_teacher_phone)}</td><td>${s.target_children}</td><td style="white-space:nowrap;">${ro ? "" : `<button class="btn small ghost" onclick="editSchool('${s.id}')">Edit</button> <button class="btn small ghost" onclick="delSchool('${s.id}')">Remove</button>`}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">No schools yet.</td></tr>`}
     <tr><td colspan="6"><b>Total school children</b></td><td><b>${ed.schools.reduce((n, s) => n + s.target_children, 0)}</b></td><td></td></tr></tbody></table>
     ${ro ? "" : `<div class="sect" style="margin-top:.8rem;"><b>Add a school</b><datalist id="schoolDl">${(master || []).map(m => `<option value="${esc(m.name)}">`).join("")}</datalist><div class="grid3">
       <div><label>Name of school</label><input id="s_name" list="schoolDl"></div><div><label>Head teacher name</label><input id="s_head"></div>
@@ -290,6 +290,30 @@ async function addSchool() {
     const { error } = await supabaseClient.from("school_assignments").insert({ campaign_id: campaign.id, school_id: id, team_no: ed.t.team_no, campaign_day: ed.day, target_children: num($("s_kids").value) });
     if (error) throw new Error(/duplicate|unique/i.test(error.message) ? "This school is already in the School List of this campaign (another team or day)." : error.message);
     await reloadEd(); showTab("school"); } catch (e) { err.textContent = msg(e); err.style.display = "block"; }
+}
+function editSchool(id) {
+  const s = ed.schools.find(x => x.id === id); if (!s) return; const i = ed.schools.indexOf(s);
+  $("sr_" + id).innerHTML = `<td>${i + 1}</td><td>${ed.t.team_no}</td><td>${ed.day}</td>
+    <td><input id="es_name" value="${esc(s.schools.name)}"></td><td><input id="es_head" value="${esc(s.schools.head_teacher_name)}"></td>
+    <td><input id="es_phone" value="${esc(s.schools.head_teacher_phone)}"></td><td><input id="es_kids" type="number" min="0" value="${s.target_children}" style="width:5rem;"></td>
+    <td style="white-space:nowrap;"><button class="btn small" onclick="saveSchool('${id}')">Save</button> <button class="btn small ghost" onclick="showTab('school')">Cancel</button><div class="error-text" id="esErr" style="display:none;"></div></td>`;
+}
+async function saveSchool(id) {
+  const s = ed.schools.find(x => x.id === id), err = $("esErr"), show = (m) => { err.textContent = m; err.style.display = "block"; };
+  try {
+    const name = $("es_name").value.trim().replace(/\s+/g, " "); if (!name) return show("Name of school is required");
+    const kidsRaw = $("es_kids").value.trim(), kids = kidsRaw === "" ? 0 : parseInt(kidsRaw, 10); if (!(kids >= 0)) return show("Children cannot be negative");
+    if (name.toLowerCase() !== s.schools.name.trim().toLowerCase()) {
+      const { data: dup } = await supabaseClient.from("schools").select("id").eq("uc_id", aic.uc_id).ilike("name", name.replace(/[%_]/g, m => "\\" + m)).neq("id", s.schools.id).limit(1);
+      if (dup && dup.length) return show("Another school with this name already exists in this union council.");
+    }
+    const info = { name, head_teacher_name: $("es_head").value.trim() || null, head_teacher_phone: $("es_phone").value.trim() || null };
+    if (info.name !== s.schools.name || info.head_teacher_name !== (s.schools.head_teacher_name || null) || info.head_teacher_phone !== (s.schools.head_teacher_phone || null)) {
+      const { error } = await supabaseClient.from("schools").update(info).eq("id", s.schools.id); if (error) return show(msg(error));
+    }
+    const { error: e2 } = await supabaseClient.from("school_assignments").update({ target_children: kids }).eq("id", id); if (e2) return show(msg(e2));
+    await reloadEd(); showTab("school");
+  } catch (e) { show(msg(e)); }
 }
 async function delSchool(id) { if (!confirm("Remove this school?")) return; const { error } = await supabaseClient.from("school_assignments").delete().eq("id", id); if (error) return alert(msg(error)); await reloadEd(); showTab("school"); }
 
