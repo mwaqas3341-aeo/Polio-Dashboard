@@ -449,6 +449,10 @@ async function openPerson(c) {
     member: editing ? `Edit team member — Team ${team?.team_no ?? ""}` : c.replace ? `Replace a member of Team ${team?.team_no}` : `Add member to Team ${team?.team_no}` }[c.kind];
   let extra = "";
   if (c.kind === "ucmo" && !editing) extra += planFields(null, null);
+  if (c.kind === "ucmo") extra += `<div class="sect"><h3>UCMO Area Map picture — can be added later</h3>
+      <p class="muted">The map of this union council's whole area. It stays linked to the UCMO and can be replaced later.</p>
+      <input type="file" id="um_file" accept="image/jpeg,image/png"><div class="muted" id="um_st">Not uploaded yet</div>
+      <img id="um_prev" alt="UCMO area map" style="display:none;max-width:100%;width:420px;border:1px solid #999;border-radius:6px;margin-top:.3rem;"></div>`;
   if (c.kind === "aic") extra += `<div class="sect"><h3>AIC Area Map picture — can be added later</h3>
       <p class="muted">The map of this Area Incharge's whole area. It stays linked to this AIC and can be replaced later. It is needed before an Operational Plan can be submitted.</p>
       <input type="file" id="am_file" accept="image/jpeg,image/png"><div class="muted" id="am_st">Not uploaded yet</div>
@@ -465,6 +469,11 @@ async function openPerson(c) {
   openPanel(title, `<div class="sect"><h3>Personal details</h3>${personFields("f")}</div>${extra}${errBox()}
     <div style="margin-top:1rem;"><button class="btn" id="saveBtn">Save</button> <button class="btn ghost" onclick="closePanel()">Cancel</button></div>`);
   wirePerson("f"); if (editing) { fillPerson("f", editing); if ($("f_status")) $("f_status").value = editing.status === "active" ? "active" : editing.status === "left_campaign" ? "left_campaign" : "inactive"; }
+  if (c.kind === "ucmo") {
+    if (editing?.area_map_path) { $("um_st").textContent = "Uploaded ✓ — choose a file only to replace it."; signedUrl(editing.area_map_path).then(u => { if (u) { $("um_prev").src = u; $("um_prev").style.display = "block"; } }); }
+    $("um_file").onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (!/^image\/(jpeg|png)$/.test(f.type)) { alert("Only JPG or PNG pictures are allowed."); e.target.value = ""; return; }
+      $("um_prev").src = URL.createObjectURL(f); $("um_prev").style.display = "block"; $("um_st").textContent = "New map chosen ✓"; };
+  }
   if (c.kind === "aic") {
     $("am_file").dataset.existing = editing?.area_map_path || "";
     if (editing?.area_map_path) { $("am_st").textContent = "Uploaded ✓ — choose a file only to replace it."; signedUrl(editing.area_map_path).then(u => { if (u) { $("am_prev").src = u; $("am_prev").style.display = "block"; } }); }
@@ -516,6 +525,13 @@ async function savePerson() {
         const up = await supabaseClient.storage.from("staff-documents").upload(path, f, { upsert: true, contentType: f.type }); if (up.error) throw up.error;
         const { error } = await supabaseClient.rpc("set_aic_area_map", { p_aic: rec.id, p_path: path }); if (error) throw error;
       } catch (e) { notes.push("The AIC was saved, but the Area Map could not be uploaded (" + (e.message || e) + "). Open the AIC again and add it."); }
+    }
+    if (c.kind === "ucmo" && $("um_file") && $("um_file").files[0]) {
+      try { const f = await compressImage($("um_file").files[0]); const path = `${rec.uc_id}/${rec.id}/area-map.${fileExt(f)}`;
+        const old = ed?.area_map_path; if (old && old !== path) await supabaseClient.storage.from("staff-documents").remove([old]);
+        const up = await supabaseClient.storage.from("staff-documents").upload(path, f, { upsert: true, contentType: f.type }); if (up.error) throw up.error;
+        const { error } = await supabaseClient.rpc("set_ucmo_area_map", { p_ucmo: rec.id, p_path: path }); if (error) throw error;
+      } catch (e) { notes.push("The UCMO was saved, but the Area Map could not be uploaded (" + (e.message || e) + "). Open the UCMO again and add it."); }
     }
     if (c.kind === "aic" && drv) {
       drv.payload.aic_staff_id = rec.id;
