@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CNIC lists — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<style>
+  .btn.small { padding:.3rem .8rem; } .btn.ghost { background:#fff; color:inherit; border:1px solid var(--line); }
+  .chk { display:flex; flex-wrap:wrap; gap:.4rem .9rem; margin:.3rem 0; } .chk label { font-weight:normal; }
+  #prevBox { margin-top:1rem; } #prevFrame { width:100%; height:80vh; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .bar { height:.5rem; background:#e3e8e6; border-radius:99px; overflow:hidden; } .bar i { display:block; height:100%; background:#1a7f5a; width:0; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar-mount"></aside>
+  <main class="main">
+    <div class="topbar"><h1>CNIC lists (PDF)</h1></div>
+    <div class="card">
+      <div class="form-grid">
+        <div><label>List</label><select id="kind"><option value="aic">Area Incharges</option><option value="driver">Drivers</option><option value="both">Area Incharges and Drivers</option><option value="team">Team members (by AIC and team)</option></select></div>
+        <div><label>Union council</label><select id="ucSel"></select></div>
+        <div><label>Campaign (printed on the PDF)</label><select id="campSel"></select></div>
+      </div>
+      <div id="teamFilters" style="display:none;">
+        <div class="form-grid" style="margin-top:.6rem;">
+          <div><label>Team number(s) — e.g. 4, 5, 10-14 (blank = all)</label><input id="teamNos" placeholder="all teams"></div>
+          <div><label>Team type</label><select id="teamType"><option value="">All types</option><option value="fixed">Fixed</option><option value="transit">Transit</option><option value="mobile">Mobile</option><option value="none">Type not set</option></select></div>
+        </div>
+      </div>
+      <div id="aicFilterWrap" style="margin-top:.6rem;"><label>Area Incharges (untick to leave out)</label><div class="chk" id="aicChecks"></div></div>
+      <label class="muted" style="display:block;margin-top:.4rem;"><input type="checkbox" id="inactiveChk"> Include people who are no longer active</label>
+      <p class="muted" id="summary" style="margin:.6rem 0;"></p>
+      <button class="btn" id="prevBtn">Preview</button>
+      <button class="btn ghost" id="dlBtn">Download PDF</button>
+      <div id="prog" style="display:none;margin-top:.6rem;"><div class="bar"><i id="progBar"></i></div><span class="muted" id="progTxt"></span></div>
+      <div class="error-text" id="err" style="display:none;"></div>
+      <p class="muted">Each CNIC is printed at the official card proportion (85.6 × 54 mm, enlarged 5%) with the name, CNIC and mobile number above it. Missing pictures are shown as "not uploaded" — nothing is invented.</p>
+    </div>
+    <div class="card" id="prevBox" style="display:none;">
+      <a class="btn small" id="openTab" target="_blank">Open in a new tab (best on phones)</a>
+      <iframe id="prevFrame" title="PDF preview"></iframe>
+    </div>
+  </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/supabaseClient.js"></script>
+<script src="../assets/js/nav.js"></script>
+<script src="../assets/js/crud.js"></script>
+<script src="../assets/js/validators.js"></script>
+<script src="../assets/js/cnicpdf.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let ucs = [], camps = [], aics = [], lastBlob = null, lastName = "cnic-list.pdf";
+const natural = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+const typeLabel = (t) => ({ fixed: "Fixed", transit: "Transit", mobile: "Mobile" })[t] || "Type not set";
+
+(async () => {
+  const session = await requireAuth(); if (!session) return; renderSidebar("cnic-lists.html");
+  const [{ data: u }, { data: c }] = await Promise.all([supabaseClient.from("union_councils").select("id, name").order("name"), supabaseClient.from("campaigns").select("id, name").order("start_date", { ascending: false })]);
+  ucs = u || []; camps = c || [];
+  $("ucSel").innerHTML = ucs.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join(""); $("campSel").innerHTML = camps.map(x => `<option>${esc(x.name)}</option>`).join("") || "<option></option>";
+  $("kind").onchange = () => { $("teamFilters").style.display = $("kind").value === "team" ? "block" : "none"; refresh(); };
+  $("ucSel").onchange = loadAics; $("inactiveChk").onchange = refresh; ["teamNos", "teamType"].forEach(i => $(i).addEventListener("change", refresh));
+  $("prevBtn").onclick = () => run(false); $("dlBtn").onclick = () => run(true);
+  await loadAics();
+})();
+
+async function loadAics() {
+  const { data } = await supabaseClient.from("staff").select("id, aic_no, full_name").eq("uc_id", $("ucSel").value).eq("designation", "aic").order("aic_no"); aics = data || [];
+  $("aicChecks").innerHTML = aics.map(a => `<label><input type="checkbox" class="aicChk" value="${a.id}" checked> AIC ${a.aic_no} — ${esc(a.full_name)}</label>`).join("") || `<span class="muted">No Area Incharge in this union council.</span>`;
+  document.querySelectorAll(".aicChk").forEach(c => c.onchange = refresh); await refresh();
+}
+const chosenAics = () => [...document.querySelectorAll(".aicChk:checked")].map(c => c.value);
+function parseNos(txt) { const set = new Set(); (txt || "").split(/[,\s]+/).filter(Boolean).forEach(p => { const m = p.match(/^(\d+)-(\d+)$/); if (m) for (let i = +m[1]; i <= +m[2]; i++) set.add(i); else if (/^\d+$/.test(p)) set.add(+p); }); return set; }
+
+/* ---- fetch exactly the people the filters select (no pictures yet) ---- */
+async function fetchGroups() {
+  const kind = $("kind").value, uc = $("ucSel").value, inc = $("inactiveChk").checked, ids = chosenAics(), groups = [];
+  const cols = "id, full_name, father_name, cnic, phone, designation, status, aic_no, official_designation, department, cnic_pic_front_path, cnic_pic_back_path";
+  const ucName = ucs.find(u => u.id === uc)?.name || "";
+  if (kind !== "team") {
+    const want = kind === "aic" ? ["aic"] : kind === "driver" ? ["driver"] : ["aic", "driver"];
+    for (const d of want) {
+      let q = supabaseClient.from("staff").select(cols + ", aic:aic_staff_id(id, aic_no, full_name)").eq("uc_id", uc).eq("designation", d); if (!inc) q = q.eq("status", "active");
+      const { data, error } = await q; if (error) throw error;
+      let rows = (data || []).filter(r => d === "aic" ? ids.includes(r.id) : ids.includes(r.aic?.id));
+      rows.sort((a, b) => d === "aic" ? a.aic_no - b.aic_no : natural(a.aic?.aic_no ?? 0, b.aic?.aic_no ?? 0) || natural(a.full_name, b.full_name));
+      groups.push({ heading: d === "aic" ? "Area Incharges" : "Drivers", teams: [{ heading: null, people: rows.map(r => person(r, d === "aic" ? `AIC ${r.aic_no}` : `Driver of AIC ${r.aic?.aic_no ?? "—"} (${r.aic?.full_name ?? ""})`, ucName)) }] });
+    }
+  } else {
+    const { data, error } = await supabaseClient.from("teams").select(`id, team_no, team_type, aic:aic_staff_id(id, aic_no, full_name), team_members(active, member_no, staff(${cols}))`).eq("uc_id", uc);
+    if (error) throw error;
+    const nos = parseNos($("teamNos").value), ty = $("teamType").value;
+    let teams = (data || []).filter(t => t.aic && ids.includes(t.aic.id) && (!nos.size || nos.has(t.team_no)) && (!ty || (ty === "none" ? !t.team_type : t.team_type === ty)));
+    const byAic = new Map(); teams.forEach(t => { if (!byAic.has(t.aic.id)) byAic.set(t.aic.id, { aic: t.aic, teams: [] }); byAic.get(t.aic.id).teams.push(t); });
+    [...byAic.values()].sort((a, b) => a.aic.aic_no - b.aic.aic_no).forEach(g => {
+      g.teams.sort((a, b) => natural(a.team_no, b.team_no));
+      groups.push({ heading: `AIC ${g.aic.aic_no} — ${g.aic.full_name}`, teams: g.teams.map(t => {
+        const mem = (t.team_members || []).filter(m => m.active || inc).sort((a, b) => a.member_no - b.member_no);
+        return { heading: `Team ${t.team_no} — ${typeLabel(t.team_type)}`, note: mem.length ? null : "No member assigned yet", people: mem.map(m => person(m.staff, `Team ${t.team_no} (${typeLabel(t.team_type)}) · Member ${m.member_no} · AIC ${g.aic.aic_no}`, ucName)) }; }) });
+    });
+  }
+  return groups;
+}
+function person(s, where, ucName) {
+  const off = [s.official_designation, s.department].filter(Boolean).join(", ");
+  return { name: s.full_name, father: s.father_name, cnic: s.cnic, cell: s.phone, detail: [where, "UC " + ucName, off].filter(Boolean).join(" · "), frontPath: s.cnic_pic_front_path, backPath: s.cnic_pic_back_path };
+}
+async function refresh() {
+  try { const g = await fetchGroups(), ppl = g.flatMap(x => x.teams.flatMap(t => t.people)), both = ppl.filter(p => p.frontPath && p.backPath).length;
+    $("summary").textContent = `${ppl.length} person(s) selected — ${both} with both pictures, ${ppl.length - both} with a picture missing.`; $("err").style.display = "none"; }
+  catch (e) { $("summary").textContent = ""; showErr(e); }
+}
+function showErr(e) { $("err").textContent = e.message || String(e); $("err").style.display = "block"; }
+
+/* ---- pictures: signed URL -> downscaled JPEG, 4 at a time, only for the selected people ---- */
+async function loadImage(path) {
+  const { data } = await supabaseClient.storage.from("staff-documents").createSignedUrl(path, 300); if (!data?.signedUrl) return null;
+  const blob = await (await fetch(data.signedUrl)).blob();
+  const bmp = await createImageBitmap(blob, { imageOrientation: "from-image" }).catch(() => null); if (!bmp) return null;
+  const s = Math.min(1, 1500 / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas"); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+  const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(bmp, 0, 0, c.width, c.height);
+  return { dataUrl: c.toDataURL("image/jpeg", 0.85), w: c.width, h: c.height };
+}
+async function preload(paths, onTick) {
+  const cache = new Map(); let done = 0, i = 0;
+  const worker = async () => { while (i < paths.length) { const p = paths[i++]; try { cache.set(p, await loadImage(p)); } catch { cache.set(p, null); } onTick(++done, paths.length); } };
+  await Promise.all([worker(), worker(), worker(), worker()]); return cache;
+}
+async function run(download) {
+  $("err").style.display = "none"; const btns = [$("prevBtn"), $("dlBtn")]; btns.forEach(b => b.disabled = true); $("prog").style.display = "block";
+  try {
+    const groups = await fetchGroups(), people = groups.flatMap(g => g.teams.flatMap(t => t.people));
+    if (!people.length && !groups.some(g => g.teams.length)) throw new Error("Nothing matches these filters.");
+    const paths = [...new Set(people.flatMap(p => [p.frontPath, p.backPath]).filter(Boolean))];
+    const cache = await preload(paths, (d, n) => { $("progBar").style.width = (100 * d / n) + "%"; $("progTxt").textContent = `Loading pictures ${d} of ${n}…`; });
+    $("progTxt").textContent = "Building the PDF…"; await new Promise(r => setTimeout(r, 30));
+    const kind = $("kind").value, uc = ucs.find(u => u.id === $("ucSel").value)?.name || "", camp = $("campSel").value || "";
+    const titles = { aic: "CNIC List — Area Incharges", driver: "CNIC List — Drivers", both: "CNIC List — Area Incharges and Drivers", team: "CNIC List — Team Members" };
+    const { doc, stats } = buildCnicPdf({ jsPDF: window.jspdf.jsPDF, title: titles[kind], subtitle: `Campaign: ${camp}   |   UC: ${uc}   |   ${stats0(people)}`, groups, getImage: (p) => cache.get(p) || null, generatedOn: "Generated " + new Date().toLocaleString("en-GB") });
+    lastBlob = doc.output("blob"); lastName = `CNIC_List_${kind}_${camp}_${uc}.pdf`.replace(/[^\w.\-]+/g, "_");
+    const url = URL.createObjectURL(lastBlob); $("prevFrame").src = url; $("openTab").href = url; $("prevBox").style.display = "block";
+    $("summary").textContent = `${stats.people} person(s), ${stats.pages} page(s) — ${stats.people - stats.missing} with both pictures, ${stats.missing} with a picture missing.`;
+    if (download) { const a = document.createElement("a"); a.href = url; a.download = lastName; a.click(); } else $("prevBox").scrollIntoView({ behavior: "smooth" });
+  } catch (e) { showErr(e); } finally { btns.forEach(b => b.disabled = false); $("prog").style.display = "none"; }
+}
+const stats0 = (p) => `${p.length} person(s)`;
+</script>
+</body>
+</html>

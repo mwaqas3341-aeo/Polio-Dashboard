@@ -57,6 +57,7 @@ pages/
   campaigns.html               Campaign Details: edit dates/days, live UC → AIC → team structure, saved rosters
   staff.html                   Staff Management: UCMO → AIC → teams → members, drivers, CNIC pictures/expiry, Team Adjustment + history
   operational-plan.html        Operational Plan: Mobile teams, Days 1–3, pictures, day maps, MMP list, automatic School List, Excel reports
+  cnic-lists.html              CNIC lists (PDF): Area Incharges, Drivers, Team members by AIC and team; preview + download
   payments.html                Payment lists (EasyPaisa / JazzCash / IBAN) with Excel download
   staff-pdf.html               Team staff PDF with CNIC front/back at card size
   teams.html                   Old staff form (no longer in the menu; superseded by staff.html)
@@ -79,6 +80,8 @@ assets/
   js/supabaseClient.js          Client init + auth helpers
   js/nav.js                     Shared sidebar
   js/crud.js                    Shared form helpers (campaign dropdowns, UC lookup)
+  js/cnicpdf.js                 CNIC PDF layout (A4, cards at 85.6x54 mm proportion, front/back side by side)
+  js/images.js                  Picture shrinking before upload
   js/validators.js              CNIC / mobile / IBAN (mod-97) validators, wallet and team-type lists
   js/export.js                  Shared Excel export (SheetJS) — used by team-plan/logistics/mmp/schools/area-summary
 supabase/migrations/
@@ -113,6 +116,8 @@ Phase 1 (Campaign Details + Staff Management), applied in order after `0010`:
 - `0017_edit_team_and_tighten.sql` — `update_team()`; roster snapshots limited to admin / district coordinator / UCMO; plan table audited
 - `0018_cnic_expiry_and_required_pictures.sql` — CNIC expiry (or lifetime flag); the database refuses to put a person on a team without both CNIC pictures and a valid expiry
 - `0019_planned_team_hint.sql` — remembers the team a person is expected to join, for one-click placement
+- `0021`–`0022` — official designation / department / place of posting on staff; a team may exist before its type is set
+- `0023_partial_data_allowed.sql` — partial records allowed (no CNIC pictures needed to save or to join a team); unanswered figures are NULL, not 0
 - `0020_operational_plan.sql` — Operational Plan for Mobile teams (Days 1–3, doses = children × 1.11 kept by trigger), plan pictures, day maps, AIC Area Map, school/MMP totals, and the Missed Children gate before a campaign can be closed
 
 Notes: staff, AICs and teams are permanent records that carry over between campaigns. A keep-alive ping runs inside Supabase

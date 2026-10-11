@@ -71,6 +71,7 @@ let me = null, camps = [], campaign = null, ucName = "", aics = [], aic = null, 
 const GROUPS = ["G1", "G2", "G3"];
 const MANAGER = () => ["admin", "district_coordinator", "ucmo"].includes(me.role);
 const num = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : 0; };
+const numOrNull = (v) => { if (v === "" || v == null) return null; const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : null; };   // blank = not answered yet; 0 = a real zero
 function msg(e) { const m = e?.message || String(e); return m.replace(/^.*?(This plan|Village|Name of|At least|The Day|The Area|The Operational|The plan|Save the plan)/, "$1"); }
 
 (async () => {
@@ -165,7 +166,7 @@ const locked = () => ed.plan?.status === "submitted" && !MANAGER();
 
 function totalsHtml() {
   const p = ed.plan, sch = ed.schools.reduce((n, s) => n + s.target_children, 0), mmp = ed.mmp.reduce((n, m) => n + m.child_count, 0);
-  const hh = p ? p.children_households_1_5 : 0, u1 = p ? p.children_under_1 : 0, total = hh + u1 + sch, doses = Math.round(total * 111) / 100;
+  const hh = (p && p.children_households_1_5) || 0, u1 = (p && p.children_under_1) || 0, total = hh + u1 + sch, doses = Math.round(total * 111) / 100;
   return `<div class="calc" id="calc"><div><b id="cTotal">${total}</b><span>Total children under 5<span class="urdu">5 سال سے کم عمر بچوں کی کل تعداد</span></span></div>
     <div><b id="cDoses">${Math.round(doses)}</b><span>Polio doses required (children × 1.11 = ${doses.toFixed(2)})<span class="urdu">پولیو ویکسین خوراکیں</span></span></div>
     <div><b>${sch}</b><span>School / madrasa children (from School list)<span class="urdu">سکول / مدرسہ کے بچے</span></span></div>
@@ -182,11 +183,11 @@ function tabPlan() {
       <div><label>Team working order (as per map) <span class="urdu">ٹیم کے کام کرنے کی ترتیب: نقشہ کے حساب سے</span></label><input id="f_order" value="${esc(p.working_order || "")}" ${ro}></div>
       <div><label>Name of Head of 1st Family <span class="urdu">پہلے گھر کے سربراہ کا نام</span></label><input id="f_first" value="${esc(p.head_first_family || "")}" ${ro}></div>
       <div><label>Name of Head of Last Family <span class="urdu">آخری گھر کے سربراہ کا نام</span></label><input id="f_last" value="${esc(p.head_last_family || "")}" ${ro}></div>
-      <div><label>Total households <span class="urdu">کل گھرانے</span></label><input type="number" min="0" id="f_hh" value="${p.total_households ?? 0}" ${ro}></div>
-      <div><label>Children in households, 1–5 years <span class="urdu">گھروں کے بچے: 1 تا 5 سال</span></label><input type="number" min="0" id="f_c15" value="${p.children_households_1_5 ?? 0}" ${ro}></div>
-      <div><label>Children under 1 year <span class="urdu">1 سال سے کم</span></label><input type="number" min="0" id="f_u1" value="${p.children_under_1 ?? 0}" ${ro}></div></div>
+      <div><label>Total households <span class="urdu">کل گھرانے</span></label><input type="number" min="0" id="f_hh" value="${p.total_households ?? ""}" ${ro}></div>
+      <div><label>Children in households, 1–5 years <span class="urdu">گھروں کے بچے: 1 تا 5 سال</span></label><input type="number" min="0" id="f_c15" value="${p.children_households_1_5 ?? ""}" ${ro}></div>
+      <div><label>Children under 1 year <span class="urdu">1 سال سے کم</span></label><input type="number" min="0" id="f_u1" value="${p.children_under_1 ?? ""}" ${ro}></div></div>
     ${totalsHtml()}
-    <p class="muted">Doses = total children × 1.11, shown to the nearest whole dose like your workbook. School and MMP numbers come from tabs 3 and 4 — you do not type them here. Doses cannot be edited by hand.</p>
+    <p class="muted">Leave a figure <b>blank</b> if it is not known yet — enter <b>0</b> only when there really are none. Blanks are saved as "not answered" and must be filled before final submission. Doses = total children × 1.11, shown to the nearest whole dose like your workbook. School and MMP numbers come from tabs 3 and 4 — you do not type them here. Doses cannot be edited by hand.</p>
     <div class="error-text" id="pErr" style="display:none;white-space:pre-line;"></div>
     <div style="margin-top:.8rem;">${ro ? "" : `<button class="btn" onclick="savePlan()">Save</button> <button class="btn" style="background:#14633f;" onclick="submitPlan()">Submit plan</button>`}
       ${ed.plan?.status === "submitted" && MANAGER() ? `<button class="btn ghost" onclick="reopenPlan()">Reopen for corrections</button>` : ""}</div>`;
@@ -194,7 +195,7 @@ function tabPlan() {
 }
 function refreshCalc() { const sch = ed.schools.reduce((n, s) => n + s.target_children, 0), total = num($("f_c15").value) + num($("f_u1").value) + sch; $("cTotal").textContent = total; $("cDoses").textContent = Math.round(total * 111 / 100); }
 function readPlan() { return { village_area: $("f_village").value.trim() || null, community_vaccination_place: $("f_place").value.trim() || null, team_group: $("f_group").value || null, working_order: $("f_order").value.trim() || null,
-  head_first_family: $("f_first").value.trim() || null, head_last_family: $("f_last").value.trim() || null, total_households: num($("f_hh").value), children_households_1_5: num($("f_c15").value), children_under_1: num($("f_u1").value) }; }
+  head_first_family: $("f_first").value.trim() || null, head_last_family: $("f_last").value.trim() || null, total_households: numOrNull($("f_hh").value), children_households_1_5: numOrNull($("f_c15").value), children_under_1: numOrNull($("f_u1").value) }; }
 async function savePlan(silent) {
   const err = $("pErr"); err.style.display = "none";
   try { const body = readPlan();

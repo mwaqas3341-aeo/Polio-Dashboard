@@ -329,7 +329,7 @@ function personFields(p) {
     <div class="form-grid" style="margin-top:.5rem;"><div><label>Bank (type to search)</label><input id="${p}_bank" list="bankList" placeholder="e.g. HBL"></div>
     <div><label>IBAN</label><input id="${p}_iban" placeholder="PK00XXXX0000000000000000" maxlength="29"></div></div>
     <div class="chips" id="${p}_chips"></div></details>
-  <div class="sect"><h3>CNIC pictures and expiry — all required</h3>
+  <div class="sect"><h3>CNIC pictures and expiry — can be added later</h3>
     <div class="form-grid">
       <div><label>CNIC front picture</label><input type="file" id="${p}_ffile" accept="image/jpeg,image/png"><div class="muted" id="${p}_fst"></div><img id="${p}_fprev" alt="CNIC front" style="display:none;width:60mm;max-width:100%;border:1px solid #999;border-radius:3mm;margin-top:.3rem;"></div>
       <div><label>CNIC back picture</label><input type="file" id="${p}_bfile" accept="image/jpeg,image/png"><div class="muted" id="${p}_bst"></div><img id="${p}_bprev" alt="CNIC back" style="display:none;width:60mm;max-width:100%;border:1px solid #999;border-radius:3mm;margin-top:.3rem;"></div>
@@ -357,7 +357,7 @@ function wirePerson(p) {
     if (file.size > 6 * 1024 * 1024) { alert("The picture is bigger than 6 MB — please use a smaller photo."); e.target.value = ""; return; }
     prev.src = URL.createObjectURL(file); prev.style.display = "block"; $(`${p}_${f}st`).textContent = "New picture chosen ✓"; };
   $(`${p}_life`).onchange = (e) => { $(`${p}_exp`).disabled = e.target.checked; if (e.target.checked) $(`${p}_exp`).value = ""; };
-  $(`${p}_ffile`).dataset.existing = ""; $(`${p}_bfile`).dataset.existing = ""; $(`${p}_fst`).textContent = "Required"; $(`${p}_bst`).textContent = "Required";
+  $(`${p}_ffile`).dataset.existing = ""; $(`${p}_bfile`).dataset.existing = ""; $(`${p}_fst`).textContent = "Not uploaded yet"; $(`${p}_bst`).textContent = "Not uploaded yet";
   $(`${p}_iban`).oninput = (e) => { e.target.value = Validate.normalizeIban(e.target.value); upd(); };
   $(`${p}_bank`).oninput = upd; $(`${p}_bank`).onchange = upd;
 }
@@ -370,7 +370,7 @@ function fillPerson(p, s) {
   if (s.bank_code || s.iban) $(`${p}_bank`).closest("details").open = true; $(`${p}_iban`).dispatchEvent(new Event("input"));
   $(`${p}_life`).checked = !!s.cnic_lifetime; $(`${p}_exp`).disabled = !!s.cnic_lifetime; $(`${p}_exp`).value = s.cnic_expiry || ""; $(`${p}_exp`).dataset.orig = s.cnic_expiry || "";
   for (const [side, f] of [["front", "f"], ["back", "b"]]) { const path = s[`cnic_pic_${side}_path`]; $(`${p}_${f}file`).dataset.existing = path || "";
-    $(`${p}_${f}st`).innerHTML = path ? `Uploaded ✓ — choose a file only if you want to replace it. <a href="#" onclick="previewExisting('${p}','${f}','${path}');return false;">Preview</a>` : "Required"; }
+    $(`${p}_${f}st`).innerHTML = path ? `Uploaded ✓ — choose a file only if you want to replace it. <a href="#" onclick="previewExisting('${p}','${f}','${path}');return false;">Preview</a>` : "Not uploaded yet"; }
 }
 async function previewExisting(p, f, path) { const u = await signedUrl(path); const img = $(`${p}_${f}prev`); if (u) { img.src = u; img.style.display = "block"; } }
 function readPerson(p, errs, label) {
@@ -390,10 +390,8 @@ function readPerson(p, errs, label) {
     else if (r.bank === "mismatch") errs.push(`${label}: IBAN belongs to bank code ${r.bankCode}, not the selected bank`); }
   const life = $(`${p}_life`).checked, exp = $(`${p}_exp`).value, today = new Date().toISOString().slice(0, 10);
   const fF = $(`${p}_ffile`).files[0] || null, bF = $(`${p}_bfile`).files[0] || null;
-  if (!fF && !$(`${p}_ffile`).dataset.existing) errs.push(`${label}: CNIC front picture is required`);
-  if (!bF && !$(`${p}_bfile`).dataset.existing) errs.push(`${label}: CNIC back picture is required`);
-  if (!life) { if (!exp) errs.push(`${label}: CNIC expiry date is required (or tick "Lifetime CNIC")`);
-    else if (exp < today && exp !== $(`${p}_exp`).dataset.orig) errs.push(`${label}: this CNIC expired on ${exp} — a valid CNIC is needed`); }
+  // pictures and expiry may be added later (partial records are allowed); only a wrong value is rejected
+  if (!life && exp && exp < today && exp !== $(`${p}_exp`).dataset.orig) errs.push(`${label}: this CNIC expired on ${exp} — please check the date`);
   return { full_name: name, father_name: father, cnic, phone, payment_number: pay, payment_wallet: wallet || null, bank_code: bank?.code || null, iban: iban || null,
            cnic_expiry: life ? null : (exp || null), cnic_lifetime: life, _front: fF, _back: bF,
            official_designation: v("odes") || null, department: v("dept") || null, place_of_posting: v("post") || null };
@@ -420,9 +418,9 @@ async function openPerson(c) {
     member: editing ? `Edit team member — Team ${team?.team_no ?? ""}` : c.replace ? `Replace a member of Team ${team?.team_no}` : `Add member to Team ${team?.team_no}` }[c.kind];
   let extra = "";
   if (c.kind === "ucmo" && !editing) extra += planFields(null, null);
-  if (c.kind === "aic") extra += `<div class="sect"><h3>AIC Area Map picture — required</h3>
-      <p class="muted">The map of this Area Incharge's whole area. It stays linked to this AIC and can be replaced later.</p>
-      <input type="file" id="am_file" accept="image/jpeg,image/png"><div class="muted" id="am_st">Required</div>
+  if (c.kind === "aic") extra += `<div class="sect"><h3>AIC Area Map picture — can be added later</h3>
+      <p class="muted">The map of this Area Incharge's whole area. It stays linked to this AIC and can be replaced later. It is needed before an Operational Plan can be submitted.</p>
+      <input type="file" id="am_file" accept="image/jpeg,image/png"><div class="muted" id="am_st">Not uploaded yet</div>
       <img id="am_prev" alt="Area map" style="display:none;max-width:100%;width:420px;border:1px solid #999;border-radius:6px;margin-top:.3rem;"></div>
     <div class="sect"><h3>Does this Area Incharge have a driver?</h3><div class="radios"><label><input type="radio" name="hasDrv" value="no" checked> No</label><label><input type="radio" name="hasDrv" value="yes"> Yes</label></div>
       <div id="drvBox" style="display:none;margin-top:.5rem;"><h3>Driver details</h3>${personFields("d")}</div></div>
@@ -461,7 +459,6 @@ async function savePerson() {
     if (c.kind === "ucmo" && !ed) plan = readPlan(errs);
     if (c.kind === "aic") { const yes = document.querySelector('input[name="hasDrv"]:checked').value === "yes"; p.can_have_driver = yes;
       if (yes) { const { _front: dF, _back: dB, ...dp } = readPerson("d", errs, "Driver"); drv = { payload: { uc_id: uc, designation: "driver", ...dp }, front: dF, back: dB }; } }
-    if (c.kind === "aic" && !$("am_file").files[0] && !$("am_file").dataset.existing) errs.push("The AIC Area Map picture is required");
     if (c.kind === "aic") for (const [n, v] of selTeams) if (!v.id && !v.type) errs.push(`Choose the type of Team ${n} (Fixed, Transit or Mobile)`);
     if (c.kind === "member" && c.replace && !ed) replace = readReplaceBlock("nr", errs);
     if (c.kind === "member" && !ed && !team?.aic_staff_id) errs.push("This team has no Area Incharge yet");

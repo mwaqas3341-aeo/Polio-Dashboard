@@ -15,6 +15,7 @@ const NAV_LINKS = [
   { href: "pages/two-a-form.html", label: "2A form (generate & print)" },
   { href: "pages/supervision.html", label: "Supervision visits" },
   { href: "pages/payments.html", label: "Payment lists" },
+  { href: "pages/cnic-lists.html", label: "CNIC lists (PDF)" },
   { href: "pages/staff-pdf.html", label: "Staff PDF (CNIC, AIC)" },
   { href: "pages/ddm-cards.html", label: "DDM cards" },
   { href: "pages/audit-log.html", label: "Audit log" },
