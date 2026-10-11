@@ -40,7 +40,7 @@
     </div>
 
     <div class="card"><h2>Campaign-day maps</h2>
-      <p class="muted">One map picture for each campaign day, uploaded separately. These are different from the AIC Area Map added when the AIC was registered.</p>
+      <p class="muted">One map picture for each campaign day for the whole Area Incharge. Each team also has its own separate map for each day (inside the team's Day boxes below). These are different from the single colour AIC Area Map added when the AIC was registered.</p>
       <div class="days" id="dayMaps"></div></div>
 
     <div id="teams"></div>
@@ -67,7 +67,7 @@
 <script src="../assets/js/images.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-let me = null, camps = [], campaign = null, ucName = "", aics = [], aic = null, teams = [], plans = {}, picCounts = {}, dayMaps = {}, ed = null;
+let me = null, camps = [], campaign = null, ucName = "", aics = [], aic = null, teams = [], plans = {}, picCounts = {}, dayMaps = {}, teamMaps = {}, ed = null;
 const GROUPS = ["G1", "G2", "G3"];
 const MANAGER = () => ["admin", "district_coordinator", "ucmo"].includes(me.role);
 const num = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : 0; };
@@ -106,6 +106,8 @@ async function loadAic() {
     supabaseClient.from("operational_day_maps").select("campaign_day, storage_path").eq("campaign_id", campaign.id).eq("aic_staff_id", aic.id)]);
   plans = {}; (pl || []).forEach(p => plans[p.team_id + "|" + p.campaign_day] = p);
   dayMaps = {}; (dm || []).forEach(m => dayMaps[m.campaign_day] = m.storage_path);
+  teamMaps = {};
+  if (ids.length) { const { data: tm } = await supabaseClient.from("team_day_maps").select("team_id, campaign_day, storage_path").eq("campaign_id", campaign.id).in("team_id", ids); (tm || []).forEach(m => teamMaps[m.team_id + "|" + m.campaign_day] = m.storage_path); }
   picCounts = {}; const pids = (pl || []).map(p => p.id);
   if (pids.length) { const { data: pc } = await supabaseClient.from("operational_plan_pictures").select("plan_id").in("plan_id", pids); (pc || []).forEach(x => picCounts[x.plan_id] = (picCounts[x.plan_id] || 0) + 1); }
   renderDayMaps(); renderTeams();
@@ -124,12 +126,23 @@ async function uploadDayMap(d, file) {
     const { error } = await supabaseClient.from("operational_day_maps").upsert({ campaign_id: campaign.id, aic_staff_id: aic.id, campaign_day: d, storage_path: path, updated_at: new Date().toISOString() }, { onConflict: "campaign_id,aic_staff_id,campaign_day" }); if (error) throw error;
     dayMaps[d] = path; renderDayMaps(); } catch (e) { alert("Map not saved: " + msg(e)); }
 }
+async function uploadTeamMap(teamId, d, file) {
+  if (!file) return;
+  if (!/^image\/(jpeg|png)$/.test(file.type)) return alert("Only JPG or PNG pictures are allowed.");
+  try { const f = await compressImage(file); const path = `${aic.uc_id}/${campaign.id}/team-maps/${teamId}/day${d}.${fileExt(f)}`;
+    const up = await supabaseClient.storage.from("operational-plans").upload(path, f, { upsert: true, contentType: f.type }); if (up.error) throw up.error;
+    const { error } = await supabaseClient.from("team_day_maps").upsert({ campaign_id: campaign.id, team_id: teamId, campaign_day: d, storage_path: path, updated_at: new Date().toISOString() }, { onConflict: "campaign_id,team_id,campaign_day" }); if (error) throw error;
+    teamMaps[teamId + "|" + d] = path; renderTeams(); } catch (e) { alert("Map not saved: " + msg(e)); }
+}
 async function openFile(path, bucket = "operational-plans") { const { data } = await supabaseClient.storage.from(bucket).createSignedUrl(path, 300); if (data?.signedUrl) window.open(data.signedUrl, "_blank"); else alert("Could not open the picture"); }
 
 function dayCell(t, d) {
   const p = plans[t.id + "|" + d], pics = p ? (picCounts[p.id] || 0) : 0;
   const st = !p ? '<span class="tag">Not started</span>' : p.status === "submitted" ? '<span class="tag ok">Submitted ✓</span>' : '<span class="tag warn">Draft</span>';
-  return `<div class="day"><b>Day ${d}</b><small>${st}</small><small>${p ? `Doses ${Math.round(p.required_doses)} · Pictures ${pics}/3` : ""}</small><button class="btn small" onclick="openEditor('${t.id}', ${d})">${p ? "Open" : "Start"}</button></div>`;
+  return `<div class="day"><b>Day ${d}</b><small>${st}</small><small>${p ? `Doses ${Math.round(p.required_doses)} · Pictures ${pics}/3` : ""}</small><button class="btn small" onclick="openEditor('${t.id}', ${d})">${p ? "Open" : "Start"}</button>
+    <small style="margin-top:.4rem;">Team map: ${teamMaps[t.id + "|" + d] ? '<span class="tag ok">Uploaded ✓</span>' : '<span class="tag">Not uploaded</span>'}</small>
+    <input type="file" id="tmap_${t.id}_${d}" accept="image/jpeg,image/png" style="display:none" onchange="uploadTeamMap('${t.id}', ${d}, this.files[0])">
+    <button class="btn small ghost" onclick="document.getElementById('tmap_${t.id}_${d}').click()">${teamMaps[t.id + "|" + d] ? "Replace map" : "Upload map"}</button>${teamMaps[t.id + "|" + d] ? ` <button class="btn small ghost" onclick="openFile('${teamMaps[t.id + "|" + d]}')">View</button>` : ""}</div>`;
 }
 function renderTeams() {
   if (!teams.length) { $("teams").innerHTML = `<div class="card"><p>This Area Incharge has no <b>Mobile</b> team yet. Fixed and Transit teams do not need an Operational Plan. Add Mobile teams in Staff.</p></div>`; return; }

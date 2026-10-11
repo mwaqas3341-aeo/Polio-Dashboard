@@ -190,6 +190,10 @@ function renderBoard() {
   let h = `<div class="card ucmo"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
       <div><span class="tag">UCMO</span> <span class="big">${esc(ucmo.full_name)}</span><br><span class="muted">${esc(ucmo.phone)} · ${cnicLine(ucmo)}</span></div>
       <div><button class="btn small" onclick="openPerson({kind:'ucmo',staff:'${ucmo.id}'})">Edit</button> <button class="btn small ghost" onclick="openPlan()">Change numbers</button></div></div>
+      <div style="margin-top:.5rem;"><b>UCMO Area Map</b> (whole union council): ${ucmo.area_map_path ? '<span class="tag ok">Uploaded ✓</span>' : '<span class="tag">Not uploaded yet</span>'}
+        <input type="file" id="ucmoMapFile" accept="image/jpeg,image/png" style="display:none" onchange="uploadUcmoMap(this.files[0]); this.value='';">
+        <button class="btn small" onclick="document.getElementById('ucmoMapFile').click()">${ucmo.area_map_path ? "Replace map" : "Upload map"}</button>
+        ${ucmo.area_map_path ? `<button class="btn small ghost" onclick="viewAreaMap('${ucmo.area_map_path}')">View</button>` : ""}</div>
       <div style="margin-top:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
         <div>Area Incharges: <b>${haveA}</b> of ${nA}<div class="bar"><i style="width:${pc(haveA, nA)}%"></i></div></div>
         <div>Teams: <b>${haveT}</b> of ${nT}<div class="bar"><i style="width:${pc(haveT, nT)}%"></i></div></div></div></div>`;
@@ -438,6 +442,18 @@ async function saveCnic(rec, front, back) {
   if (Object.keys(upd).length) { const { error } = await supabaseClient.from("staff").update(upd).eq("id", rec.id); if (error) return error.message; Object.assign(rec, upd); }
   return null;
 }
+async function uploadUcmoMap(file) {
+  if (!file) return;
+  if (!/^image\/(jpeg|png)$/.test(file.type)) return alert("Only JPG or PNG pictures are allowed.");
+  const u = B?.ucmo; if (!u) return;
+  try {
+    const f = await compressImage(file); const path = `${u.uc_id}/${u.id}/area-map.${fileExt(f)}`;
+    const up = await supabaseClient.storage.from("staff-documents").upload(path, f, { upsert: true, contentType: f.type }); if (up.error) throw up.error;
+    const { error } = await supabaseClient.rpc("set_ucmo_area_map", { p_ucmo: u.id, p_path: path }); if (error) throw error;
+    if (u.area_map_path && u.area_map_path !== path) await supabaseClient.storage.from("staff-documents").remove([u.area_map_path]);   // only after the new one is safely saved
+    await loadBoard();
+  } catch (e) { alert("The map was not saved: " + (e.message || e)); }
+}
 async function viewAreaMap(path) { const u = await signedUrl(path); if (u) window.open(u, "_blank"); else alert("Could not open the map"); }
 async function signedUrl(path) { const { data } = await supabaseClient.storage.from("staff-documents").createSignedUrl(path, 300); return data?.signedUrl || null; }
 
@@ -449,8 +465,8 @@ async function openPerson(c) {
     member: editing ? `Edit team member — Team ${team?.team_no ?? ""}` : c.replace ? `Replace a member of Team ${team?.team_no}` : `Add member to Team ${team?.team_no}` }[c.kind];
   let extra = "";
   if (c.kind === "ucmo" && !editing) extra += planFields(null, null);
-  if (c.kind === "aic") extra += `<div class="sect"><h3>AIC Area Map picture — can be added later</h3>
-      <p class="muted">The map of this Area Incharge's whole area. It stays linked to this AIC and can be replaced later. It is needed before an Operational Plan can be submitted.</p>
+  if (c.kind === "aic") extra += `<div class="sect"><h3>AIC Area Map picture (one colour map) — can be added later</h3>
+      <p class="muted">One colour map of this Area Incharge's whole area. It stays linked to this AIC and can be replaced later. It is needed before an Operational Plan can be submitted.</p>
       <input type="file" id="am_file" accept="image/jpeg,image/png"><div class="muted" id="am_st">Not uploaded yet</div>
       <img id="am_prev" alt="Area map" style="display:none;max-width:100%;width:420px;border:1px solid #999;border-radius:6px;margin-top:.3rem;"></div>
     <div class="sect"><h3>Does this Area Incharge have a driver?</h3><div class="radios"><label><input type="radio" name="hasDrv" value="no" checked> No</label><label><input type="radio" name="hasDrv" value="yes"> Yes</label></div>
