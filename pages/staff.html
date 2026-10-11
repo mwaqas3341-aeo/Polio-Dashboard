@@ -13,6 +13,12 @@
   .aic { border:1px solid var(--line); border-radius:var(--radius); margin:.7rem 0; padding:.7rem .9rem; background:#fff; }
   .aic.empty { background:#fafafa; border-style:dashed; display:flex; justify-content:space-between; align-items:center; color:#666; }
   .team { border-top:1px dashed var(--line); padding:.5rem 0; }
+  .cnicpics { display:inline-flex; gap:6px; flex-wrap:wrap; vertical-align:middle; margin:.25rem 0; }
+  .cnicpics img { height:74px; border:1px solid #9aa5a0; border-radius:5px; cursor:zoom-in; background:#fff; }
+  #cnicBox { position:fixed; inset:0; background:rgba(15,23,42,.8); z-index:2000; display:none; align-items:center; justify-content:center; padding:14px; }
+  #cnicBox .inner { background:#fff; border-radius:14px; max-width:1100px; width:100%; max-height:94vh; overflow:auto; padding:14px 16px; }
+  #cnicBox .pair { display:grid; grid-template-columns:1fr 1fr; gap:12px; } #cnicBox .pair img { width:100%; border:1px solid #9aa5a0; border-radius:8px; }
+  @media (max-width:700px) { #cnicBox .pair { grid-template-columns:1fr; } }
   .team .slots { display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-top:.3rem; }
   @media (max-width:640px) { .team .slots { grid-template-columns:1fr; } }
   .slot { border:1px solid var(--line); border-radius:8px; padding:.45rem .6rem; background:#fbfcfc; font-size:.92rem; }
@@ -188,7 +194,7 @@ function renderBoard() {
   const nA = plan?.total_aics ?? Math.max(0, ...aics.map(a => a.aic_no)), nT = plan?.total_teams ?? Math.max(0, ...teams.map(t => t.team_no));
   const haveA = aics.length, haveT = teams.length, pc = (a, b) => b ? Math.min(100, Math.round(a * 100 / b)) : 0;
   let h = `<div class="card ucmo"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
-      <div><span class="tag">UCMO</span> <span class="big">${esc(ucmo.full_name)}</span><br><span class="muted">${esc(ucmo.phone)} · ${cnicLine(ucmo)}</span></div>
+      <div><span class="tag">UCMO</span> <span class="big">${esc(ucmo.full_name)}</span><br><span class="muted">${esc(ucmo.phone)} · ${cnicLine(ucmo)}</span> ${cnicBox(ucmo)}</div>
       <div><button class="btn small" onclick="openPerson({kind:'ucmo',staff:'${ucmo.id}'})">Edit</button> <button class="btn small ghost" onclick="openPlan()">Change numbers</button></div></div>
       <div style="margin-top:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
         <div>Area Incharges: <b>${haveA}</b> of ${nA}<div class="bar"><i style="width:${pc(haveA, nA)}%"></i></div></div>
@@ -203,25 +209,25 @@ function renderBoard() {
     const drv = drivers.find(d => d.aic_staff_id === a.id), mine = teams.filter(t => t.aic_staff_id === a.id);
     const isCol = collapsedAics.has(a.id);
     h += `<div class="aic"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
-        <div><button class="btn small ghost" onclick="toggleAic('${a.id}')" title="Show or hide this Area Incharge's driver and teams">${isCol ? "▸" : "▾"}</button> <span class="tag">AIC ${n}</span> <span class="big">${esc(a.full_name)}</span> ${a.status !== "active" ? badge(a.status) : ""}<br><span class="muted">${esc([a.official_designation, a.department, a.place_of_posting].filter(Boolean).join(" · "))}</span><br><span class="muted">${esc(a.phone)} · ${cnicLine(a)}</span><br><span class="muted">${a.area_map_path ? `Area map ✓ <a href="#" onclick="viewAreaMap('${a.area_map_path}');return false;">View</a>` : `<b style="color:#9b1c1c">Area map missing</b>`}</span></div>
+        <div><button class="btn small ghost" onclick="toggleAic('${a.id}')" title="Show or hide this Area Incharge's driver and teams">${isCol ? "▸" : "▾"}</button> <span class="tag">AIC ${n}</span> <span class="big">${esc(a.full_name)}</span> ${a.status !== "active" ? badge(a.status) : ""}<br><span class="muted">${esc([a.official_designation, a.department, a.place_of_posting].filter(Boolean).join(" · "))}</span><br><span class="muted">${esc(a.phone)} · ${cnicLine(a)}</span> ${cnicBox(a)}<br><span class="muted">${a.area_map_path ? `Area map ✓ <a href="#" onclick="viewAreaMap('${a.area_map_path}');return false;">View</a>` : `<b style="color:#9b1c1c">Area map missing</b>`}</span></div>
         <div><button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n},staff:'${a.id}'})">Edit</button>
           <button class="btn small ghost" onclick="openTeamPicker('${a.id}')">+ Add team</button>
           <button class="btn small ghost" style="color:#9b1c1c;" onclick="deleteStaff('${a.id}','aic')">Delete AIC</button></div></div>
       ${isCol ? `<p class="muted" style="margin:.4rem 0 0;">${mine.length} team(s)${drv ? " · driver " + esc(drv.full_name) : ""} — hidden. Press ▸ to show.</p>` : `
-      <div style="margin-top:.3rem;">Driver: ${drv ? `<b>${esc(drv.full_name)}</b> <span class="muted">${esc(drv.father_name ? "s/o " + drv.father_name + " · " : "")}${esc(drv.phone || "")} · ${cnicLine(drv)}</span> <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n},staff:'${drv.id}'})">Edit</button> <button class="btn small ghost" style="color:#9b1c1c;" onclick="deleteStaff('${drv.id}','driver')">Delete driver</button>`
+      <div style="margin-top:.3rem;">Driver: ${drv ? `<b>${esc(drv.full_name)}</b> <span class="muted">${esc(drv.father_name ? "s/o " + drv.father_name + " · " : "")}${esc(drv.phone || "")} · ${cnicLine(drv)}</span> ${cnicBox(drv)} <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n},staff:'${drv.id}'})">Edit</button> <button class="btn small ghost" style="color:#9b1c1c;" onclick="deleteStaff('${drv.id}','driver')">Delete driver</button>`
         : `<span class="muted">none</span> <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n}})">+ Add driver</button>`}</div>
       ${mine.map(teamHtml).join("") || `<p class="muted" style="margin:.5rem 0 0;">No teams yet — press “+ Add team”.</p>`}`}</div>`;
   }
   const loose = teams.filter(t => !t.aic_staff_id);
   if (loose.length) h += `<div class="card"><b>Teams without an Area Incharge:</b> ${loose.map(t => t.team_no).join(", ")}</div>`;
-  $("board").innerHTML = h;
+  $("board").innerHTML = h; fillCnicPics();
 }
 function teamHtml(t) {
   const slot = (i) => { const m = t.active.find(x => x.member_no === i);
     if (!m) return `<div class="slot free"><span>Member ${i} — empty</span><button class="btn small" onclick="openPerson({kind:'member',team:'${t.id}'})">+ Add</button></div>`;
     const s = m.staff, f = s.cnic_pic_front_path, b = s.cnic_pic_back_path;
     return `<div class="slot"><b>${esc(s.full_name)}</b><br><span class="muted">${esc(s.phone)}</span><br>
-      <span class="muted">${cnicLine(s)}</span><br>
+      <span class="muted">${cnicLine(s)}</span> ${cnicBox(s)}<br>
       <button class="btn small" onclick="openPerson({kind:'member',staff:'${s.id}',team:'${t.id}'})">Edit</button>
       <button class="btn small ghost" onclick="openAdjust('${s.id}')">Move / change</button>
       <button class="btn small ghost" onclick="openPerson({kind:'member',team:'${t.id}',replace:'${s.id}'})">Replace</button></div>`; };
@@ -437,6 +443,28 @@ async function saveCnic(rec, front, back) {
     upd[col] = path; }
   if (Object.keys(upd).length) { const { error } = await supabaseClient.from("staff").update(upd).eq("id", rec.id); if (error) return error.message; Object.assign(rec, upd); }
   return null;
+}
+function cnicBox(s) { return `<span class="cnicbtn"><button class="btn small ghost" type="button" onclick="viewCnic('${s.id}')">View CNIC</button></span> <span class="cnicpics" data-sid="${s.id}"></span>`; }
+async function fillCnicPics() {
+  const els = [...document.querySelectorAll("#board .cnicpics[data-sid]")]; if (!els.length) return;
+  const by = new Map(); [B.ucmo, ...B.aics, ...B.drivers].filter(Boolean).forEach(x => by.set(x.id, x)); B.teams.forEach(t => (t.active || []).forEach(m => by.set(m.staff.id, m.staff)));
+  const paths = []; els.forEach(e => { const x = by.get(e.dataset.sid); if (x) [x.cnic_pic_front_path, x.cnic_pic_back_path].forEach(q => q && paths.push(q)); });
+  if (!paths.length) return;
+  const { data } = await supabaseClient.storage.from("staff-documents").createSignedUrls([...new Set(paths)], 1800);
+  const url = new Map((data || []).map(d => [d.path, d.signedUrl]));
+  els.forEach(e => { const x = by.get(e.dataset.sid); if (!x) return;
+    e.innerHTML = [["Front", x.cnic_pic_front_path], ["Back", x.cnic_pic_back_path]].filter(([, q]) => url.get(q)).map(([l, q]) => `<img src="${url.get(q)}" alt="CNIC ${l}" title="CNIC ${l} — click to enlarge" onclick="viewCnic('${e.dataset.sid}')">`).join(""); });
+}
+async function viewCnic(id) {
+  const { data: r, error } = await supabaseClient.from("staff").select("full_name, cnic, cnic_pic_front_path, cnic_pic_back_path").eq("id", id).single();
+  if (error || !r) return alert("Could not load this person's CNIC pictures");
+  const ps = [r.cnic_pic_front_path, r.cnic_pic_back_path].filter(Boolean);
+  const { data } = ps.length ? await supabaseClient.storage.from("staff-documents").createSignedUrls(ps, 900) : { data: [] };
+  const u = new Map((data || []).map(d => [d.path, d.signedUrl]));
+  let box = document.getElementById("cnicBox"); if (!box) { box = document.createElement("div"); box.id = "cnicBox"; document.body.appendChild(box); box.addEventListener("click", (e) => { if (e.target === box || e.target.dataset.close) box.style.display = "none"; }); document.addEventListener("keydown", (e) => { if (e.key === "Escape") box.style.display = "none"; }); }
+  const img = (l, q) => q && u.get(q) ? `<div><div class="muted" style="margin-bottom:3px"><b>${l}</b> · <a href="${u.get(q)}" target="_blank" rel="noopener">open in new tab</a></div><img src="${u.get(q)}" alt="CNIC ${l}"></div>` : `<div><div class="muted"><b>${l}</b></div><p style="color:#9b1c1c"><b>Picture not uploaded yet</b></p></div>`;
+  box.innerHTML = `<div class="inner"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px"><div><b>${esc(r.full_name)}</b> <span class="muted">· CNIC ${esc(r.cnic)}</span></div><button class="btn small" type="button" data-close="1">Close ✕</button></div><div class="pair">${img("Front", r.cnic_pic_front_path)}${img("Back", r.cnic_pic_back_path)}</div></div>`;
+  box.style.display = "flex";
 }
 async function viewAreaMap(path) { const u = await signedUrl(path); if (u) window.open(u, "_blank"); else alert("Could not open the map"); }
 async function signedUrl(path) { const { data } = await supabaseClient.storage.from("staff-documents").createSignedUrl(path, 300); return data?.signedUrl || null; }
@@ -659,7 +687,7 @@ async function loadRows() {
   $("rows").innerHTML = (data || []).map(r => { const tm = (r.team_members || []).find(m => m.active);
     const kind = { ucmo: "ucmo", aic: "aic", driver: "driver", team_member: "member" }[r.designation];
     return `<tr><td>${esc(r.full_name)}</td><td>${DESIGNATIONS[r.designation]}${r.aic_no ? " " + r.aic_no : ""}</td><td>${esc(r.cnic)}</td><td>${esc(r.phone)}</td><td>${tm ? "Team " + tm.teams.team_no : "—"}</td><td>${badge(r.status)}</td>
-      <td><button class="btn small ghost" onclick="findEdit('${r.id}')">Open</button></td></tr>`; }).join("") || `<tr><td colspan="7" class="muted">No staff found.</td></tr>`;
+      <td><button class="btn small ghost" onclick="viewCnic('${r.id}')">View CNIC</button> <button class="btn small ghost" onclick="findEdit('${r.id}')">Open</button></td></tr>`; }).join("") || `<tr><td colspan="7" class="muted">No staff found.</td></tr>`;
 }
 async function findEdit(id) {
   const { data: s } = await supabaseClient.from("staff").select("id, designation, aic_no, aic_staff_id, team_members(active, team_id)").eq("id", id).single();
