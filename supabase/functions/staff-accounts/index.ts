@@ -10,7 +10,7 @@ const cors = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
-const ROLE_FOR: Record<string, string> = { aic: "aic", team_member: "team_member" };
+const ROLE_FOR: Record<string, string> = { aic: "aic", team_member: "team_member", ucmo: "ucmo" };   // ucmo logins: administrators only
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -38,7 +38,8 @@ Deno.serve(async (req) => {
     if (!s) { fail("Staff record not found"); continue; }
     if (cp.role === "ucmo" && (!cp.uc_id || s.uc_id !== cp.uc_id)) { fail("Not in your union council", s.full_name); continue; }
     const role = ROLE_FOR[s.designation];
-    if (!role) { fail("Logins are only for Area Incharges and team members", s.full_name); continue; }
+    if (!role) { fail("Logins are only for UCMOs, Area Incharges and team members", s.full_name); continue; }
+    if (role === "ucmo" && cp.role !== "admin") { fail("Only an administrator can manage a UCMO login", s.full_name); continue; }
     const digits = String(s.cnic ?? "").replace(/\D/g, "");
     if (!/^\d{13}$/.test(digits)) { fail("CNIC is missing or is not 13 digits — correct it in Staff Management first", s.full_name); continue; }
     const email = `${digits}@cnic.polio.local`;
@@ -56,7 +57,7 @@ Deno.serve(async (req) => {
     }
 
     if (!prof) { fail("No login exists yet — create it first", s.full_name); continue; }
-    if (!["aic", "team_member"].includes(prof.role)) { fail("This account is not an Area Incharge / team login", s.full_name); continue; }
+    if (prof.role !== role) { fail("This account is not a " + role + " login", s.full_name); continue; }
     if (action === "reset") {
       const { error: ue } = await admin.auth.admin.updateUserById(prof.id, { email, email_confirm: true, password: digits });
       if (ue) { fail(ue.message, s.full_name); continue; }
