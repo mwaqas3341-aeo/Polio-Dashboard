@@ -222,7 +222,12 @@ async function submitPlan() {
   const err = $("pErr");
   const { error } = await supabaseClient.from("operational_plans").update({ status: "submitted" }).eq("id", ed.plan.id);
   if (error) { err.textContent = msg(error); err.style.display = "block"; return; }
-  await reloadEd(); showTab("plan"); alert("Operational Plan submitted.");
+  await reloadEd(); showTab("plan");
+  const pl = ed.plan || {}, miss = [];
+  if (!(pl.village_area || "").trim()) miss.push("village / area name"); if (!(pl.head_first_family || "").trim()) miss.push("1st family head"); if (!(pl.head_last_family || "").trim()) miss.push("last family head");
+  if (pl.total_households == null || pl.children_households_1_5 == null || pl.children_under_1 == null) miss.push("some household / children figures");
+  if (ed.pics.length < 3) miss.push(`pictures (${ed.pics.length}/3)`); if (!dayMaps[ed.day]) miss.push(`Day ${ed.day} map`); if (!aic.area_map_path) miss.push("AIC Area Map");
+  alert("Operational Plan submitted with the information available." + (miss.length ? "\n\nStill missing (you can add these later; ask your UCMO to reopen if it is locked): " + miss.join(", ") + "." : ""));
 }
 async function reopenPlan() { if (!confirm("Reopen this plan so the AIC can correct it?")) return; const { error } = await supabaseClient.from("operational_plans").update({ status: "draft" }).eq("id", ed.plan.id); if (error) return alert(msg(error)); await reloadEd(); showTab("plan"); }
 
@@ -230,7 +235,7 @@ async function reopenPlan() { if (!confirm("Reopen this plan so the AIC can corr
 function tabPics() {
   if (!ed.plan) { $("pBody").innerHTML = `<p>Save the plan first (tab 1), then add its pictures here.</p>`; return; }
   const ro = locked();
-  $("pBody").innerHTML = `<p class="muted">At least 3 pictures of the Operational Plan are needed before it can be submitted. Large photos are shrunk automatically.</p>
+  $("pBody").innerHTML = `<p class="muted">Please add up to 5 pictures of the Operational Plan (at least 3 are recommended). You can submit without them and add them later. Large photos are shrunk automatically.</p>
     ${[1, 2, 3, 4, 5].map(n => { const p = ed.pics.find(x => x.slot === n);
       return `<div class="slot"><b>Picture ${n}${n > 3 ? " (optional)" : ""}</b> ${p ? '<span class="tag ok">Uploaded ✓</span>' : n <= 3 ? '<span class="tag bad">Missing</span>' : ""}<div id="pv${n}"></div>
         <input type="file" id="pf${n}" accept="image/jpeg,image/png" style="display:none" onchange="uploadPic(${n}, this.files[0])">
