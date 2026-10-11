@@ -17,7 +17,7 @@
   <aside class="sidebar" id="sidebar-mount"></aside>
   <main class="main">
     <div class="topbar"><h1>Login accounts — Area Incharges &amp; team leaders</h1></div>
-    <p class="muted">Each person signs in with their <b>13-digit CNIC</b> as the username and the <b>same CNIC as the first password</b>. At the first sign-in they must choose a new password (it cannot be their CNIC). Only an administrator or the UCMO of the union council can create, reset or disable these logins. Each team has <b>one login only — its team leader</b> (the leader set in Staff Management); other team members do not get logins. If a team's leader is changed, disable the old leader's login and create one for the new leader. A login needs a valid 13-digit CNIC in Staff Management.</p>
+    <p class="muted">Each person signs in with their <b>13-digit CNIC</b> as the username and the <b>same CNIC as the first password</b>. Passwords are not changed by users; only an administrator can reset them. Only an administrator or the UCMO of the union council can create, reset or disable these logins. Each team has <b>one login only — its team leader</b> (the leader set in Staff Management); other team members do not get logins. If a team's leader is changed, disable the old leader's login and create one for the new leader. A login needs a valid 13-digit CNIC in Staff Management.</p>
     <div class="card">
       <div class="form-grid">
         <div><label>Union council</label><select id="ucSel"></select></div>
@@ -83,7 +83,7 @@ async function load() {
 function status(p) { const f = p.prof; if (!f) return ["none", `<span class="badge2 warn">No login</span>`];
   if (p.designation === "team_member" && !p.isLeader) return ["off", `<span class="badge2 off">Has a login but is no longer a team leader — disable it</span>`];
   if (f.login_disabled) return ["off", `<span class="badge2 off">Disabled</span>`];
-  return f.must_change_password ? ["must", `<span class="badge2 warn">Created — first password not changed yet</span>`] : ["has", `<span class="badge2 ok">Active</span>`]; }
+  return ["has", `<span class="badge2 ok">Active</span>`]; }
 
 function draw() {
   const kind = $("kindSel").value, st = $("stSel").value, q = $("q").value.trim().toLowerCase();
@@ -98,7 +98,7 @@ function draw() {
 async function act(action, allMissing) {
   let ids = allMissing ? P.filter(p => !p.prof).map(p => p.id) : [...document.querySelectorAll(".pick:checked")].map(c => c.value);
   if (!ids.length) { alert(allMissing ? "Everyone listed already has a login." : "Tick at least one person first."); return; }
-  const text = { create: `Create ${ids.length} login(s)? Username and first password will be each person's CNIC.`, reset: `Reset ${ids.length} password(s) to the CNIC? They must choose a new one at next sign-in.`, disable: `Disable ${ids.length} login(s)? They will not be able to sign in.`, enable: `Enable ${ids.length} login(s)?` }[action];
+  const text = { create: `Create ${ids.length} login(s)? Username and first password will be each person's CNIC.`, reset: `Reset ${ids.length} password(s) to the CNIC?`, disable: `Disable ${ids.length} login(s)? They will not be able to sign in.`, enable: `Enable ${ids.length} login(s)?` }[action];
   if (!confirm(text)) return;
   $("busy").textContent = "Working…"; const out = [];
   for (let i = 0; i < ids.length; i += 50) {

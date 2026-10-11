@@ -21,11 +21,6 @@ async function requireAuth() {
       window.location.href = inPages ? "../setup-profile.html" : "setup-profile.html";
       return null;
     }
-    if (profile.must_change_password && page !== "change-password.html") {
-      const inPages = window.location.pathname.includes("/pages/");
-      window.location.href = inPages ? "../change-password.html" : "change-password.html";
-      return null;
-    }
   }
   return session;
 }

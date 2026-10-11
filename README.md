@@ -50,7 +50,6 @@ and whether the Google Form and 2A form are both live data-entry channels).
 
 ```
 index.html                   Login (CNIC or email + password, Supabase Auth)
-change-password.html          Change your own password
 setup-profile.html            First-login profile setup
 dashboard.html                KPI overview + campaign list
 pages/
