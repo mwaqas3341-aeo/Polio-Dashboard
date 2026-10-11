@@ -5,9 +5,9 @@ const CARD_W_MM = 85.60, CARD_H_MM = 53.98, CARD_SCALE = 1.05;
 
 function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn }) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const PW = 210, PH = 297, M = 10, HEAD_BOTTOM = 26.5, FOOT_Y = 292, BOTTOM = 287;
+  const PW = 210, PH = 297, M = 10, HEAD_BOTTOM = 25.5, FOOT_Y = 293, BOTTOM = 289.5;
   const FW = CARD_W_MM * CARD_SCALE, FH = CARD_H_MM * CARD_SCALE, GAP = 6;
-  const FRAME_TOP = 19, BLOCK_H = FRAME_TOP + FH + 4;   // name, details, FRONT/BACK labels, frames, space
+  const FRAME_TOP = 7.5, BLOCK_H = FRAME_TOP + FH + 1.6;   // bold name / cell line, frames, small gap -> 4 CNICs per page
   const stats = { people: 0, withBoth: 0, missing: 0, pages: 1, blocks: [] };
   let y = HEAD_BOTTOM, curGroup = "", curTeam = "";
 
@@ -22,8 +22,8 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn })
   header();
   const ensure = (h) => { if (y + h > BOTTOM) newPage(); };
 
-  const drawFrame = (x, yy, label, img) => {
-    doc.setFont("helvetica", "bold").setFontSize(8).setTextColor(90); doc.text(label, x, yy - 1);
+  const drawFrame = (x, yy, label, img, caption) => {
+    doc.setFont("helvetica", "bold").setFontSize(12.5).setTextColor(10); doc.text(String(caption || ""), x, yy - 1.8, { maxWidth: FW });   // bold line above the picture: name over the front, cell number over the back
     doc.setDrawColor(120).setLineWidth(0.25);
     if (!img) {
       doc.setLineDashPattern([1.2, 1.2], 0); doc.rect(x, yy, FW, FH); doc.setLineDashPattern([], 0);
@@ -49,13 +49,9 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn })
       for (const p of t.people) {
         ensure(BLOCK_H);
         const top = y;
-        doc.setFont("helvetica", "bold").setFontSize(11.5).setTextColor(10); doc.text(p.name || "(name missing)", M, y + 4.5, { maxWidth: PW - 2 * M });
-        doc.setFont("helvetica", "normal").setFontSize(9.5).setTextColor(40);
-        doc.text(`CNIC: ${p.cnic || "—"}      Mobile: ${p.cell || "—"}${p.father ? "      Father: " + p.father : ""}`, M, y + 10, { maxWidth: PW - 2 * M });
-        if (p.detail) { doc.setFontSize(8.5).setTextColor(100); doc.text(p.detail, M, y + 14.0, { maxWidth: PW - 2 * M }); }
         const fy = y + FRAME_TOP;
-        const a = drawFrame(M, fy, "FRONT", p.frontPath ? getImage(p.frontPath) : null);
-        const b = drawFrame(M + FW + GAP, fy, "BACK", p.backPath ? getImage(p.backPath) : null);
+        const a = drawFrame(M, fy, "FRONT", p.frontPath ? getImage(p.frontPath) : null, p.name || "(name missing)");
+        const b = drawFrame(M + FW + GAP, fy, "BACK", p.backPath ? getImage(p.backPath) : null, p.cell || "(cell no. missing)");
         stats.people++; if (a && b) stats.withBoth++; else stats.missing++;
         stats.blocks.push({ page: doc.getCurrentPageInfo ? doc.getCurrentPageInfo().pageNumber : stats.pages, top, bottom: fy + FH, name: p.name });
         y = top + BLOCK_H;
