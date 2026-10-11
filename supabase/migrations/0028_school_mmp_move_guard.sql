@@ -1,4 +1,4 @@
--- NOT YET APPLIED. Run once in the Supabase SQL editor.
+-- Applied to the live Supabase project on 2026-10-11.
 -- Editing a school / MMP assignment can now move it to another team or day. The old guard only looked at the NEW team/day,
 -- so a school could be moved OUT of a submitted Operational Plan. This checks the old position as well. Nothing else changes.
 create or replace function plan_lists_guard() returns trigger language plpgsql security definer set search_path = public as $$

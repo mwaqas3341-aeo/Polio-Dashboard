@@ -1,4 +1,4 @@
--- NOT YET APPLIED. Run once in the Supabase SQL editor (after 0028).
+-- Applied to the live Supabase project on 2026-10-11.
 -- AIC Summary MP fields that exist nowhere else in the system (DDM cards, supplies, refusals, zero-dose, madaris, ...).
 -- One row per campaign x Area Incharge; figures is a JSON object. A missing key / null = "not answered yet", never a fake zero.
 create table if not exists aic_microplan_figures (
