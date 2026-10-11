@@ -227,3 +227,10 @@ This is a static site — enable GitHub Pages on this repo (Settings → Pages
 - The Excel exports (Team Micro Plan, Logistic Plan, CNIC List, School List, Area Incharge Summary) currently use plain generic headers/column order, not the exact sheet layout (merged headers, sheet name, row grouping) from your source files — I don't have those exact formats memorized cell-for-cell, so treat these as "the right numbers, generic layout" until you compare one against the original and tell me what to fix
 - Confirm the Logistic Plan capsule/carrier assumptions above and correct the migration if needed
 - An admin UI for editing other users' profiles/roles (currently only doable directly in Supabase, or by the user themselves on first login)
+
+## 2026 supervision and UC-level formats (migration 0030 — applied)
+- `pages/supervision-forms.html` — Desk Review (41 indicators x teams, 1/0/N scoring), Field Validation (10 checks x team/day, pass/fail) and Area Incharge Tour Plan; stored in `campaign_forms` (one row per campaign x form x AIC).
+- `pages/uc-forms.html` — UC Summary (totals calculated live from AIC figures, operational plans, teams, missed children; a few typed fields) and the UC Social Mobilization Plan.
+- `pages/uc-package.html` — AIC-wise and whole-UC downloads: all AICs in one file, one file per AIC, one AIC with all teams, one AIC with each team separate, AIC pages only, UC pages only. Real PDF files or browser print; Microplan sheets are pulled from `microplan.html`.
+- `pages/maps.html` — print pages for UC Map 12MP, AIC Map 8MP and Route Map 7MP (days 1-3).
+- Look and feel follows the AEO Schools Portal (A-I-DB): dark top bar, three module groups (Campaign / Staff / Plan Management), module cards.

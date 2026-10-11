@@ -22,8 +22,12 @@
         <div class="kpi attention"><div class="value">—</div><div class="label">Missed children (uncovered)</div></div>
       </div>
 
+
+      <div class="section-title"><i class="bi bi-grid-3x3-gap-fill"></i> Modules <div class="title-line"></div></div>
+      <div class="mod-grid" id="modGrid"></div>
+
+      <div class="section-title"><i class="bi bi-flag-fill"></i> Campaigns <div class="title-line"></div></div>
       <div class="card">
-        <h2>Campaigns</h2>
         <div class="table-wrap">
           <table id="campaignsTable">
             <thead><tr><th>Name</th><th>Type</th><th>Dates</th><th>Status</th><th></th></tr></thead>
@@ -43,6 +47,9 @@
       const session = await requireAuth();
       if (!session) return;
       renderSidebar("dashboard.html");
+      const DESC = { campaign: "Campaign details, dates, days and daily operations", staff: "UCMOs, Area Incharges, teams, drivers, CNICs and staff documents", plan: "Microplans, operational plans, maps, school lists, supervision and the complete AIC / UC package" };
+      document.getElementById("modGrid").innerHTML = NAV_GROUPS.map(g => `<div class="module-card m-${g.key}"><i class="bi ${g.icon} mc-icon"></i><div class="mc-title">${g.label}</div><div class="mc-desc">${DESC[g.key]}</div>
+        <div class="mc-links">${g.links.map(l => `<a href="${l.href}"><i class="bi ${l.icon}"></i>${l.label}</a>`).join("")}</div></div>`).join("");
 
       const profile = await loadCurrentProfile();
       if (!profile) {

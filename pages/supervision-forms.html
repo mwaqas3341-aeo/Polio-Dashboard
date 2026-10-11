@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Desk review, validation and tour plan — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css"><link rel="stylesheet" href="../assets/css/forms.css">
+<style> .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; } .tabs button { border:1.5px solid var(--b0); background:#fff; border-radius:999px; padding:7px 16px; font-weight:800; font-size:.82rem; cursor:pointer; color:var(--t2); } .tabs button.on { background:var(--brand); border-color:var(--brand); color:#fff; } .saved { color:var(--ok); font-weight:700; font-size:.85rem; } </style>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar-mount"></aside>
+  <main class="main">
+    <div class="topbar"><h1>Desk Review · Field Validation · Tour Plan</h1></div>
+    <p class="muted">Official 2026 formats. Choose the Area Incharge, fill the form for each team, then Save. Scores and totals are calculated automatically. Print gives a clean A4 landscape page you can save as PDF.</p>
+    <div class="dl-panel noprint"><div class="dl-row">
+      <div><label>Campaign</label><select id="campSel"></select></div>
+      <div><label>Area Incharge</label><select id="aicSel"></select></div>
+      <div style="flex:0 0 auto;display:flex;gap:6px;flex-wrap:wrap"><button class="btn" id="saveBtn"><i class="bi bi-save"></i> Save</button><button class="btn secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print / PDF</button><button class="btn secondary" id="xlsBtn"><i class="bi bi-file-earmark-excel"></i> Excel</button></div>
+    </div><div id="msg" class="muted" style="margin-top:6px"></div></div>
+    <div class="tabs noprint" id="tabs"><button data-t="desk" class="on">Desk Review</button><button data-t="fv">Field Validation</button><button data-t="tour">Tour Plan</button></div>
+    <div id="sheet"><p class="muted">Loading…</p></div>
+  </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="../assets/js/config.js"></script><script src="../assets/js/supabaseClient.js"></script><script src="../assets/js/nav.js"></script><script src="../assets/js/forms.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let B = null, tab = "desk", me = null, canEdit = false;
+const TYPE = { desk: "desk_review", fv: "field_validation", tour: "tour_plan" };
+const curAic = () => B.aics.find(a => a.id === $("aicSel").value);
+(async () => {
+  const session = await requireAuth(); if (!session) return; renderSidebar("supervision-forms.html");
+  { const { data: pr } = await supabaseClient.from("profiles").select("role, staff_id, uc_id").eq("id", session.user.id).single(); me = pr || { role: "viewer" }; } canEdit = ["admin", "district_coordinator", "ucmo", "aic", "encoder"].includes(me?.role); if (!canEdit) $("saveBtn").style.display = "none";
+  const { data: cs } = await supabaseClient.from("campaigns").select("id, name").order("start_date", { ascending: false });
+  $("campSel").innerHTML = (cs || []).map(c => `<option value="${c.id}">${FS.esc(c.name)}</option>`).join("") || `<option value="">No campaign yet</option>`;
+  $("campSel").onchange = load; $("aicSel").onchange = draw;
+  $("tabs").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; tab = b.dataset.t; [...$("tabs").children].forEach(x => x.classList.toggle("on", x === b)); draw(); };
+  $("saveBtn").onclick = save; $("xlsBtn").onclick = xls;
+  $("sheet").addEventListener("change", onChange); $("sheet").addEventListener("input", (e) => { if (e.target.matches("[data-dh],[data-fh],[data-tp]") && e.target.tagName !== "SELECT") onChange(e, true); });
+  if ($("campSel").value) await load(); else $("sheet").innerHTML = `<p class="muted">Create a campaign first.</p>`;
+})();
+async function load() {
+  $("sheet").innerHTML = `<p class="muted">Loading…</p>`;
+  B = await FS.loadBase($("campSel").value);
+  $("aicSel").innerHTML = B.aics.map(a => `<option value="${a.id}">AIC ${FS.esc(a.aic_no)} — ${FS.esc(a.full_name)}</option>`).join("") || `<option value="">No Area Incharge</option>`;
+  if (me?.role === "aic" && me.staff_id) { $("aicSel").value = me.staff_id; $("aicSel").disabled = true; }
+  draw();
+}
+function draw() {
+  const a = curAic(); if (!a) { $("sheet").innerHTML = `<p class="muted">No Area Incharge found for this campaign's union council.</p>`; return; }
+  $("sheet").innerHTML = tab === "desk" ? FS.renderDesk(B, a, canEdit) : tab === "fv" ? FS.renderFV(B, a, canEdit) : FS.renderTour(B, a, canEdit);
+}
+let t0; function onChange(e, typing) {
+  const a = curAic(), el = e.target, ds = el.dataset; if (!a) return;
+  const type = TYPE[tab];
+  FS.draft(B, type, a.id, (d) => {
+    if (ds.dr !== undefined) { const [tn, i] = ds.dr.split("|"); d.answers = d.answers || {}; (d.answers[tn] = d.answers[tn] || {})[i] = el.value; }
+    else if (ds.dh) d[ds.dh] = el.value;
+    else if (ds.fv !== undefined) { const [tn, i] = ds.fv.split("|"); d.teams = d.teams || {}; const t = (d.teams[tn] = d.teams[tn] || { a: {} }); (t.a = t.a || {})[i] = el.value; }
+    else if (ds.fvday !== undefined) { d.teams = d.teams || {}; const t = (d.teams[ds.fvday] = d.teams[ds.fvday] || { a: {} }); t.day = el.value; }
+    else if (ds.fh) d[ds.fh] = el.value;
+    else if (ds.tp) { const [day, tn, f] = ds.tp.split("|"); d.days = d.days || {}; d.days[day] = d.days[day] || {}; const t = FS.teamsOf(B, a.id).find(x => String(x.team_no) === tn), idx = FS.teamsOf(B, a.id).indexOf(t);
+      const cur = d.days[day][tn] || FS.tourDefault(B, t, Number(day), idx); d.days[day][tn] = { ...cur, [f]: el.value }; }
+  });
+  $("msg").textContent = "Unsaved changes";
+  if (!typing && (ds.dr !== undefined || ds.fv !== undefined || ds.fvday !== undefined)) { const y = window.scrollY; draw(); window.scrollTo(0, y); }
+}
+async function save() {
+  const a = curAic(); if (!a) return; $("saveBtn").disabled = true;
+  try { await FS.saveForm(B, TYPE[tab], a.id, FS.getForm(B, TYPE[tab], a.id)); $("msg").innerHTML = `<span class="saved">Saved ✓</span>`; }
+  catch (e) { $("msg").innerHTML = `<span class="error-text">Could not save: ${FS.esc(e.message || e)}</span>`; }
+  $("saveBtn").disabled = false;
+}
+function xls() {
+  const a = curAic(); if (!a) return; const ts = FS.teamsOf(B, a.id), D = FS.getForm(B, TYPE[tab], a.id); let rows = [];
+  if (tab === "desk") { rows = [["Component", "#", "Indicator", ...ts.map(t => "Team " + t.team_no), "Total Score"]].concat(FS.DESK_FLAT.map((r, i) => [r.g, i + 1, r.t, ...ts.map(t => ((D.answers || {})[t.team_no] || {})[i] ?? ""), ts.filter(t => ((D.answers || {})[t.team_no] || {})[i] === "1").length]));
+    rows.push(["", "", "Overall %", ...ts.map(t => { const s = FS.score(FS.DESK_FLAT.map((_, i) => ((D.answers || {})[t.team_no] || {})[i])); return s.pct === null ? "" : s.pct + "%"; })]); }
+  else if (tab === "fv") { rows = [["#", "Variable", ...ts.map(t => "Team " + t.team_no + " (Day " + (((D.teams || {})[t.team_no] || {}).day || "") + ")")]].concat(FS.FV.map((v, i) => [i + 1, v, ...ts.map(t => (((D.teams || {})[t.team_no] || {}).a || {})[i] ?? "")]));
+    rows.push(["", "Result %", ...ts.map(t => { const s = FS.score(FS.FV.map((_, i) => { const v = (((D.teams || {})[t.team_no] || {}).a || {})[i]; return v === "Yes" ? "1" : v === "No" ? "0" : ""; })); return s.pct === null ? "" : s.pct + "%"; })]); }
+  else { rows = [["Day", "Team", "Area", "First visit", "Second visit", "Reason", "Remarks"]]; const days = Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7);
+    for (let d = 1; d <= days; d++) ts.forEach((t, i) => { const c = { ...FS.tourDefault(B, t, d, i), ...(((D.days || {})[d] || {})[t.team_no] || {}) }; rows.push([d, t.team_no, c.area, c.t1, c.t2, c.reason, c.remark]); }); }
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), TYPE[tab].slice(0, 28)); XLSX.writeFile(wb, `${TYPE[tab]}_AIC${a.aic_no}.xlsx`);
+}
+</script>
+</body>
+</html>

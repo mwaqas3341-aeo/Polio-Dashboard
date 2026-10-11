@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UC summary and social mobilization — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css"><link rel="stylesheet" href="../assets/css/forms.css">
+<style> .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; } .tabs button { border:1.5px solid var(--b0); background:#fff; border-radius:999px; padding:7px 16px; font-weight:800; font-size:.82rem; cursor:pointer; color:var(--t2); } .tabs button.on { background:var(--brand); border-color:var(--brand); color:#fff; } .saved { color:var(--ok); font-weight:700; font-size:.85rem; } </style>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar-mount"></aside>
+  <main class="main">
+    <div class="topbar"><h1>UC Summary · Social Mobilization Plan</h1></div>
+    <p class="muted">UC Summary totals are calculated from the AIC figures, operational plans, teams and missed-children records. Only the few blue boxes (names, dates, phone numbers) are typed. The Social Mobilization Plan is typed by the UCMO. Only the UCMO or an admin can save these two forms.</p>
+    <div class="dl-panel noprint"><div class="dl-row">
+      <div><label>Campaign</label><select id="campSel"></select></div>
+      <div style="flex:0 0 auto;display:flex;gap:6px;flex-wrap:wrap"><button class="btn" id="saveBtn"><i class="bi bi-save"></i> Save</button><button class="btn secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print / PDF</button><button class="btn secondary" id="xlsBtn"><i class="bi bi-file-earmark-excel"></i> Excel</button></div>
+    </div><div id="msg" class="muted" style="margin-top:6px"></div></div>
+    <div class="tabs noprint" id="tabs"><button data-t="uc" class="on">UC Summary</button><button data-t="sm">Social Mobilization Plan</button></div>
+    <div id="sheet"><p class="muted">Loading…</p></div>
+  </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="../assets/js/config.js"></script><script src="../assets/js/supabaseClient.js"></script><script src="../assets/js/nav.js"></script><script src="../assets/js/forms.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let B = null, tab = "uc", me = null, canEdit = false;
+const TYPE = { uc: "uc_summary", sm: "sm_plan" };
+(async () => {
+  const session = await requireAuth(); if (!session) return; renderSidebar("uc-forms.html");
+  { const { data: pr } = await supabaseClient.from("profiles").select("role, staff_id, uc_id").eq("id", session.user.id).single(); me = pr || { role: "viewer" }; } canEdit = ["admin", "district_coordinator", "ucmo"].includes(me?.role);
+  if (!canEdit) { $("saveBtn").style.display = "none"; }
+  const { data: cs } = await supabaseClient.from("campaigns").select("id, name").order("start_date", { ascending: false });
+  $("campSel").innerHTML = (cs || []).map(c => `<option value="${c.id}">${FS.esc(c.name)}</option>`).join("") || `<option value="">No campaign yet</option>`;
+  $("campSel").onchange = load;
+  $("tabs").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; tab = b.dataset.t; [...$("tabs").children].forEach(x => x.classList.toggle("on", x === b)); draw(); };
+  $("saveBtn").onclick = save; $("xlsBtn").onclick = xls;
+  $("sheet").addEventListener("change", (e) => onChange(e)); $("sheet").addEventListener("input", (e) => onChange(e, true)); $("sheet").addEventListener("click", (e) => { const b = e.target.closest("[data-smadd]"); if (!b) return; FS.draft(B, "sm_plan", null, d => { d.rows = d.rows || {}; const k = b.dataset.smadd, n = Math.max(FS.SM.find(s => s.k === k).rows, (d.rows[k] || []).length) + 1; d.rows[k] = d.rows[k] || []; d.rows[k][n - 1] = d.rows[k][n - 1] || []; }); draw(); });
+  if ($("campSel").value) await load(); else $("sheet").innerHTML = `<p class="muted">Create a campaign first.</p>`;
+})();
+async function load() { $("sheet").innerHTML = `<p class="muted">Loading…</p>`; B = await FS.loadBase($("campSel").value); draw(); }
+function draw() { $("sheet").innerHTML = tab === "uc" ? FS.renderUcSummary(B, canEdit) : FS.renderSm(B, canEdit); }
+function onChange(e, typing) {
+  const ds = e.target.dataset; if (!canEdit || !B) return; if (typing && e.target.tagName === "SELECT") return;
+  if (ds.uc) FS.draft(B, "uc_summary", null, d => { d[ds.uc] = e.target.value; });
+  else if (ds.smh) FS.draft(B, "sm_plan", null, d => { d.head = d.head || {}; d.head[ds.smh] = e.target.value; });
+  else if (ds.sm) { const [k, r, c] = ds.sm.split("|"); FS.draft(B, "sm_plan", null, d => { d.rows = d.rows || {}; d.rows[k] = d.rows[k] || []; d.rows[k][r] = d.rows[k][r] || []; d.rows[k][r][c] = e.target.value; }); }
+  else return; $("msg").textContent = "Unsaved changes";
+}
+async function save() {
+  $("saveBtn").disabled = true;
+  try { await FS.saveForm(B, TYPE[tab], null, FS.getForm(B, TYPE[tab], null)); $("msg").innerHTML = `<span class="saved">Saved ✓</span>`; }
+  catch (e) { $("msg").innerHTML = `<span class="error-text">Could not save: ${FS.esc(e.message || e)}</span>`; }
+  $("saveBtn").disabled = false;
+}
+function xls() {
+  let rows = [];
+  if (tab === "uc") { const A = FS.ucAuto(B), M = FS.getForm(B, "uc_summary", null); rows = [["Field", "Value"], ...Object.entries(A), ["--- typed fields ---", ""], ...Object.entries(M)]; }
+  else { const M = FS.getForm(B, "sm_plan", null); FS.SM.forEach(s => { rows.push([s.en], s.cols); ((M.rows || {})[s.k] || []).forEach(r => rows.push(r)); rows.push([]); }); }
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), TYPE[tab].slice(0, 28)); XLSX.writeFile(wb, `${TYPE[tab]}_${B.geo.uc || "UC"}.xlsx`);
+}
+</script>
+</body>
+</html>
