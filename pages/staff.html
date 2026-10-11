@@ -146,7 +146,7 @@ async function loadBoard() {
   const uc = ucId();
   const [{ data: plan }, { data: people }, { data: teams }] = await Promise.all([
     supabaseClient.from("uc_plans").select("total_aics, total_teams").eq("uc_id", uc).maybeSingle(),
-    supabaseClient.from("staff").select("id, uc_id, full_name, cnic, phone, designation, status, aic_no, aic_staff_id, can_have_driver, area_map_path, official_designation, department, place_of_posting, cnic_pic_front_path, cnic_pic_back_path, cnic_expiry, cnic_lifetime").eq("uc_id", uc).in("designation", ["ucmo", "aic", "driver"]).order("aic_no"),
+    supabaseClient.from("staff").select("id, uc_id, full_name, father_name, cnic, phone, designation, status, aic_no, aic_staff_id, can_have_driver, area_map_path, official_designation, department, place_of_posting, cnic_pic_front_path, cnic_pic_back_path, cnic_expiry, cnic_lifetime").eq("uc_id", uc).in("designation", ["ucmo", "aic", "driver"]).order("aic_no"),
     supabaseClient.from("teams").select("id, team_no, team_type, aic_staff_id, team_members(id, active, member_no, staff(id, full_name, phone, status, cnic_pic_front_path, cnic_pic_back_path, cnic_expiry, cnic_lifetime))").eq("uc_id", uc).order("team_no")]);
   const ucmo = (people || []).find(p => p.designation === "ucmo" && p.status === "active") || null;
   const aics = (people || []).filter(p => p.designation === "aic");
@@ -154,6 +154,33 @@ async function loadBoard() {
   B = { uc, plan, ucmo, aics, drivers, teams: (teams || []).map(t => ({ ...t, active: (t.team_members || []).filter(m => m.active).sort((a, b) => a.member_no - b.member_no) })) };
   renderBoard();
 }
+let collapsedAics = new Set(); try { collapsedAics = new Set(JSON.parse(localStorage.getItem("staffCollapsedAics") || "[]")); } catch (e) {}
+function saveCollapsed() { try { localStorage.setItem("staffCollapsedAics", JSON.stringify([...collapsedAics])); } catch (e) {} }
+function toggleAic(id) { collapsedAics.has(id) ? collapsedAics.delete(id) : collapsedAics.add(id); saveCollapsed(); renderBoard(); }
+function setAllAics(collapse) { collapsedAics = collapse ? new Set(B.aics.map(a => a.id)) : new Set(); saveCollapsed(); renderBoard(); }
+
+/* Delete an Area Incharge or a driver. The database refuses anything still linked to teams or campaign records, so nothing is lost by accident. */
+async function deleteStaff(id, kind) {
+  const who = kind === "aic" ? B.aics.find(a => a.id === id) : B.drivers.find(d => d.id === id); if (!who) return;
+  const label = kind === "aic" ? "Area Incharge" : "driver";
+  if (kind === "aic") {
+    const teams = B.teams.filter(t => t.aic_staff_id === id), drv = B.drivers.find(d => d.aic_staff_id === id);
+    if (teams.length) return alert(`${who.full_name} still has ${teams.length} team(s) (${teams.map(t => "Team " + t.team_no).join(", ")}).\n\nA team cannot be left without an Area Incharge. Delete the empty teams, or move them to another Area Incharge first, then delete this Area Incharge.`);
+    if (drv) { if (!confirm(`${who.full_name} has the driver ${drv.full_name}. Deleting the Area Incharge will also delete this driver.\n\nDelete both?`)) return; const r = await removeStaffRow(drv, "driver"); if (r) return alert(r); }
+  }
+  if (!confirm(`Delete ${label} ${who.full_name} (CNIC ${who.cnic}) permanently?\n\nThis cannot be undone. The deletion is written to the audit log.`)) return;
+  const err = await removeStaffRow(who, label); if (err) return alert(err);
+  await loadBoard();
+}
+async function removeStaffRow(who, label) {
+  const { data, error } = await supabaseClient.from("staff").delete().eq("id", who.id).select("id");
+  if (error) { if (error.code === "23503") return `${who.full_name} is linked to other records (for example campaign maps, DDM cards or staff-change history), so the ${label} cannot be deleted.\n\nOpen Edit and set the Status to Inactive instead — the records are kept and the person no longer appears as active.`; return "Could not delete: " + (error.message || error); }
+  if (!data || !data.length) return `You are not allowed to delete this ${label}. Only the UCMO, a district coordinator or an administrator can.`;
+  const files = [who.cnic_pic_front_path, who.cnic_pic_back_path, who.area_map_path].filter(Boolean);   // clean up pictures only after the record is gone
+  if (files.length) await supabaseClient.storage.from("staff-documents").remove(files).catch(() => {});
+  return null;
+}
+
 function renderBoard() {
   const { plan, ucmo, aics, drivers, teams } = B;
   if (!ucmo) { $("board").innerHTML = `<div class="card"><h2>Step 1 — Add the UCMO</h2><p>Start with the UCMO of this union council. You will be asked how many Area Incharges and how many teams there will be.</p>
@@ -169,17 +196,21 @@ function renderBoard() {
   const untyped = teams.filter(t => !t.team_type);
   if (untyped.length) h += `<div class="card" style="border-color:#e0a0a0;"><b>${untyped.length} team(s) still need a type</b> (Fixed, Transit or Mobile). <button class="btn small" onclick="openBulkTypes()">Set team types</button></div>`;
   if (!plan) h += `<div class="card"><b>Tell the system how many Area Incharges and teams this union council will have.</b> <button class="btn small" onclick="openPlan()">Set the numbers</button></div>`;
+  if (aics.length) h += `<div style="text-align:right;margin:.4rem 0 0;"><button class="btn small ghost" onclick="setAllAics(true)">Collapse all</button> <button class="btn small ghost" onclick="setAllAics(false)">Expand all</button></div>`;
   for (let n = 1; n <= nA; n++) {
     const a = aics.find(x => x.aic_no === n);
     if (!a) { h += `<div class="aic empty"><span><b>AIC ${n}</b> — not added yet</span><button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n}})">+ Add AIC ${n}</button></div>`; continue; }
     const drv = drivers.find(d => d.aic_staff_id === a.id), mine = teams.filter(t => t.aic_staff_id === a.id);
+    const isCol = collapsedAics.has(a.id);
     h += `<div class="aic"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
-        <div><span class="tag">AIC ${n}</span> <span class="big">${esc(a.full_name)}</span> ${a.status !== "active" ? badge(a.status) : ""}<br><span class="muted">${esc([a.official_designation, a.department, a.place_of_posting].filter(Boolean).join(" · "))}</span><br><span class="muted">${esc(a.phone)} · ${cnicLine(a)}</span><br><span class="muted">${a.area_map_path ? `Area map ✓ <a href="#" onclick="viewAreaMap('${a.area_map_path}');return false;">View</a>` : `<b style="color:#9b1c1c">Area map missing</b>`}</span></div>
+        <div><button class="btn small ghost" onclick="toggleAic('${a.id}')" title="Show or hide this Area Incharge's driver and teams">${isCol ? "▸" : "▾"}</button> <span class="tag">AIC ${n}</span> <span class="big">${esc(a.full_name)}</span> ${a.status !== "active" ? badge(a.status) : ""}<br><span class="muted">${esc([a.official_designation, a.department, a.place_of_posting].filter(Boolean).join(" · "))}</span><br><span class="muted">${esc(a.phone)} · ${cnicLine(a)}</span><br><span class="muted">${a.area_map_path ? `Area map ✓ <a href="#" onclick="viewAreaMap('${a.area_map_path}');return false;">View</a>` : `<b style="color:#9b1c1c">Area map missing</b>`}</span></div>
         <div><button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n},staff:'${a.id}'})">Edit</button>
-          <button class="btn small ghost" onclick="openTeamPicker('${a.id}')">+ Add team</button></div></div>
-      <div style="margin-top:.3rem;">Driver: ${drv ? `${esc(drv.full_name)} <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n},staff:'${drv.id}'})">Edit</button>`
+          <button class="btn small ghost" onclick="openTeamPicker('${a.id}')">+ Add team</button>
+          <button class="btn small ghost" style="color:#9b1c1c;" onclick="deleteStaff('${a.id}','aic')">Delete AIC</button></div></div>
+      ${isCol ? `<p class="muted" style="margin:.4rem 0 0;">${mine.length} team(s)${drv ? " · driver " + esc(drv.full_name) : ""} — hidden. Press ▸ to show.</p>` : `
+      <div style="margin-top:.3rem;">Driver: ${drv ? `<b>${esc(drv.full_name)}</b> <span class="muted">${esc(drv.father_name ? "s/o " + drv.father_name + " · " : "")}${esc(drv.phone || "")} · ${cnicLine(drv)}</span> <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n},staff:'${drv.id}'})">Edit</button> <button class="btn small ghost" style="color:#9b1c1c;" onclick="deleteStaff('${drv.id}','driver')">Delete driver</button>`
         : `<span class="muted">none</span> <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n}})">+ Add driver</button>`}</div>
-      ${mine.map(teamHtml).join("") || `<p class="muted" style="margin:.5rem 0 0;">No teams yet — press “+ Add team”.</p>`}</div>`;
+      ${mine.map(teamHtml).join("") || `<p class="muted" style="margin:.5rem 0 0;">No teams yet — press “+ Add team”.</p>`}`}</div>`;
   }
   const loose = teams.filter(t => !t.aic_staff_id);
   if (loose.length) h += `<div class="card"><b>Teams without an Area Incharge:</b> ${loose.map(t => t.team_no).join(", ")}</div>`;
@@ -315,10 +346,10 @@ function openTeamEdit(teamId) {
 function personFields(p) {
   return `<div class="form-grid">
     <div><label>Name</label><input id="${p}_name"></div>
-    <div><label>Father name</label><input id="${p}_father"></div>
+    <div><label>Father name <span class="muted">(can be added later)</span></label><input id="${p}_father"></div>
     <div><label>CNIC</label><input id="${p}_cnic" placeholder="XXXXX-XXXXXXX-X" inputmode="numeric" maxlength="15"></div>
     <div><label>Cell number</label><input id="${p}_phone" placeholder="03XX-XXXXXXX" inputmode="numeric" maxlength="12"></div>
-    <div><label>Payment wallet</label><select id="${p}_wallet"><option value="">Select…</option>${WALLETS.map(w => `<option value="${w[0]}">${w[1]}</option>`).join("")}</select></div>
+    <div><label>Payment wallet <span class="muted">(can be added later)</span></label><select id="${p}_wallet"><option value="">Select…</option>${WALLETS.map(w => `<option value="${w[0]}">${w[1]}</option>`).join("")}</select></div>
     <div><label>Original designation (e.g. PST, LHS)</label><input id="${p}_odes"></div>
     <div><label>Department (Health / Education / …)</label><input id="${p}_dept"></div>
     <div><label>Place of posting</label><input id="${p}_post"></div>
@@ -370,19 +401,19 @@ function fillPerson(p, s) {
   if (s.bank_code || s.iban) $(`${p}_bank`).closest("details").open = true; $(`${p}_iban`).dispatchEvent(new Event("input"));
   $(`${p}_life`).checked = !!s.cnic_lifetime; $(`${p}_exp`).disabled = !!s.cnic_lifetime; $(`${p}_exp`).value = s.cnic_expiry || ""; $(`${p}_exp`).dataset.orig = s.cnic_expiry || "";
   for (const [side, f] of [["front", "f"], ["back", "b"]]) { const path = s[`cnic_pic_${side}_path`]; $(`${p}_${f}file`).dataset.existing = path || "";
-    $(`${p}_${f}st`).innerHTML = path ? `Uploaded ✓ — choose a file only if you want to replace it. <a href="#" onclick="previewExisting('${p}','${f}','${path}');return false;">Preview</a>` : "Not uploaded yet"; }
+    $(`${p}_${f}st`).innerHTML = path ? "Uploaded ✓ — choose a file only if you want to replace it." : "Not uploaded yet";
+    if (path) previewExisting(p, f, path); }
 }
-async function previewExisting(p, f, path) { const u = await signedUrl(path); const img = $(`${p}_${f}prev`); if (u) { img.src = u; img.style.display = "block"; } }
+async function previewExisting(p, f, path) { const u = await signedUrl(path); const img = $(`${p}_${f}prev`); if (u && img) { img.src = u; img.style.display = "block"; } else if (img) $(`${p}_${f}st`).innerHTML += " <span style=\"color:#9b1c1c\">(the picture could not be loaded)</span>"; }
 function readPerson(p, errs, label) {
   const v = (f) => $(`${p}_${f}`).value.trim();
   const name = v("name"), father = v("father"), cnic = v("cnic"), phone = v("phone"), wallet = v("wallet"), iban = Validate.normalizeIban(v("iban")), bank = bankFromInput(v("bank"));
-  const pay = $(`${p}_same`).checked ? phone : v("pay");
+  const same = $(`${p}_same`).checked, pay = wallet ? (same ? phone : v("pay")) : null;   // no wallet chosen yet -> no wallet number saved (the database keeps them as a pair)
   if (!name) errs.push(`${label}: name is required`);
-  if (!father) errs.push(`${label}: father name is required`);
   if (!Validate.isCnic(cnic)) errs.push(`${label}: CNIC must be 13 digits`);
   if (!Validate.isMobile(phone)) errs.push(`${label}: cell number must be like 03XX-XXXXXXX`);
-  if (!wallet) errs.push(`${label}: choose the payment wallet (EasyPaisa, JazzCash or Other)`);
-  if (!$(`${p}_same`).checked && !Validate.isMobile(pay)) errs.push(`${label}: wallet number must be like 03XX-XXXXXXX`);
+  if (wallet && !same && !Validate.isMobile(pay)) errs.push(`${label}: wallet number must be like 03XX-XXXXXXX`);
+  if (!wallet && !same && v("pay")) errs.push(`${label}: choose the payment wallet type for that wallet number, or clear the number`);
   if (v("bank") && !bank) errs.push(`${label}: choose a bank from the list (or OTHER)`);
   if (iban) { const r = Validate.iban(iban, bank);
     if (!r.format) errs.push(`${label}: IBAN must be PK + 22 characters (24 in total)`);
@@ -392,7 +423,7 @@ function readPerson(p, errs, label) {
   const fF = $(`${p}_ffile`).files[0] || null, bF = $(`${p}_bfile`).files[0] || null;
   // pictures and expiry may be added later (partial records are allowed); only a wrong value is rejected
   if (!life && exp && exp < today && exp !== $(`${p}_exp`).dataset.orig) errs.push(`${label}: this CNIC expired on ${exp} — please check the date`);
-  return { full_name: name, father_name: father, cnic, phone, payment_number: pay, payment_wallet: wallet || null, bank_code: bank?.code || null, iban: iban || null,
+  return { full_name: name, father_name: father || null, cnic, phone, payment_number: pay, payment_wallet: wallet || null, bank_code: bank?.code || null, iban: iban || null,
            cnic_expiry: life ? null : (exp || null), cnic_lifetime: life, _front: fF, _back: bF,
            official_designation: v("odes") || null, department: v("dept") || null, place_of_posting: v("post") || null };
 }
@@ -436,7 +467,7 @@ async function openPerson(c) {
   wirePerson("f"); if (editing) { fillPerson("f", editing); if ($("f_status")) $("f_status").value = editing.status === "active" ? "active" : editing.status === "left_campaign" ? "left_campaign" : "inactive"; }
   if (c.kind === "aic") {
     $("am_file").dataset.existing = editing?.area_map_path || "";
-    if (editing?.area_map_path) $("am_st").innerHTML = `Uploaded ✓ — choose a file only to replace it. <a href="#" onclick="viewAreaMap('${editing.area_map_path}');return false;">Preview</a>`;
+    if (editing?.area_map_path) { $("am_st").textContent = "Uploaded ✓ — choose a file only to replace it."; signedUrl(editing.area_map_path).then(u => { if (u) { $("am_prev").src = u; $("am_prev").style.display = "block"; } }); }
     $("am_file").onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (!/^image\/(jpeg|png)$/.test(f.type)) { alert("Only JPG or PNG pictures are allowed."); e.target.value = ""; return; }
       $("am_prev").src = URL.createObjectURL(f); $("am_prev").style.display = "block"; $("am_st").textContent = "New map chosen ✓"; };
     selTeams = new Map(); renderTeamGrid(editing);
