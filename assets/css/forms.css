@@ -31,3 +31,6 @@ table.fx textarea { text-align:inherit; min-height:34px; }
   .fx-pic { height:165mm; border:none; } .noprint-ctl { display:none !important; }
   .scroll.pb { break-before:page; } .scroll.first { break-before:auto; }
 }
+
+.fx-2a table.fx { font-size:11px; } .fx-2a table.fx th { font-size:10px; padding:2px 3px; } .fx-2a table.fx td { padding:2px 3px; } .fx-team { break-inside:avoid; page-break-inside:avoid; }
+@media print { .fx-2a table.fx { font-size:8.5pt; } .fx-2a table.fx th { font-size:7.5pt; } }

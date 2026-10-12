@@ -41,7 +41,7 @@
         <label><input type="checkbox" id="o_tour" checked> Tour plan</label>
         <label><input type="checkbox" id="o_desk" checked> Desk review</label>
         <label><input type="checkbox" id="o_fv" checked> Field validation</label>
-        <label><input type="checkbox" id="o_2a"> 2A forms for every team and day</label>
+        <label><input type="checkbox" id="o_2a"> 2A form — all days, all teams of the AIC</label>
         <label><input type="checkbox" id="o_uc" checked> UC pages (UC map 12MP, UC summary, social mobilization)</label>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
@@ -125,7 +125,7 @@ async function build() {
     if (o.aicmap) out.push(m[0]);
     if (o.teams && withTeams) out.push(...mp.slice(1));
     if (o.aicmap) out.push(...m.slice(1));
-    if (o.twoA) FS.teamsOf(B, a.id).forEach(t => days2A().forEach(d => out.push(FS.render2A(B, t, d, a))));
+    if (o.twoA) out.push(FS.render2ADays(B, a));
     if (o.tour) out.push(FS.renderTour(B, a, false)); if (o.desk) out.push(FS.renderDesk(B, a, false)); if (o.fv) out.push(FS.renderFV(B, a, false));
     return wrap(out); };
   const days2A = () => Array.from({ length: Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7) }, (_, i) => i + 1);

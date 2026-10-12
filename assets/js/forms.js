@@ -290,6 +290,23 @@ FS.render2AAic = (B, aic, day, catchup) => {
     <tr><td colspan="2"><b>Total</b></td><td><b>${th}</b></td><td><b>${tc}</b></td>${cols.map(c => `<td><b>${tot[c[0]]}</b></td>`).join("")}</tr></tbody></table></div>
     <div class="fx-note">Figures not yet reported show 0.</div><div class="fx-sig"><div>Area Incharge</div><div>UCMO</div></div></div>`;
 };
+/* 2A of an Area Incharge, all days: every team of his area as its own block (like the team plans), one row per campaign day. */
+FS.render2ADays = (B, aic) => {
+  const ts = FS.teamsOf(B, aic.id), cols = FS.rcols(B), nd = Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7), z = (v) => (v === null || v === undefined || v === "") ? 0 : v;
+  if (!ts.length) return `<div class="fx-page fx-2a"><h1>2A Form — Area Incharge</h1>${hdrBlock(B, aic)}<p class="fx-miss">No teams for this Area Incharge yet.</p></div>`;
+  const block = (t) => {
+    const members = (t.workers || []).slice().sort((a, b) => FS.nat(a.member_no ?? 0, b.member_no ?? 0)).map(m => `${E_(m.staff?.full_name || "")}${m.member_role === "leader" ? " (Leader)" : ""}`).join("، ") || "—";
+    const tot = Object.fromEntries(cols.map(c => [c[0], 0])); let th = 0, tc = 0;
+    const rows = []; for (let d = 1; d <= nd; d++) for (const cu of [false, true]) { const r = FS.rep(B, t.team_no, d, cu); if (cu && !r) continue; const g = FS.tgt(B, t.team_no, d) || {}, op = B.plans.find(p => p.team_id === t.id && p.campaign_day === d) || B.ft.find(p => p.team_id === t.id && p.campaign_day === d) || {};
+      if (!cu) { th += +g.target_households || 0; tc += +g.target_children || 0; } cols.forEach(c => tot[c[0]] += +(r || {})[c[0]] || 0);
+      rows.push(`<tr><td><b>Day ${d}${cu ? " (catch-up)" : ""}</b></td><td>${FS.dayDate(B, d)}</td><td class="l">${E_(op.village_area || op.place_name || "")}</td><td>${cu ? "" : z(g.target_households)}</td><td>${cu ? "" : z(g.target_children)}</td>${cols.map(c => `<td>${z((r || {})[c[0]])}</td>`).join("")}</tr>`); }
+    return `<div class="fx-team"><div class="fx-hdr" style="margin:6px 0 2px"><div>Team no.: <b>${E_(t.team_no)}</b> (${E_(t.team_type || "")})</div><div style="grid-column:span 2">Team members: <b>${members}</b></div></div>
+      <div class="fx-wrap"><table class="fx"><thead><tr><th>Day</th><th>Date</th><th>Area</th><th>Target HH</th><th>Target children</th>${cols.map(c => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>${rows.join("")}
+      <tr><td colspan="3"><b>Team total</b></td><td><b>${th}</b></td><td><b>${tc}</b></td>${cols.map(c => `<td><b>${tot[c[0]]}</b></td>`).join("")}</tr></tbody></table></div></div>`; };
+  const per = 3, out = [];
+  for (let i = 0; i < ts.length; i += per) out.push(`<div class="fx-page fx-2a"><h1>2A Form — Daily Report (all days)</h1>${hdrBlock(B, aic, `<div>Teams: <b>${ts.length}</b></div>`)}${ts.slice(i, i + per).map(block).join("")}<div class="fx-note">Figures not yet reported show 0.</div><div class="fx-sig"><div>Area Incharge</div><div>UCMO</div></div></div>`);
+  return out.join("");
+};
 FS.sumReports = (B, teams, day, catchup) => { const cols = FS.rcols(B), tot = Object.fromEntries(cols.map(c => [c[0], 0])); let th = 0, tc = 0, last = null, n = 0;
   teams.forEach(t => { const days = day === "all" ? Array.from({ length: Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7) }, (_, i) => i + 1) : [day];
     days.forEach(d => { const r = FS.rep(B, t.team_no, d, catchup), g = FS.tgt(B, t.team_no, d); if (g) { th += +g.target_households || 0; tc += +g.target_children || 0; } if (r) { n++; cols.forEach(c => tot[c[0]] += +r[c[0]] || 0); const u = r.updated_at || r.created_at; if (u && (!last || u > last)) last = u; } }); });
