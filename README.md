@@ -239,3 +239,8 @@ This is a static site — enable GitHub Pages on this repo (Settings → Pages
 - `pages/plan-setup.html` — questions answered first: the Vitamin A capsule question (Blue / Red quantities asked only when Yes) and, per team, MMP / schools / missed children / refusals (details asked only when Yes), then the micro-plan status. Plan Management links stay locked until everything is answered (soft lock in the menus; it is not a server rule).
 - `pages/pdf-downloads.html` — the only PDF menu: plan package (all AICs, each AIC, one AIC, each team separate, one click per AIC), CNIC lists, staff PDF, DDM cards, payment lists, 2A forms for all teams.
 - Desk review is filled automatically from real plan data (plans, maps, questionnaire, forms); indicators that cannot be verified from data stay blank and are not counted. Scores are calculated, never forced.
+
+## Reporting, 2A and 2B (migration 0032 — applied)
+- `pages/reporting.html` — the Area Incharge enters the day's figures for every team of his area, saves, and downloads the AIC-wise 2A form (this day or all days). Anything not reported shows 0.
+- `pages/report-2b.html` — the UCMO's 2B form, built automatically from the reports and refreshed every 30 seconds: one row per Area Incharge plus the UC total, day-wise or cumulative.
+- Both are built from the 2A fields already in `daily_reports`; the original 2B layout has not been supplied yet.

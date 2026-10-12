@@ -18,7 +18,9 @@
         <option value="staffpdf">Staff PDF — CNIC and AIC details</option>
         <option value="ddm">DDM cards</option>
         <option value="pay">Payment lists</option>
-        <option value="twoa">2A forms — all teams</option>
+        <option value="twoa">2A forms — all teams (team-wise)</option>
+        <option value="rep">2A forms — Area Incharge reporting (enter data and download)</option>
+        <option value="twob">2B form — UC report (UCMO)</option>
       </select></div></div></div>
     <iframe id="frm" title="PDF downloads"></iframe>
   </main>
@@ -26,7 +28,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../assets/js/config.js"></script><script src="../assets/js/supabaseClient.js"></script><script src="../assets/js/nav.js"></script>
 <script>
-const PAGES = { plan: "uc-package.html", cnic: "cnic-lists.html", staffpdf: "staff-pdf.html", ddm: "ddm-cards.html", pay: "payments.html", twoa: "two-a-form.html?all=1" };
+const PAGES = { plan: "uc-package.html", cnic: "cnic-lists.html", staffpdf: "staff-pdf.html", ddm: "ddm-cards.html", pay: "payments.html", twoa: "two-a-form.html?all=1", rep: "reporting.html", twob: "report-2b.html" };
 (async () => {
   const session = await requireAuth(); if (!session) return; renderSidebar("pdf-downloads.html");
   const sel = document.getElementById("doc"), q = new URLSearchParams(location.search).get("doc"); if (q && PAGES[q]) sel.value = q;

@@ -3,6 +3,8 @@ const NAV_GROUPS = [
   { key: "campaign", icon: "bi-flag-fill", label: "Campaign Management", links: [
     { href: "pages/campaigns.html", icon: "bi-calendar-event", label: "Campaign Details" },
     { href: "pages/daily-reports.html", icon: "bi-clipboard-data", label: "Daily reports (quick entry)" },
+    { href: "pages/reporting.html", icon: "bi-clipboard2-pulse", label: "Reporting — active campaign (2A)" },
+    { href: "pages/report-2b.html", icon: "bi-file-earmark-bar-graph", label: "2B form (UCMO — automatic)" },
     { href: "pages/two-a-form.html", icon: "bi-file-earmark-text", label: "2A form (all teams)" },
     { href: "pages/audit-log.html", icon: "bi-shield-check", label: "Audit log" },
   ]},
