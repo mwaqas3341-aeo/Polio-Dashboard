@@ -254,72 +254,90 @@ FS.renderSm = (B, edit) => {
     ${blocks}<div class="fx-sig"><div>Signature DPCR Focal Person</div><div>Signature of UC Incharge</div></div></div>`;
 };
 
-/* ---------------- 2A form (daily reporting) — same layout for every team, day and campaign ---------------- */
-FS.F2A = [["households_visited", "Households visited"], ["children_vaccinated_first_visit", "Children vaccinated (1st visit)"], ["missed_children_under_12m", "Missed children under 12 months"], ["missed_children_12_59m", "Missed children 12–59 months"],
-  ["refusal_under_12m", "Refusals under 12 months"], ["refusal_12_59m", "Refusals 12–59 months"], ["catchup_covered", "Catch-up covered"], ["still_missed", "Still missed"], ["guest_vaccinated", "Guest children vaccinated"],
-  ["street_vaccinated", "Street children vaccinated"], ["hrmp_vaccinated", "HRMP vaccinated"], ["vaccine_doses_used", "Vaccine doses used"], ["vitamin_a_red", "Vitamin A — red capsules", "vit"], ["vitamin_a_blue", "Vitamin A — blue capsules", "vit"],
-  ["afp_cases_notified", "AFP cases notified"], ["zero_dose_ri_recorded", "Zero-dose children recorded for RI"], ["zero_zero_houses", "Zero-zero houses"], ["lock_houses", "Locked houses"]];
-FS.render2A = (B, t, day, aic) => {
-  const tg = (B.targets || []).find(x => String(x.team_no) === String(t.team_no) && x.campaign_day === day), rp = (B.reports || []).find(x => String(x.team_no) === String(t.team_no) && x.campaign_day === day && !x.is_catchup);
-  const needVit = FS.caps(B).vit_a_needed !== "no", f = FS.F2A.filter(r => r[2] !== "vit" || needVit);
-  const roster = (t.workers || []).slice().sort((a, b) => FS.nat(a.member_no ?? 0, b.member_no ?? 0));
-  const half = Math.ceil(f.length / 2), cell = (r) => r ? `<td class="l">${E_(r[1])}</td><td style="width:70px"><b>${rp && rp[r[0]] != null ? E_(rp[r[0]]) : 0}</b></td>` : "<td></td><td></td>";
-  return `<div class="fx-page"><h1>2A Form — Daily Reporting</h1>
-    <div class="fx-hdr"><div>Campaign: <b>${E_(B.campaign.name)}</b></div><div>Union Council: <b>${E_(B.geo.uc)}</b></div><div>Area Incharge: <b>${aic ? "AIC " + E_(aic.aic_no) + " — " + E_(aic.full_name) : ""}</b></div><div>Team no.: <b>${E_(t.team_no)}</b> (${E_(t.team_type || "")})</div><div>Day: <b>${day}</b></div><div>Date: <b>${B.campaign.start_date ? FS.fmtDate(new Date(new Date(B.campaign.start_date + "T00:00:00").getTime() + (day - 1) * 864e5).toISOString().slice(0, 10)) : ""}</b></div></div>
-    <table class="fx" style="margin-bottom:6px"><thead><tr><th>#</th><th>Name</th><th>CNIC</th><th>Cell no.</th><th>Role</th></tr></thead><tbody>${roster.length ? roster.map((m, i) => `<tr><td>${m.member_no ?? i + 1}</td><td class="l">${E_(m.staff?.full_name || "")}</td><td>${E_(m.staff?.cnic || "")}</td><td>${E_(m.staff?.phone || "")}</td><td>${m.member_role === "leader" ? "Leader" : "Member"}</td></tr>`).join("") : `<tr><td colspan="5" class="fx-miss">No team members added yet</td></tr>`}</tbody></table>
-    <table class="fx" style="margin-bottom:6px"><thead><tr><th>Target households</th><th>Target children</th><th>Vaccine doses needed</th></tr></thead><tbody><tr><td><b>${tg ? tg.target_households : 0}</b></td><td><b>${tg ? tg.target_children : 0}</b></td><td><b>${tg ? Math.round(tg.target_children * 1.11 * 100) / 100 : 0}</b></td></tr></tbody></table>
-    <table class="fx"><thead><tr><th colspan="2">Field actuals</th><th colspan="2">Field actuals</th></tr></thead><tbody>${Array.from({ length: half }, (_, i) => `<tr style="height:26px">${cell(f[i])}${cell(f[i + half])}</tr>`).join("")}</tbody></table>
-    <div class="fx-sig"><div>Team Leader</div><div>Area Incharge</div><div>UCMO</div></div></div>`;
-};
-
-/* ---------------- 2A (per Area Incharge, all his teams) and 2B (UC, all Area Incharges) ---------------- */
-FS.RCOLS = [["households_visited", "HH visited"], ["children_vaccinated_first_visit", "Vaccinated 1st visit"], ["missed_children_under_12m", "Missed < 12m"], ["missed_children_12_59m", "Missed 12–59m"], ["refusal_under_12m", "Refusal < 12m"], ["refusal_12_59m", "Refusal 12–59m"],
-  ["catchup_covered", "Catch-up covered"], ["still_missed", "Still missed"], ["guest_vaccinated", "Guest vacc."], ["street_vaccinated", "Street vacc."], ["hrmp_vaccinated", "HRMP vacc."], ["vaccine_doses_used", "Doses used"],
-  ["vitamin_a_red", "Vit A red", "vit"], ["vitamin_a_blue", "Vit A blue", "vit"], ["afp_cases_notified", "AFP notified"], ["zero_dose_ri_recorded", "Zero-dose RI"], ["zero_zero_houses", "Zero-zero houses"], ["lock_houses", "Locked houses"]];
-FS.rcols = (B) => FS.RCOLS.filter(c => c[2] !== "vit" || FS.caps(B).vit_a_needed !== "no");
+/* ---------------- Official 2A forms (campaign days and catch-up days) and the UC 2B ----------------
+   Layout follows "Daily Performance, FLW's Attendance and Vaccine Recording and Reporting" (2A). Anything not reported shows 0. */
+FS.A_COLS = [
+  { k: "hh_target", g: "Number of households", l: "Target (micro plan)", calc: "hh" }, { k: "households_visited", g: "Number of households", l: "Visited by team" },
+  { k: "ch_target", s: 1, l: "Children in HH from micro plan (0–5 yrs)", calc: "ch" }, { k: "children_vaccinated_first_visit", s: 1, l: "Vaccinated children of HH, first visit (0–5 yrs)" },
+  { k: "missed_na", g: "Recorded missed children (0–5 yrs)", l: "N.A" }, { k: "missed_refusal", g: "Recorded missed children (0–5 yrs)", l: "Refusal" },
+  { k: "covered_na", g: "Covered missed children, same-day catch-up", l: "N.A" }, { k: "covered_refusal", g: "Covered missed children, same-day catch-up", l: "Refusal" },
+  { k: "school_madrassa_children", s: 1, l: "School / Madrassa children" }, { k: "guest_vaccinated", s: 1, l: "Guest vaccinated" }, { k: "street_vaccinated", s: 1, l: "Children vaccinated in streets" },
+  { k: "mmp_registered", g: "Total MMP children", l: "Registered" }, { k: "mmp_vaccinated", g: "Total MMP children", l: "Vaccinated" },
+  { k: "zero_zero_houses", s: 1, l: "Total 0/0 houses" }, { k: "lock_houses", s: 1, l: "Total lock houses" },
+  { k: "vaccine_doses_received", g: "Vaccine recorded doses", l: "Received" }, { k: "vaccine_doses_used", g: "Vaccine recorded doses", l: "Used" }, { k: "vd_remaining", g: "Vaccine recorded doses", l: "Remaining", calc: "rem" },
+  { k: "finger_markers_received", s: 1, l: "Finger markers received" }, { k: "afp_cases_notified", s: 1, l: "AFP cases notified" }, { k: "zero_dose_ri_recorded", s: 1, l: "Zero dose for RI recorded" },
+  { k: "vitamin_a_red", g: "Vitamin A capsules used", l: "Red", vit: 1 }, { k: "vitamin_a_blue", g: "Vitamin A capsules used", l: "Blue", vit: 1 }];
+const cuGroup = (g, p) => [["na_u12", "NA <12 M"], ["na_1259", "NA 12–59 M"], ["r_u12", "R <12 M"], ["r_1259", "R 12–59 M"]].map(([k, l]) => ({ k: `cu_${p}_${k}`, g, l }));
+FS.C_COLS = [...cuGroup("Target for catch-up day", "target"), ...cuGroup("Covered missed children, catch-up day", "cov"), ...cuGroup("Still missed children, catch-up day", "still"),
+  { k: "guest_vaccinated", s: 1, l: "Guest vaccinated" }, { k: "street_vaccinated", s: 1, l: "Children vaccinated in streets" }, { k: "persistent_missed", s: 1, l: "Persistently missed children" },
+  { k: "vaccine_doses_received", g: "Vaccine recorded doses", l: "Received" }, { k: "vaccine_doses_used", g: "Vaccine recorded doses", l: "Used" }, { k: "vd_remaining", g: "Vaccine recorded doses", l: "Remaining", calc: "rem" },
+  { k: "finger_markers_received", g: "Finger markers", l: "Received" }, { k: "finger_markers_returned", g: "Finger markers", l: "Returned" }, { k: "fm_remaining", g: "Finger markers", l: "Remaining", calc: "fm" },
+  { k: "afp_cases_notified", s: 1, l: "AFP cases notified" }, { k: "zero_dose_ri_recorded", s: 1, l: "Zero dose for RI recorded" },
+  { k: "vitamin_a_red", g: "Vitamin A capsules used", l: "Red", vit: 1 }, { k: "vitamin_a_blue", g: "Vitamin A capsules used", l: "Blue", vit: 1 }];
+FS.F_COLS = [{ k: "children_vaccinated_first_visit", s: 1, l: "Number of children vaccinated" }, { k: "vaccine_doses_received", g: "Vaccine recorded doses", l: "Received" }, { k: "vaccine_doses_used", g: "Vaccine recorded doses", l: "Used" }, { k: "vaccine_doses_returned", g: "Vaccine recorded doses", l: "Returned" },
+  { k: "finger_markers_received", g: "Finger markers", l: "Received" }, { k: "finger_markers_returned", g: "Finger markers", l: "Returned" }, { k: "afp_cases_notified", s: 1, l: "AFP cases notified" }, { k: "zero_dose_ri_recorded", s: 1, l: "Zero dose for RI recorded" }];
+FS.colsFor = (B, catchup, fixed) => (fixed ? FS.F_COLS : catchup ? FS.C_COLS : FS.A_COLS).filter(c => !c.vit || FS.caps(B).vit_a_needed !== "no");
+FS.LEGACY = { missed_na: (r) => (+r.missed_children_under_12m || 0) + (+r.missed_children_12_59m || 0), missed_refusal: (r) => (+r.refusal_under_12m || 0) + (+r.refusal_12_59m || 0), covered_na: (r) => +r.catchup_covered || 0, mmp_vaccinated: (r) => +r.hrmp_vaccinated || 0 };
+FS.rv = (r, k) => { if (!r) return 0; const v = +r[k] || 0; return v || (FS.LEGACY[k] ? FS.LEGACY[k](r) : 0); };
 FS.dayDate = (B, day) => B.campaign.start_date ? FS.fmtDate(new Date(new Date(B.campaign.start_date + "T00:00:00").getTime() + (day - 1) * 864e5).toISOString().slice(0, 10)) : "";
+FS.nDays = (B) => Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7);
 FS.rep = (B, teamNo, day, catchup) => (B.reports || []).find(x => String(x.team_no) === String(teamNo) && x.campaign_day === day && !!x.is_catchup === !!catchup);
 FS.tgt = (B, teamNo, day) => (B.targets || []).find(x => String(x.team_no) === String(teamNo) && x.campaign_day === day);
-FS.render2AAic = (B, aic, day, catchup) => {
-  const ts = FS.teamsOf(B, aic.id), cols = FS.rcols(B), z = (v) => (v === null || v === undefined || v === "") ? 0 : v; let tot = Object.fromEntries(cols.map(c => [c[0], 0])); let th = 0, tc = 0;
-  const rows = ts.map(t => { const r = FS.rep(B, t.team_no, day, catchup) || {}, g = FS.tgt(B, t.team_no, day) || {}; th += +g.target_households || 0; tc += +g.target_children || 0; cols.forEach(c => tot[c[0]] += +r[c[0]] || 0);
-    return `<tr><td><b>${E_(t.team_no)}</b></td><td>${E_(t.team_type || "")}</td><td>${z(g.target_households)}</td><td>${z(g.target_children)}</td>${cols.map(c => `<td>${z(r[c[0]])}</td>`).join("")}</tr>`; }).join("");
-  return `<div class="fx-page"><h1>2A Form — Daily Report of Area Incharge${catchup ? " (Catch-up day)" : ""}</h1>
-    ${hdrBlock(B, aic, `<div>Day: <b>${day}</b></div><div>Date: <b>${FS.dayDate(B, day)}</b></div>`)}
-    <div class="fx-wrap"><table class="fx"><thead><tr><th>Team</th><th>Type</th><th>Target HH</th><th>Target children</th>${cols.map(c => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>${rows || `<tr><td colspan="${cols.length + 4}" class="fx-miss">No teams for this Area Incharge yet</td></tr>`}
-    <tr><td colspan="2"><b>Total</b></td><td><b>${th}</b></td><td><b>${tc}</b></td>${cols.map(c => `<td><b>${tot[c[0]]}</b></td>`).join("")}</tr></tbody></table></div>
-    <div class="fx-note">Figures not yet reported show 0.</div><div class="fx-sig"><div>Area Incharge</div><div>UCMO</div></div></div>`;
+FS.planOf = (B, t, day) => B.plans.find(p => p.team_id === t.id && p.campaign_day === day) || {};
+/* calculated value of one cell */
+FS.cell = (B, t, day, catchup, c) => { const r = FS.rep(B, t.team_no, day, catchup);
+  if (c.calc === "hh") return catchup ? 0 : (+FS.planOf(B, t, day).total_households || +(FS.tgt(B, t.team_no, day) || {}).target_households || 0);
+  if (c.calc === "ch") return catchup ? 0 : (+FS.planOf(B, t, day).total_children || +(FS.tgt(B, t.team_no, day) || {}).target_children || 0);
+  if (c.calc === "rem") return Math.max(0, FS.rv(r, "vaccine_doses_received") - FS.rv(r, "vaccine_doses_used"));
+  if (c.calc === "fm") return Math.max(0, FS.rv(r, "finger_markers_received") - FS.rv(r, "finger_markers_returned"));
+  return FS.rv(r, c.k); };
+const head2 = (cols, extra) => { const g = []; cols.forEach(c => { if (c.s) g.push({ s: 1, c }); else { const last = g[g.length - 1]; if (last && !last.s && last.g === c.g) last.n.push(c); else g.push({ g: c.g, n: [c] }); } });
+  const r1 = g.map(x => x.s ? `<th rowspan="2">${E_(x.c.l)}</th>` : `<th colspan="${x.n.length}">${E_(x.g)}</th>`).join(""), r2 = g.filter(x => !x.s).map(x => x.n.map(c => `<th>${E_(c.l)}</th>`).join("")).join(""); return [r1 + extra[0], r2 + extra[1]]; };
+FS.members = (t) => (t.workers || []).slice().sort((a, b) => (a.member_role === "leader" ? -1 : b.member_role === "leader" ? 1 : FS.nat(a.member_no ?? 0, b.member_no ?? 0))).map(m => E_(m.staff?.full_name || "")).filter(Boolean).join(", ");
+const SIG = ['<th colspan="2">Signature</th>', "<th>Morning</th><th>Evening</th>"];
+FS.render2AOfficial = (B, aic, day, catchup, onlyTeamId) => {
+  let ts = FS.teamsOf(B, aic.id); if (onlyTeamId) ts = ts.filter(t => t.id === onlyTeamId);
+  const mob = ts.filter(t => (t.team_type || "mobile") === "mobile"), fx = ts.filter(t => t.team_type === "fixed" || t.team_type === "transit"), nd = FS.nDays(B);
+  const label = catchup ? `Catchup Day ${nd + day}` : `Campaign Day ${day}`, date = FS.dayDate(B, catchup ? nd + day : day);
+  const reported = ts.filter(t => FS.rep(B, t.team_no, day, catchup)).length, cnt = (k) => ts.filter(t => (t.team_type || "mobile") === k).length;
+  const cols = FS.colsFor(B, catchup, false), fcols = FS.colsFor(B, catchup, true), z = (v) => Number.isInteger(v) ? v : Math.round(v * 100) / 100;
+  const totals = (list, cl) => cl.map(c => z(list.reduce((n, t) => n + FS.cell(B, t, day, catchup, c), 0)));
+  const [h1, h2] = head2(cols, SIG), [f1, f2] = head2(fcols, SIG);
+  const mrows = mob.map(t => `<tr><td><b>${E_(t.team_no)}</b></td><td class="l">${FS.members(t)}</td>${cols.map(c => `<td>${z(FS.cell(B, t, day, catchup, c))}</td>`).join("")}<td></td><td></td></tr>`).join("") || `<tr><td colspan="${cols.length + 4}" class="fx-miss">No mobile / CBV teams</td></tr>`;
+  const frows = fx.map(t => `<tr><td><b>${E_(t.team_type === "fixed" ? "Fixed" : "Transit")} ${E_(t.team_no)}</b></td><td class="l">${FS.members(t)}</td>${fcols.map(c => `<td>${z(FS.cell(B, t, day, catchup, c))}</td>`).join("")}<td></td><td></td></tr>`).join("") || `<tr><td colspan="${fcols.length + 4}" class="fx-miss">No fixed / transit teams</td></tr>`;
+  const sum = (list, k) => list.reduce((n, t) => n + FS.rv(FS.rep(B, t.team_no, day, catchup), k), 0), typeRow = (nm, list) => { const g = sum(list, "vaccine_doses_received"), u = sum(list, "vaccine_doses_used"); return `<tr><td class="l"><b>${nm}</b></td><td>${z(g)}</td><td>${z(u)}</td><td>${z(Math.max(0, g - u))}</td><td>${sum(list, "finger_markers_received")}</td></tr>`; };
+  return `<div class="fx-page fx-2a"><h1>Daily Performance, FLW's Attendance and Vaccine Recording and Reporting</h1><h2>2A Form${catchup ? " — Catch-up days" : ""}</h2>
+    <div class="fx-hdr"><div>Province: <b>Punjab</b></div><div>District: <b>${E_(B.geo.district)}</b></div><div>Tehsil/Town/Taluka: <b>${E_(B.geo.tehsil)}</b></div><div>UC: <b>${E_(B.geo.uc)}</b></div><div>Name of SIA: <b>${E_(B.campaign.name)}</b></div><div>${catchup ? "Catchup Day" : "Campaign Day"}: <b>${catchup ? nd + day : day}</b></div>
+    <div>Name of AIC: <b>${E_(aic.full_name)}</b></div><div>Number of teams reported: <b>${reported}</b></div><div>Mobile/CBV: <b>${cnt("mobile")}</b> &nbsp; Fixed: <b>${cnt("fixed")}</b> &nbsp; Transit: <b>${cnt("transit")}</b></div><div>Date: <b>${date}</b></div></div>
+    <div class="fx-wrap"><table class="fx fx-main"><thead><tr><th rowspan="2">Team No.</th><th rowspan="2">Name of Team Leader and Team Member</th>${h1}</tr><tr>${h2}</tr></thead><tbody>${mrows}
+    <tr><td colspan="2"><b>Total</b></td>${totals(mob, cols).map(v => `<td><b>${v}</b></td>`).join("")}<td></td><td></td></tr></tbody></table></div>
+    <div class="fx-note" style="margin-top:6px"><b>For Fixed and Transit teams</b></div>
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:8px;align-items:start"><div class="fx-wrap"><table class="fx"><thead><tr><th rowspan="2">Team Type</th><th rowspan="2">Name of Team Leader and Team Member</th>${f1}</tr><tr>${f2}</tr></thead><tbody>${frows}
+    <tr><td colspan="2"><b>Total</b></td>${totals(fx, fcols).map(v => `<td><b>${v}</b></td>`).join("")}<td></td><td></td></tr></tbody></table></div>
+    <div class="fx-wrap"><table class="fx"><thead><tr><th rowspan="2">Type of Teams</th><th colspan="3">Total Vaccine Record</th><th rowspan="2">Finger markers received</th></tr><tr><th>Given</th><th>Used</th><th>Returned</th></tr></thead><tbody>${typeRow("Mobile", mob)}${typeRow("Fixed", ts.filter(t => t.team_type === "fixed"))}${typeRow("Transit", ts.filter(t => t.team_type === "transit"))}${typeRow("Total", ts)}</tbody></table></div></div>
+    <div class="fx-sig"><div>Verified by signature: Area Incharge</div><div>UC in Charge</div></div></div>`;
 };
-/* 2A of an Area Incharge, all days: every team of his area as its own block (like the team plans), one row per campaign day. */
-FS.render2ADays = (B, aic) => {
-  const ts = FS.teamsOf(B, aic.id), cols = FS.rcols(B), nd = Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7), z = (v) => (v === null || v === undefined || v === "") ? 0 : v;
-  if (!ts.length) return `<div class="fx-page fx-2a"><h1>2A Form — Area Incharge</h1>${hdrBlock(B, aic)}<p class="fx-miss">No teams for this Area Incharge yet.</p></div>`;
-  const block = (t) => {
-    const members = (t.workers || []).slice().sort((a, b) => FS.nat(a.member_no ?? 0, b.member_no ?? 0)).map(m => `${E_(m.staff?.full_name || "")}${m.member_role === "leader" ? " (Leader)" : ""}`).join("، ") || "—";
-    const tot = Object.fromEntries(cols.map(c => [c[0], 0])); let th = 0, tc = 0;
-    const rows = []; for (let d = 1; d <= nd; d++) for (const cu of [false, true]) { const r = FS.rep(B, t.team_no, d, cu); if (cu && !r) continue; const g = FS.tgt(B, t.team_no, d) || {}, op = B.plans.find(p => p.team_id === t.id && p.campaign_day === d) || B.ft.find(p => p.team_id === t.id && p.campaign_day === d) || {};
-      if (!cu) { th += +g.target_households || 0; tc += +g.target_children || 0; } cols.forEach(c => tot[c[0]] += +(r || {})[c[0]] || 0);
-      rows.push(`<tr><td><b>Day ${d}${cu ? " (catch-up)" : ""}</b></td><td>${FS.dayDate(B, d)}</td><td class="l">${E_(op.village_area || op.place_name || "")}</td><td>${cu ? "" : z(g.target_households)}</td><td>${cu ? "" : z(g.target_children)}</td>${cols.map(c => `<td>${z((r || {})[c[0]])}</td>`).join("")}</tr>`); }
-    return `<div class="fx-team"><div class="fx-hdr" style="margin:6px 0 2px"><div>Team no.: <b>${E_(t.team_no)}</b> (${E_(t.team_type || "")})</div><div style="grid-column:span 2">Team members: <b>${members}</b></div></div>
-      <div class="fx-wrap"><table class="fx"><thead><tr><th>Day</th><th>Date</th><th>Area</th><th>Target HH</th><th>Target children</th>${cols.map(c => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>${rows.join("")}
-      <tr><td colspan="3"><b>Team total</b></td><td><b>${th}</b></td><td><b>${tc}</b></td>${cols.map(c => `<td><b>${tot[c[0]]}</b></td>`).join("")}</tr></tbody></table></div></div>`; };
-  const per = 3, out = [];
-  for (let i = 0; i < ts.length; i += per) out.push(`<div class="fx-page fx-2a"><h1>2A Form — Daily Report (all days)</h1>${hdrBlock(B, aic, `<div>Teams: <b>${ts.length}</b></div>`)}${ts.slice(i, i + per).map(block).join("")}<div class="fx-note">Figures not yet reported show 0.</div><div class="fx-sig"><div>Area Incharge</div><div>UCMO</div></div></div>`);
-  return out.join("");
-};
-FS.sumReports = (B, teams, day, catchup) => { const cols = FS.rcols(B), tot = Object.fromEntries(cols.map(c => [c[0], 0])); let th = 0, tc = 0, last = null, n = 0;
-  teams.forEach(t => { const days = day === "all" ? Array.from({ length: Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7) }, (_, i) => i + 1) : [day];
-    days.forEach(d => { const r = FS.rep(B, t.team_no, d, catchup), g = FS.tgt(B, t.team_no, d); if (g) { th += +g.target_households || 0; tc += +g.target_children || 0; } if (r) { n++; cols.forEach(c => tot[c[0]] += +r[c[0]] || 0); const u = r.updated_at || r.created_at; if (u && (!last || u > last)) last = u; } }); });
-  return { tot, th, tc, last, n, cols }; };
+FS.render2A = (B, t, day, aic) => FS.render2AOfficial(B, aic, day, false, t.id);
+/* every campaign day, then any catch-up day that has reports */
+FS.render2ADays = (B, aic) => { const nd = FS.nDays(B), out = [], ids = new Set(FS.teamsOf(B, aic.id).map(t => String(t.team_no)));
+  for (let d = 1; d <= nd; d++) out.push(FS.render2AOfficial(B, aic, d, false));
+  for (let d = 1; d <= 3; d++) if ((B.reports || []).some(r => r.is_catchup && r.campaign_day === d && ids.has(String(r.team_no)))) out.push(FS.render2AOfficial(B, aic, d, true));
+  return out.join(""); };
+
+/* ---- 2B: UC consolidated, one row per Area Incharge ---- */
+FS.sumReports = (B, teams, day, catchup) => { const cols = FS.colsFor(B, catchup, false).filter(c => !c.calc || c.calc === "hh" || c.calc === "ch" || c.calc === "rem" || c.calc === "fm"), days = day === "all" ? Array.from({ length: FS.nDays(B) }, (_, i) => i + 1) : [day];
+  const tot = Object.fromEntries(cols.map(c => [c.k, 0])); let last = null, n = 0;
+  teams.forEach(t => days.forEach(d => { const r = FS.rep(B, t.team_no, d, catchup); if (r) { n++; const u = r.updated_at || r.created_at; if (u && (!last || u > last)) last = u; } cols.forEach(c => { tot[c.k] += FS.cell(B, t, d, catchup, c); }); }));
+  return { tot, last, n, cols }; };
 FS.render2B = (B, day, catchup) => {
-  const cols = FS.rcols(B), rows = B.aics.map(a => ({ a, ...FS.sumReports(B, FS.teamsOf(B, a.id), day, catchup) })), all = FS.sumReports(B, B.teams, day, catchup);
-  const when = (x) => x ? new Date(x).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
-  return `<div class="fx-page"><h1>2B Form — Union Council Daily Report${catchup ? " (Catch-up day)" : ""}</h1>
-    <div class="fx-hdr"><div>Campaign: <b>${E_(B.campaign.name)}</b></div><div>Union Council: <b>${E_(B.geo.uc)}</b></div><div>Tehsil: <b>${E_(B.geo.tehsil)}</b></div><div>District: <b>${E_(B.geo.district)}</b></div><div>UCMO: <b>${E_(B.ucmo?.full_name || "")}</b></div><div>${day === "all" ? "All days (cumulative)" : `Day: <b>${day}</b> &nbsp; Date: <b>${FS.dayDate(B, day)}</b>`}</div></div>
-    <div class="fx-wrap"><table class="fx"><thead><tr><th>AIC</th><th>Area Incharge</th><th>Teams</th><th>Target HH</th><th>Target children</th>${cols.map(c => `<th>${c[1]}</th>`).join("")}<th class="noprint-ctl">Last update</th></tr></thead><tbody>
-    ${rows.map(r => `<tr><td><b>${E_(r.a.aic_no)}</b></td><td class="l">${E_(r.a.full_name)}</td><td>${FS.teamsOf(B, r.a.id).length}</td><td>${r.th}</td><td>${r.tc}</td>${cols.map(c => `<td>${r.tot[c[0]]}</td>`).join("")}<td class="noprint-ctl">${r.n ? when(r.last) : "not reported"}</td></tr>`).join("") || `<tr><td colspan="${cols.length + 6}" class="fx-miss">No Area Incharges</td></tr>`}
-    <tr><td colspan="2"><b>UC Total</b></td><td><b>${B.teams.length}</b></td><td><b>${all.th}</b></td><td><b>${all.tc}</b></td>${cols.map(c => `<td><b>${all.tot[c[0]]}</b></td>`).join("")}<td class="noprint-ctl"></td></tr></tbody></table></div>
-    <div class="fx-note">Prepared automatically from the reports entered by the Area Incharges. Figures not yet reported show 0.</div><div class="fx-sig"><div>UCMO</div><div>Received by</div></div></div>`;
+  const all = FS.sumReports(B, B.teams, day, catchup), cols = all.cols, rows = B.aics.map(a => ({ a, ...FS.sumReports(B, FS.teamsOf(B, a.id), day, catchup) })), z = (v) => Number.isInteger(v) ? v : Math.round(v * 100) / 100;
+  const when = (x) => x ? new Date(x).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—", nd = FS.nDays(B);
+  return `<div class="fx-page fx-2a"><h1>2B Form — Union Council Daily Report${catchup ? " (Catch-up days)" : ""}</h1>
+    <div class="fx-hdr"><div>Campaign: <b>${E_(B.campaign.name)}</b></div><div>Union Council: <b>${E_(B.geo.uc)}</b></div><div>Tehsil: <b>${E_(B.geo.tehsil)}</b></div><div>District: <b>${E_(B.geo.district)}</b></div><div>UCMO: <b>${E_(B.ucmo?.full_name || "")}</b></div><div>${day === "all" ? "All days (cumulative)" : `${catchup ? "Catchup Day " + (nd + day) : "Campaign Day " + day} &nbsp; Date: <b>${FS.dayDate(B, catchup ? nd + day : day)}</b>`}</div></div>
+    <div class="fx-wrap"><table class="fx"><thead><tr><th>AIC</th><th>Area Incharge</th><th>Teams</th>${cols.map(c => `<th>${c.g ? E_(c.g) + "<br>" : ""}${E_(c.l)}</th>`).join("")}<th class="noprint-ctl">Last update</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td><b>${E_(r.a.aic_no)}</b></td><td class="l">${E_(r.a.full_name)}</td><td>${FS.teamsOf(B, r.a.id).length}</td>${cols.map(c => `<td>${z(r.tot[c.k])}</td>`).join("")}<td class="noprint-ctl">${r.n ? when(r.last) : "not reported"}</td></tr>`).join("") || `<tr><td colspan="${cols.length + 4}" class="fx-miss">No Area Incharges</td></tr>`}
+    <tr><td colspan="2"><b>UC Total</b></td><td><b>${B.teams.length}</b></td>${cols.map(c => `<td><b>${z(all.tot[c.k])}</b></td>`).join("")}<td class="noprint-ctl"></td></tr></tbody></table></div>
+    <div class="fx-note">Prepared automatically from the 2A reports entered by the Area Incharges. Figures not yet reported show 0.</div><div class="fx-sig"><div>UCMO</div><div>Received by</div></div></div>`;
 };
 
 /* ---------------- Maps (pictures already uploaded elsewhere) ---------------- */

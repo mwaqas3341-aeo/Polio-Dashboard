@@ -5,7 +5,7 @@
 .fx-hdr b { font-weight:800; }
 table.fx { border-collapse:collapse; width:100%; font-size:12px; table-layout:auto; }
 table.fx th, table.fx td { border:1px solid #222; padding:3px 5px; text-align:center; vertical-align:middle; }
-table.fx th { background:#eef1f5; font-weight:800; } table.fx td.l { text-align:left; } table.fx td.r { text-align:right; }
+table.fx th { background:#eef1f5; font-weight:800; text-transform:none; letter-spacing:0; } table.fx td.l { text-align:left; } table.fx td.r { text-align:right; }
 table.fx td.grp { background:#f7f7f7; font-weight:800; text-align:left; } table.fx tr { break-inside:avoid; }
 table.fx input, table.fx select, table.fx textarea { border:1px solid #9aa5a0; border-radius:3px; padding:2px 3px; font-size:12px; text-align:center; background:#fff; width:100%; min-width:46px; }
 table.fx textarea { text-align:inherit; min-height:34px; }
@@ -33,4 +33,4 @@ table.fx textarea { text-align:inherit; min-height:34px; }
 }
 
 .fx-2a table.fx { font-size:11px; } .fx-2a table.fx th { font-size:10px; padding:2px 3px; } .fx-2a table.fx td { padding:2px 3px; } .fx-team { break-inside:avoid; page-break-inside:avoid; }
-@media print { .fx-2a table.fx { font-size:8.5pt; } .fx-2a table.fx th { font-size:7.5pt; } }
+@media print { .fx-2a table.fx { font-size:7pt; } .fx-2a table.fx th { font-size:5.8pt; padding:1pt 1.5pt; } .fx-2a table.fx td { padding:1pt 2pt; } .fx-2a .fx-hdr { font-size:9pt; } .fx-2a h1 { font-size:14pt; } .fx-2a .fx-wrap { overflow:visible; } .fx-2a table.fx-main tbody tr { height:24pt; } .fx-2a table.fx-main tbody tr:last-child { height:16pt; } }

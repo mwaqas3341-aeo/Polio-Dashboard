@@ -244,3 +244,8 @@ This is a static site — enable GitHub Pages on this repo (Settings → Pages
 - `pages/reporting.html` — the Area Incharge enters the day's figures for every team of his area, saves, and downloads the AIC-wise 2A form (this day or all days). Anything not reported shows 0.
 - `pages/report-2b.html` — the UCMO's 2B form, built automatically from the reports and refreshed every 30 seconds: one row per Area Incharge plus the UC total, day-wise or cumulative.
 - Both are built from the 2A fields already in `daily_reports`; the original 2B layout has not been supplied yet.
+
+## Official 2A forms (migration 0033 — applied)
+- Built from the official April 2026 2A sheets (campaign days and catch-up days): header, Mobile/CBV team table with leader and member names, Fixed and Transit table, Type-of-Teams vaccine summary, signature columns. Totals and "Remaining" are calculated.
+- Entered on `pages/reporting.html` (new `daily_reports` columns, all existing columns kept); the UC 2B (`pages/report-2b.html`) sums the same figures per Area Incharge.
+- Note: in the sample sheet the "Returned" figure for Mobile teams equalled the doses given; here it is calculated as Given − Used.
