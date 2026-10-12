@@ -13,7 +13,7 @@
   <main class="main">
     <div class="topbar"><h1>Reporting — active campaign (2A)</h1></div>
     <div class="entry">
-      <p class="muted">Enter what each team did, for the day you choose. Anything not entered counts as 0. Grey boxes come from the saved Operational Plan or are calculated for you (households, children, school and MMP children, missed and remaining). Covered figures can be more than the target. Save, then download the official 2A form of your area. The UCMO's 2B form updates by itself.</p>
+      <p class="muted">Enter what each team did, for the day you choose. Anything not entered counts as 0. Grey boxes come from the saved Operational Plan or are calculated for you (households, children, school and MMP children, missed and remaining). Under \"Used\" vaccine you will see the expected use as a guide, but you type the doses actually used and the remaining doses are calculated. Covered figures can be more than the target. Save, then download the official 2A form of your area. The UCMO's 2B form updates by itself.</p>
       <div class="dl-panel"><div class="dl-row">
         <div><label>Campaign</label><select id="campSel"></select></div>
         <div><label>Area Incharge</label><select id="aicSel"></select></div>
@@ -64,7 +64,7 @@ function inputsTable(ts, cols, fixed) {
   const all = (!fixed && !catchup) ? cols.concat(EXTRA) : cols, h = all.map(c => `<th>${c.g ? E(c.g) + "<br>" : ""}${E(c.l)}</th>`).join("");
   return `<table class="fx grid"><thead><tr><th>Team</th>${h}</tr></thead><tbody>${ts.map(t => `<tr data-t="${E(t.team_no)}" data-fixed="${fixed ? 1 : 0}"><td><b>${E(t.team_no)}</b><br><small>${E(t.team_type || "")}</small></td>${all.map(c => c.calc
     ? `<td class="calc" data-ck="${c.k}">${FS.cell(B, t, day, catchup, c, rowVals(t))}</td>`
-    : `<td><input type="number" min="0" step="any" data-k="${E(t.team_no)}|${c.k}" value="${E((draft[t.team_no] || {})[c.k] ?? FS.cell(B, t, day, catchup, c))}"></td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    : `<td><input type="number" min="0" step="any" data-k="${E(t.team_no)}|${c.k}" value="${E((draft[t.team_no] || {})[c.k] ?? FS.cell(B, t, day, catchup, c))}">${c.k === "vaccine_doses_used" && !fixed ? `<div class="muted exp" data-exp="1" style="font-size:.68rem;margin-top:2px">Expected: <b>${FS.expectedDoses(B, t, day, catchup, rowVals(t))}</b></div>` : ""}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
 }
 const rowVals = (t) => draft[t.team_no] || undefined;
 function drawGrid() {
@@ -77,7 +77,8 @@ function draw() { drawGrid(); $("full").innerHTML = allPages(); }
 function onInput(e) { const k = e.target.dataset.k; if (!k) return; const [tn, f] = k.split("|"); (draft[tn] = draft[tn] || {})[f] = e.target.value; $("msg").textContent = "Unsaved changes";
   const tr = e.target.closest("tr"), a = curAic(), t = FS.teamsOf(B, a.id).find(x => String(x.team_no) === tn), { day, catchup } = dayInfo(), fixed = tr.dataset.fixed === "1", vals = {};
   tr.querySelectorAll("[data-k]").forEach(i => { vals[i.dataset.k.split("|")[1]] = i.value; });                         // live values of the row, so remaining figures update as you type
-  const cols = FS.colsFor(B, catchup, fixed).concat(EXTRA); tr.querySelectorAll("[data-ck]").forEach(td => { const c = cols.find(x => x.k === td.dataset.ck); if (c) td.textContent = FS.cell(B, t, day, catchup, c, vals); }); }
+  const cols = FS.colsFor(B, catchup, fixed).concat(EXTRA); tr.querySelectorAll("[data-ck]").forEach(td => { const c = cols.find(x => x.k === td.dataset.ck); if (c) td.textContent = FS.cell(B, t, day, catchup, c, vals); });
+  const ex = tr.querySelector("[data-exp] b"); if (ex) ex.textContent = FS.expectedDoses(B, t, day, catchup, vals); }
 async function save() {
   const a = curAic(); if (!a) return; $("saveBtn").disabled = true; const { day, catchup } = dayInfo(), rows = [];
   FS.teamsOf(B, a.id).forEach(t => { const fixed = t.team_type === "fixed" || t.team_type === "transit", cols = FS.colsFor(B, catchup, fixed), d = draft[t.team_no] || {},

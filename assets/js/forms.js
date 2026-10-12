@@ -302,6 +302,10 @@ FS.cell = (B, t, day, catchup, c, vals) => { const r = FS.rep(B, t.team_no, day,
     default: return g(c.k); } };
 const head2 = (cols, extra) => { const g = []; cols.forEach(c => { if (c.s) g.push({ s: 1, c }); else { const last = g[g.length - 1]; if (last && !last.s && last.g === c.g) last.n.push(c); else g.push({ g: c.g, n: [c] }); } });
   const r1 = g.map(x => x.s ? `<th rowspan="2">${E_(x.c.l)}</th>` : `<th colspan="${x.n.length}">${E_(x.g)}</th>`).join(""), r2 = g.filter(x => !x.s).map(x => x.n.map(c => `<th>${E_(c.l)}</th>`).join("")).join(""); return [r1 + extra[0], r2 + extra[1]]; };
+/* Expected vaccine use (shown to the Area Incharge as a guide; the Used figure is always typed by the AIC). Campaign days: required doses of the saved plan. Catch-up days: 1.11 x the targets entered. */
+FS.expectedDoses = (B, t, day, catchup, vals) => { const round2 = (v) => Math.round(v * 100) / 100;
+  if (catchup) { const g = (k) => (vals && vals[k] !== undefined) ? (+vals[k] || 0) : FS.rv(FS.rep(B, t.team_no, day, true), k); return round2(1.11 * ["na_u12", "na_1259", "r_u12", "r_1259"].reduce((n, k) => n + g("cu_target_" + k), 0)); }
+  const p = FS.planOf(B, t, day); return p.required_doses != null ? round2(+p.required_doses) : (p.total_children ? round2(+p.total_children * 1.11) : 0); };
 FS.members = (t) => (t.workers || []).slice().sort((a, b) => (a.member_role === "leader" ? -1 : b.member_role === "leader" ? 1 : FS.nat(a.member_no ?? 0, b.member_no ?? 0))).map(m => E_(m.staff?.full_name || "")).filter(Boolean).join(", ");
 const SIG = ['<th colspan="2">Signature</th>', "<th>Morning</th><th>Evening</th>"];
 FS.render2AOfficial = (B, aic, day, catchup, onlyTeamId) => {
