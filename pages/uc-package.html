@@ -29,6 +29,7 @@
           <option value="one_aic_teams">One AIC — each team as a separate file</option>
           <option value="aic_only_all">AIC pages only — all AICs in one file</option>
           <option value="aic_only_each">AIC pages only — one file per AIC</option>
+          <option value="each_team_all">Every AIC — each team as a separate file</option>
           <option value="uc_only">UC pages only (UC map, UC summary, social mobilization)</option>
         </select></div>
         <div id="aicWrap"><label>Area Incharge</label><select id="aicSel"></select></div>
@@ -40,6 +41,7 @@
         <label><input type="checkbox" id="o_tour" checked> Tour plan</label>
         <label><input type="checkbox" id="o_desk" checked> Desk review</label>
         <label><input type="checkbox" id="o_fv" checked> Field validation</label>
+        <label><input type="checkbox" id="o_2a"> 2A forms for every team and day</label>
         <label><input type="checkbox" id="o_uc" checked> UC pages (UC map 12MP, UC summary, social mobilization)</label>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
@@ -48,6 +50,7 @@
         <button class="btn secondary" id="printBtn"><i class="bi bi-printer"></i> Print / Save as PDF</button>
       </div>
       <div id="msg" class="muted" style="margin-top:8px"></div>
+      <div style="margin-top:14px"><h3><i class="bi bi-cursor"></i> One click: save an Area Incharge's teams as separate PDFs</h3><div class="muted" style="margin-bottom:6px">Click an Area Incharge and one PDF per team is saved to this device automatically.</div><div id="quick" class="dl-row" style="gap:6px"></div></div>
     </div>
     <div id="out"></div>
     <iframe id="hiddenFrame" style="position:absolute;left:-99999px;width:1200px;height:800px;border:0" aria-hidden="true"></iframe>
@@ -75,15 +78,19 @@ async function loadCampaign() {
   say("Loading campaign…"); B = await FS.loadBase($("campSel").value);
   $("aicSel").innerHTML = B.aics.map(a => `<option value="${a.id}">AIC ${FS.esc(a.aic_no)} — ${FS.esc(a.full_name)}</option>`).join("");
   if (me?.role === "aic" && me.staff_id) { $("aicSel").value = me.staff_id; $("scope").value = "one_aic"; }
+  $("quick").innerHTML = B.aics.map(a => `<button type="button" class="btn small secondary" data-q="${a.id}"><i class="bi bi-download"></i> AIC ${FS.esc(a.aic_no)} — ${FS.esc(a.full_name)} (${FS.teamsOf(B, a.id).length} teams)</button>`).join("") || `<span class="muted">No Area Incharges</span>`;
+  $("quick").onclick = (e) => { const b = e.target.closest("[data-q]"); if (!b) return; $("scope").value = "one_aic_teams"; $("aicSel").value = b.dataset.q; syncScope(); run("download"); };
   syncScope(); say(`${B.aics.length} Area Incharge(s), ${B.teams.length} team(s) in ${B.geo.uc || "this UC"}.`);
 }
+const aicOnlyFlag = (s) => s.startsWith("aic_only");
 function syncScope() {
   const s = $("scope").value; $("aicWrap").style.display = (s === "one_aic" || s === "one_aic_teams") ? "" : "none";
   const aicOnly = s.startsWith("aic_only"), ucOnly = s === "uc_only";
   $("o_teams").disabled = aicOnly || ucOnly; if (aicOnly) $("o_teams").checked = false;
   ["o_summary", "o_aicmap", "o_tour", "o_desk", "o_fv"].forEach(id => $(id).disabled = ucOnly || s === "one_aic_teams");
-  $("o_uc").disabled = !(s === "all_one" || ucOnly);
-  if (s === "one_aic_teams") { $("o_teams").checked = true; $("o_teams").disabled = true; }
+  $("o_uc").disabled = !(s === "all_one" || ucOnly); $("o_2a").disabled = ucOnly || aicOnlyFlag(s);
+  if (s === "one_aic_teams" || s === "each_team_all") { $("o_teams").checked = true; $("o_teams").disabled = true; }
+  ["o_summary", "o_aicmap", "o_tour", "o_desk", "o_fv"].forEach(id => { if (s === "each_team_all") $(id).disabled = true; });
 }
 
 /* ---- microplan sheets come from the existing microplan page, loaded in a hidden frame ---- */
@@ -106,7 +113,7 @@ async function microplanPages(cw, aicId, teamId) {
 
 /* ---- build the list of files ---- */
 async function build() {
-  const s = $("scope").value, o = { summary: $("o_summary").checked, aicmap: $("o_aicmap").checked, teams: $("o_teams").checked, tour: $("o_tour").checked, desk: $("o_desk").checked, fv: $("o_fv").checked, uc: $("o_uc").checked };
+  const s = $("scope").value, o = { summary: $("o_summary").checked, aicmap: $("o_aicmap").checked, teams: $("o_teams").checked, tour: $("o_tour").checked, twoA: $("o_2a").checked, desk: $("o_desk").checked, fv: $("o_fv").checked, uc: $("o_uc").checked };
   const wrap = (arr) => arr.map(h => `<div class="pg">${h}</div>`);
   const needMp = (o.summary || o.teams) && s !== "uc_only"; const cw = needMp ? await frame() : null;
   const ucPages = async () => { const out = []; out.push(await FS.ucMap(B), FS.renderUcSummary(B, false), FS.renderSm(B, false)); return wrap(out); };
@@ -118,14 +125,18 @@ async function build() {
     if (o.aicmap) out.push(m[0]);
     if (o.teams && withTeams) out.push(...mp.slice(1));
     if (o.aicmap) out.push(...m.slice(1));
+    if (o.twoA) FS.teamsOf(B, a.id).forEach(t => days2A().forEach(d => out.push(FS.render2A(B, t, d, a))));
     if (o.tour) out.push(FS.renderTour(B, a, false)); if (o.desk) out.push(FS.renderDesk(B, a, false)); if (o.fv) out.push(FS.renderFV(B, a, false));
     return wrap(out); };
+  const days2A = () => Array.from({ length: Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7) }, (_, i) => i + 1);
+  const teamFile = async (a, t) => { say(`Preparing team ${t.team_no}…`); const pg = await microplanPages(cw, a.id, t.id); if (o.twoA) days2A().forEach(d => pg.push(FS.render2A(B, t, d, a))); return wrap(pg); };
   const sel = B.aics.find(a => a.id === $("aicSel").value), files = [], nm = (a) => `AIC${a.aic_no}_${a.full_name}`.replace(/[^\w\-]+/g, "_"), base = `${B.campaign.name}_${B.geo.uc}`.replace(/[^\w\-]+/g, "_");
   if (s === "uc_only") files.push({ name: `${base}_UC_pages`, pages: await ucPages() });
   else if (s === "all_one" || s === "aic_only_all") { let pages = (s === "all_one" && o.uc) ? await ucPages() : []; for (const a of B.aics) pages = pages.concat(await aicPages(a, s === "all_one")); files.push({ name: `${base}_${s === "all_one" ? "All_AICs" : "AIC_pages"}`, pages }); }
   else if (s === "each_aic" || s === "aic_only_each") for (const a of B.aics) files.push({ name: `${base}_${nm(a)}${s === "aic_only_each" ? "_AIC_pages" : ""}`, pages: await aicPages(a, s === "each_aic") });
   else if (s === "one_aic") { if (!sel) throw new Error("Choose an Area Incharge"); files.push({ name: `${base}_${nm(sel)}`, pages: await aicPages(sel, true) }); }
-  else if (s === "one_aic_teams") { if (!sel) throw new Error("Choose an Area Incharge"); for (const t of FS.teamsOf(B, sel.id)) { say(`Preparing team ${t.team_no}…`); files.push({ name: `${base}_${nm(sel)}_Team${String(t.team_no).replace(/[^\w\-]+/g, "_")}`, pages: wrap(await microplanPages(cw, sel.id, t.id)) }); } }
+  else if (s === "one_aic_teams") { if (!sel) throw new Error("Choose an Area Incharge"); for (const t of FS.teamsOf(B, sel.id)) files.push({ name: `${base}_${nm(sel)}_Team${String(t.team_no).replace(/[^\w\-]+/g, "_")}`, pages: await teamFile(sel, t) }); }
+  else if (s === "each_team_all") { for (const a of B.aics) for (const t of FS.teamsOf(B, a.id)) files.push({ name: `${base}_${nm(a)}_Team${String(t.team_no).replace(/[^\w\-]+/g, "_")}`, pages: await teamFile(a, t) }); }
   return files.filter(f => f.pages.length);
 }
 function show(files) {

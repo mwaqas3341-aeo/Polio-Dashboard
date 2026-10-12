@@ -137,3 +137,9 @@ tbody tr:hover { background:var(--brand-light); }
   .sidebar .brand small { display:none; }
   .main { padding:16px 14px 32px; }
 }
+
+/* embedded pages (inside PDF Downloads) and locked plan links */
+body.embed .sidebar { display:none !important; } body.embed .main { padding-top:10px; max-width:none; } body.embed .topbar { display:none; }
+a.locked { opacity:.55; } .mc-links a.locked, .nav-menu a.locked { cursor:not-allowed; }
+.nav-pdf { text-decoration:none !important; } .nav-pdf.on, .nav-pdf:hover { background:rgba(255,255,255,.14); color:#fff; }
+@media (max-width:820px) { .nav-pdf { width:100%; } }

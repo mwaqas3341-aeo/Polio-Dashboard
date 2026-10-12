@@ -234,3 +234,8 @@ This is a static site — enable GitHub Pages on this repo (Settings → Pages
 - `pages/uc-package.html` — AIC-wise and whole-UC downloads: all AICs in one file, one file per AIC, one AIC with all teams, one AIC with each team separate, AIC pages only, UC pages only. Real PDF files or browser print; Microplan sheets are pulled from `microplan.html`.
 - `pages/maps.html` — print pages for UC Map 12MP, AIC Map 8MP and Route Map 7MP (days 1-3).
 - Look and feel follows the AEO Schools Portal (A-I-DB): dark top bar, three module groups (Campaign / Staff / Plan Management), module cards.
+
+## Plan questionnaire, single PDF menu, auto desk review (migration 0031 — applied)
+- `pages/plan-setup.html` — questions answered first: the Vitamin A capsule question (Blue / Red quantities asked only when Yes) and, per team, MMP / schools / missed children / refusals (details asked only when Yes), then the micro-plan status. Plan Management links stay locked until everything is answered (soft lock in the menus; it is not a server rule).
+- `pages/pdf-downloads.html` — the only PDF menu: plan package (all AICs, each AIC, one AIC, each team separate, one click per AIC), CNIC lists, staff PDF, DDM cards, payment lists, 2A forms for all teams.
+- Desk review is filled automatically from real plan data (plans, maps, questionnaire, forms); indicators that cannot be verified from data stay blank and are not counted. Scores are calculated, never forced.

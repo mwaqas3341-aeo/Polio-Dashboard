@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Downloads — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<style> #frm { width:100%; height:calc(100vh - 235px); min-height:620px; border:1px solid var(--b0); border-radius:var(--r3); background:#fff; } </style>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar-mount"></aside>
+  <main class="main">
+    <div class="topbar"><h1>PDF Downloads</h1></div>
+    <div class="dl-panel"><h3><i class="bi bi-file-earmark-pdf"></i> One place for every PDF</h3>
+      <div class="dl-row"><div style="max-width:520px"><label>What do you want to download?</label><select id="doc">
+        <option value="plan">Complete plan package — all AICs, each AIC, each team (separate files)</option>
+        <option value="cnic">CNIC lists — Area Incharges, drivers, team members</option>
+        <option value="staffpdf">Staff PDF — CNIC and AIC details</option>
+        <option value="ddm">DDM cards</option>
+        <option value="pay">Payment lists</option>
+        <option value="twoa">2A forms — all teams</option>
+      </select></div></div></div>
+    <iframe id="frm" title="PDF downloads"></iframe>
+  </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/config.js"></script><script src="../assets/js/supabaseClient.js"></script><script src="../assets/js/nav.js"></script>
+<script>
+const PAGES = { plan: "uc-package.html", cnic: "cnic-lists.html", staffpdf: "staff-pdf.html", ddm: "ddm-cards.html", pay: "payments.html", twoa: "two-a-form.html?all=1" };
+(async () => {
+  const session = await requireAuth(); if (!session) return; renderSidebar("pdf-downloads.html");
+  const sel = document.getElementById("doc"), q = new URLSearchParams(location.search).get("doc"); if (q && PAGES[q]) sel.value = q;
+  const go = () => { const u = PAGES[sel.value]; document.getElementById("frm").src = u + (u.includes("?") ? "&" : "?") + "embed=1"; };
+  sel.onchange = go; go();
+})();
+</script>
+</body>
+</html>

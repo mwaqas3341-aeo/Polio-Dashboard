@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>2A form — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/style.css"><link rel="stylesheet" href="../assets/css/forms.css">
 <style>
   @media print {
     .app-shell > .sidebar, .no-print { display: none !important; }
@@ -24,6 +24,8 @@
     <aside class="sidebar" id="sidebar-mount"></aside>
     <main class="main">
       <div class="topbar no-print"><h1>2A form</h1></div>
+      <div class="card no-print" style="border-left:5px solid var(--brand)"><b>All teams in one go:</b> <span class="muted">prints a 2A form for every team (every campaign day), with the team's members, targets and any reports already saved. The layout is the same in every campaign.</span> <button class="btn small" id="allBtn" type="button"><i class="bi bi-printer"></i> Print / PDF — all teams</button></div>
+      <div id="allOut"></div>
       <p class="muted no-print">Pick a campaign, team, and day — the header, roster, and planning targets fill in automatically from what you've already entered. Fill in the field-actuals section, save, and print.</p>
 
       <div class="card no-print">
@@ -90,7 +92,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../assets/js/config.js"></script>
   <script src="../assets/js/supabaseClient.js"></script>
-  <script src="../assets/js/nav.js"></script>
+  <script src="../assets/js/nav.js"></script><script src="../assets/js/forms.js"></script>
   <script src="../assets/js/crud.js"></script>
   <script>
     let currentCampaignId = null, currentTeamNo = null, currentDay = null, currentIsCatchup = false, currentTeamId = null;
@@ -105,6 +107,13 @@
 
     document.getElementById("f_campaign").addEventListener("change", populateTeamAndDay);
     document.getElementById("printBtn").addEventListener("click", () => window.print());
+    document.getElementById("allBtn").addEventListener("click", async () => {
+      const cid = document.getElementById("f_campaign").value; if (!cid) return; const out = document.getElementById("allOut"); out.innerHTML = '<p class="muted">Preparing every team…</p>';
+      const B = await FS.loadBase(cid), days = Array.from({ length: Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7) }, (_, i) => i + 1), pages = [];
+      for (const a of B.aics) for (const t of FS.teamsOf(B, a.id)) for (const d of days) pages.push(FS.render2A(B, t, d, a));
+      out.innerHTML = pages.length ? pages.join("") : '<p class="muted">No teams found for this campaign.</p>'; if (pages.length) setTimeout(() => window.print(), 400);
+    });
+    if (new URLSearchParams(location.search).get("all") === "1") setTimeout(() => document.getElementById("allBtn").click(), 1200);
 
     async function populateTeamAndDay() {
       const campaignId = document.getElementById("f_campaign").value;
@@ -184,6 +193,8 @@
         document.getElementById(elId).value = existingReport ? (existingReport[col] ?? 0) : 0;
       }
 
+      { const { data: cf } = await supabaseClient.from("campaign_forms").select("data").eq("campaign_id", currentCampaignId).eq("form_type", "campaign_setup").maybeSingle(); const noVit = cf?.data?.vit_a_needed === "no";
+        ["r_vita_red", "r_vita_blue"].forEach(id => { const el = document.getElementById(id); if (el && el.parentElement) el.parentElement.style.display = noVit ? "none" : ""; }); }
       document.getElementById("saveStatus").textContent = existingReport ? "Editing an existing report." : "No report saved yet for this team/day.";
       document.getElementById("formDoc").style.display = "block";
     });
