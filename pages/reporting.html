@@ -13,7 +13,7 @@
   <main class="main">
     <div class="topbar"><h1>Reporting — active campaign (2A)</h1></div>
     <div class="entry">
-      <p class="muted">Enter what each team did, for the day you choose. Anything not entered counts as 0. Grey boxes are calculated for you. Save, then download the official 2A form of your area. The UCMO's 2B form updates by itself.</p>
+      <p class="muted">Enter what each team did, for the day you choose. Anything not entered counts as 0. Grey boxes come from the saved Operational Plan or are calculated for you (households, children, school and MMP children, missed and remaining). Covered figures can be more than the target. Save, then download the official 2A form of your area. The UCMO's 2B form updates by itself.</p>
       <div class="dl-panel"><div class="dl-row">
         <div><label>Campaign</label><select id="campSel"></select></div>
         <div><label>Area Incharge</label><select id="aicSel"></select></div>
@@ -58,13 +58,15 @@ async function load() {
   draft = {}; draw();
 }
 const allPages = () => { const a = curAic(); return a ? FS.render2ADays(B, a) : ""; };
+const EXTRA = [{ k: "hh_rem", l: "Households remaining", calc: "hhrem", x: 1 }, { k: "ch_rem", l: "Children remaining", calc: "chrem", x: 1 }];
 function inputsTable(ts, cols, fixed) {
   const { day, catchup } = dayInfo(); if (!ts.length) return `<p class="muted">None for this Area Incharge.</p>`;
-  const h = cols.map(c => `<th>${c.g ? E(c.g) + "<br>" : ""}${E(c.l)}</th>`).join("");
-  return `<table class="fx grid"><thead><tr><th>Team</th>${h}</tr></thead><tbody>${ts.map(t => `<tr data-t="${E(t.team_no)}"><td><b>${E(t.team_no)}</b><br><small>${E(t.team_type || "")}</small></td>${cols.map(c => c.calc
-    ? `<td class="calc" data-calc="${c.calc}">${FS.cell(B, t, day, catchup, c)}</td>`
+  const all = (!fixed && !catchup) ? cols.concat(EXTRA) : cols, h = all.map(c => `<th>${c.g ? E(c.g) + "<br>" : ""}${E(c.l)}</th>`).join("");
+  return `<table class="fx grid"><thead><tr><th>Team</th>${h}</tr></thead><tbody>${ts.map(t => `<tr data-t="${E(t.team_no)}" data-fixed="${fixed ? 1 : 0}"><td><b>${E(t.team_no)}</b><br><small>${E(t.team_type || "")}</small></td>${all.map(c => c.calc
+    ? `<td class="calc" data-ck="${c.k}">${FS.cell(B, t, day, catchup, c, rowVals(t))}</td>`
     : `<td><input type="number" min="0" step="any" data-k="${E(t.team_no)}|${c.k}" value="${E((draft[t.team_no] || {})[c.k] ?? FS.cell(B, t, day, catchup, c))}"></td>`).join("")}</tr>`).join("")}</tbody></table>`;
 }
+const rowVals = (t) => draft[t.team_no] || undefined;
 function drawGrid() {
   const a = curAic(); if (!a) { $("gridM").innerHTML = `<p class="muted">No Area Incharge found.</p>`; $("gridF").innerHTML = ""; return; }
   const { catchup, day } = dayInfo(), ts = FS.teamsOf(B, a.id), mob = ts.filter(t => (t.team_type || "mobile") === "mobile"), fx = ts.filter(t => t.team_type === "fixed" || t.team_type === "transit");
@@ -73,14 +75,17 @@ function drawGrid() {
 }
 function draw() { drawGrid(); $("full").innerHTML = allPages(); }
 function onInput(e) { const k = e.target.dataset.k; if (!k) return; const [tn, f] = k.split("|"); (draft[tn] = draft[tn] || {})[f] = e.target.value; $("msg").textContent = "Unsaved changes";
-  const tr = e.target.closest("tr"), v = (key) => Number((tr.querySelector(`[data-k="${tn}|${key}"]`) || {}).value) || 0;
-  tr.querySelectorAll("[data-calc]").forEach(td => { if (td.dataset.calc === "rem") td.textContent = Math.max(0, v("vaccine_doses_received") - v("vaccine_doses_used")); if (td.dataset.calc === "fm") td.textContent = Math.max(0, v("finger_markers_received") - v("finger_markers_returned")); }); }
+  const tr = e.target.closest("tr"), a = curAic(), t = FS.teamsOf(B, a.id).find(x => String(x.team_no) === tn), { day, catchup } = dayInfo(), fixed = tr.dataset.fixed === "1", vals = {};
+  tr.querySelectorAll("[data-k]").forEach(i => { vals[i.dataset.k.split("|")[1]] = i.value; });                         // live values of the row, so remaining figures update as you type
+  const cols = FS.colsFor(B, catchup, fixed).concat(EXTRA); tr.querySelectorAll("[data-ck]").forEach(td => { const c = cols.find(x => x.k === td.dataset.ck); if (c) td.textContent = FS.cell(B, t, day, catchup, c, vals); }); }
 async function save() {
   const a = curAic(); if (!a) return; $("saveBtn").disabled = true; const { day, catchup } = dayInfo(), rows = [];
   FS.teamsOf(B, a.id).forEach(t => { const fixed = t.team_type === "fixed" || t.team_type === "transit", cols = FS.colsFor(B, catchup, fixed), d = draft[t.team_no] || {},
       row = { campaign_id: B.campaign.id, team_no: Number(t.team_no), campaign_day: day, is_catchup: catchup, reported_by: uid };
     if (!fixed && !catchup) { row.households_target = FS.cell(B, t, day, false, { calc: "hh" }); row.children_target = FS.cell(B, t, day, false, { calc: "ch" }); }
-    cols.filter(c => !c.calc).forEach(c => { row[c.k] = Math.max(0, Number(d[c.k] ?? FS.cell(B, t, day, catchup, c)) || 0); }); rows.push(row); });
+    const vals = {}; cols.filter(c => !c.calc).forEach(c => { vals[c.k] = Math.max(0, Number(d[c.k] ?? FS.cell(B, t, day, catchup, c)) || 0); row[c.k] = vals[c.k]; });   // no upper limit: covered may be more than the target
+    cols.filter(c => c.calc && ["missed", "school", "mmp", "still"].includes(c.calc)).forEach(c => { row[c.k] = FS.cell(B, t, day, catchup, c, vals); });   // store the calculated figures too
+    rows.push(row); });
   if (!rows.length) { $("saveBtn").disabled = false; return; }
   const { data, error } = await supabaseClient.from("daily_reports").upsert(rows, { onConflict: "campaign_id,team_no,campaign_day,is_catchup" }).select();
   if (error) $("msg").innerHTML = `<span class="error-text">Could not save: ${E(error.message)}</span>`;

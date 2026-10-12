@@ -259,15 +259,15 @@ FS.renderSm = (B, edit) => {
 FS.A_COLS = [
   { k: "hh_target", g: "Number of households", l: "Target (micro plan)", calc: "hh" }, { k: "households_visited", g: "Number of households", l: "Visited by team" },
   { k: "ch_target", s: 1, l: "Children in HH from micro plan (0–5 yrs)", calc: "ch" }, { k: "children_vaccinated_first_visit", s: 1, l: "Vaccinated children of HH, first visit (0–5 yrs)" },
-  { k: "missed_na", g: "Recorded missed children (0–5 yrs)", l: "N.A" }, { k: "missed_refusal", g: "Recorded missed children (0–5 yrs)", l: "Refusal" },
+  { k: "missed_na", g: "Recorded missed children (0–5 yrs)", l: "N.A", calc: "missed" }, { k: "missed_refusal", g: "Recorded missed children (0–5 yrs)", l: "Refusal" },
   { k: "covered_na", g: "Covered missed children, same-day catch-up", l: "N.A" }, { k: "covered_refusal", g: "Covered missed children, same-day catch-up", l: "Refusal" },
-  { k: "school_madrassa_children", s: 1, l: "School / Madrassa children" }, { k: "guest_vaccinated", s: 1, l: "Guest vaccinated" }, { k: "street_vaccinated", s: 1, l: "Children vaccinated in streets" },
-  { k: "mmp_registered", g: "Total MMP children", l: "Registered" }, { k: "mmp_vaccinated", g: "Total MMP children", l: "Vaccinated" },
+  { k: "school_madrassa_children", s: 1, l: "School / Madrassa children", calc: "school" }, { k: "guest_vaccinated", s: 1, l: "Guest vaccinated" }, { k: "street_vaccinated", s: 1, l: "Children vaccinated in streets" },
+  { k: "mmp_registered", g: "Total MMP children", l: "Registered", calc: "mmp" }, { k: "mmp_vaccinated", g: "Total MMP children", l: "Vaccinated" },
   { k: "zero_zero_houses", s: 1, l: "Total 0/0 houses" }, { k: "lock_houses", s: 1, l: "Total lock houses" },
   { k: "vaccine_doses_received", g: "Vaccine recorded doses", l: "Received" }, { k: "vaccine_doses_used", g: "Vaccine recorded doses", l: "Used" }, { k: "vd_remaining", g: "Vaccine recorded doses", l: "Remaining", calc: "rem" },
   { k: "finger_markers_received", s: 1, l: "Finger markers received" }, { k: "afp_cases_notified", s: 1, l: "AFP cases notified" }, { k: "zero_dose_ri_recorded", s: 1, l: "Zero dose for RI recorded" },
   { k: "vitamin_a_red", g: "Vitamin A capsules used", l: "Red", vit: 1 }, { k: "vitamin_a_blue", g: "Vitamin A capsules used", l: "Blue", vit: 1 }];
-const cuGroup = (g, p) => [["na_u12", "NA <12 M"], ["na_1259", "NA 12–59 M"], ["r_u12", "R <12 M"], ["r_1259", "R 12–59 M"]].map(([k, l]) => ({ k: `cu_${p}_${k}`, g, l }));
+const cuGroup = (g, p) => [["na_u12", "NA <12 M"], ["na_1259", "NA 12–59 M"], ["r_u12", "R <12 M"], ["r_1259", "R 12–59 M"]].map(([k, l]) => (p === "still" ? { k: `cu_still_${k}`, g, l, calc: "still", t: `cu_target_${k}`, cv: `cu_cov_${k}` } : { k: `cu_${p}_${k}`, g, l }));
 FS.C_COLS = [...cuGroup("Target for catch-up day", "target"), ...cuGroup("Covered missed children, catch-up day", "cov"), ...cuGroup("Still missed children, catch-up day", "still"),
   { k: "guest_vaccinated", s: 1, l: "Guest vaccinated" }, { k: "street_vaccinated", s: 1, l: "Children vaccinated in streets" }, { k: "persistent_missed", s: 1, l: "Persistently missed children" },
   { k: "vaccine_doses_received", g: "Vaccine recorded doses", l: "Received" }, { k: "vaccine_doses_used", g: "Vaccine recorded doses", l: "Used" }, { k: "vd_remaining", g: "Vaccine recorded doses", l: "Remaining", calc: "rem" },
@@ -285,12 +285,21 @@ FS.rep = (B, teamNo, day, catchup) => (B.reports || []).find(x => String(x.team_
 FS.tgt = (B, teamNo, day) => (B.targets || []).find(x => String(x.team_no) === String(teamNo) && x.campaign_day === day);
 FS.planOf = (B, t, day) => B.plans.find(p => p.team_id === t.id && p.campaign_day === day) || {};
 /* calculated value of one cell */
-FS.cell = (B, t, day, catchup, c) => { const r = FS.rep(B, t.team_no, day, catchup);
-  if (c.calc === "hh") return catchup ? 0 : (+FS.planOf(B, t, day).total_households || +(FS.tgt(B, t.team_no, day) || {}).target_households || 0);
-  if (c.calc === "ch") return catchup ? 0 : (+FS.planOf(B, t, day).total_children || +(FS.tgt(B, t.team_no, day) || {}).target_children || 0);
-  if (c.calc === "rem") return Math.max(0, FS.rv(r, "vaccine_doses_received") - FS.rv(r, "vaccine_doses_used"));
-  if (c.calc === "fm") return Math.max(0, FS.rv(r, "finger_markers_received") - FS.rv(r, "finger_markers_returned"));
-  return FS.rv(r, c.k); };
+FS.cell = (B, t, day, catchup, c, vals) => { const r = FS.rep(B, t.team_no, day, catchup), p = FS.planOf(B, t, day), tg = FS.tgt(B, t.team_no, day) || {};
+  const g = (k) => (vals && vals[k] !== undefined) ? (vals[k] === "" ? 0 : (+vals[k] || 0)) : FS.rv(r, k);
+  const hhChildren = (+p.children_households_1_5 || 0) + (+p.children_under_1 || 0);
+  switch (c.calc) {
+    case "hh": return catchup ? 0 : (+p.total_households || +tg.target_households || 0);                       // from the saved Operational Plan
+    case "ch": return catchup ? 0 : (hhChildren || (p.total_children ? 0 : +tg.target_children || 0));          // household children (1-5 and under 1) from the plan
+    case "school": return catchup ? 0 : (+p.school_children || 0);                                              // school / madrassa children from the plan
+    case "mmp": return catchup ? 0 : (+p.mmp_children || 0);                                                    // MMP children from the plan
+    case "missed": return catchup ? 0 : Math.max(0, FS.cell(B, t, day, false, { calc: "ch" }) - g("children_vaccinated_first_visit") - g("missed_refusal"));   // remaining = target - covered - refusals
+    case "still": return Math.max(0, g(c.t) - g(c.cv));                                                          // remaining after covering; covered may exceed the target
+    case "rem": return Math.max(0, g("vaccine_doses_received") - g("vaccine_doses_used"));
+    case "fm": return Math.max(0, g("finger_markers_received") - g("finger_markers_returned"));
+    case "hhrem": return Math.max(0, FS.cell(B, t, day, false, { calc: "hh" }) - g("households_visited"));
+    case "chrem": return Math.max(0, FS.cell(B, t, day, false, { calc: "ch" }) - g("children_vaccinated_first_visit"));
+    default: return g(c.k); } };
 const head2 = (cols, extra) => { const g = []; cols.forEach(c => { if (c.s) g.push({ s: 1, c }); else { const last = g[g.length - 1]; if (last && !last.s && last.g === c.g) last.n.push(c); else g.push({ g: c.g, n: [c] }); } });
   const r1 = g.map(x => x.s ? `<th rowspan="2">${E_(x.c.l)}</th>` : `<th colspan="${x.n.length}">${E_(x.g)}</th>`).join(""), r2 = g.filter(x => !x.s).map(x => x.n.map(c => `<th>${E_(c.l)}</th>`).join("")).join(""); return [r1 + extra[0], r2 + extra[1]]; };
 FS.members = (t) => (t.workers || []).slice().sort((a, b) => (a.member_role === "leader" ? -1 : b.member_role === "leader" ? 1 : FS.nat(a.member_no ?? 0, b.member_no ?? 0))).map(m => E_(m.staff?.full_name || "")).filter(Boolean).join(", ");
@@ -325,7 +334,7 @@ FS.render2ADays = (B, aic) => { const nd = FS.nDays(B), out = [], ids = new Set(
   return out.join(""); };
 
 /* ---- 2B: UC consolidated, one row per Area Incharge ---- */
-FS.sumReports = (B, teams, day, catchup) => { const cols = FS.colsFor(B, catchup, false).filter(c => !c.calc || c.calc === "hh" || c.calc === "ch" || c.calc === "rem" || c.calc === "fm"), days = day === "all" ? Array.from({ length: FS.nDays(B) }, (_, i) => i + 1) : [day];
+FS.sumReports = (B, teams, day, catchup) => { const cols = FS.colsFor(B, catchup, false), days = day === "all" ? Array.from({ length: FS.nDays(B) }, (_, i) => i + 1) : [day];
   const tot = Object.fromEntries(cols.map(c => [c.k, 0])); let last = null, n = 0;
   teams.forEach(t => days.forEach(d => { const r = FS.rep(B, t.team_no, d, catchup); if (r) { n++; const u = r.updated_at || r.created_at; if (u && (!last || u > last)) last = u; } cols.forEach(c => { tot[c.k] += FS.cell(B, t, d, catchup, c); }); }));
   return { tot, last, n, cols }; };
