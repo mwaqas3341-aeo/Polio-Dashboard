@@ -278,7 +278,17 @@ FS.C_COLS = [{ k: "cu_target", g: "Target for catch-up day", l: "Total children"
 FS.F_COLS = [{ k: "children_vaccinated_first_visit", s: 1, l: "Number of children vaccinated" }, FS.AV, { k: "vaccine_doses_received", g: "Vaccine recorded doses", l: "Received" }, { k: "vaccine_doses_used", g: "Vaccine recorded doses", l: "Used" }, { k: "vaccine_doses_returned", g: "Vaccine recorded doses", l: "Returned" },
   { k: "finger_markers_received", g: "Finger markers", l: "Received" }, { k: "finger_markers_returned", g: "Finger markers", l: "Returned" }, { k: "afp_cases_notified", s: 1, l: "AFP cases notified" }, { k: "zero_dose_ri_recorded", s: 1, l: "Zero dose for RI recorded" }];
 FS.colsFor = (B, catchup, fixed, day) => (fixed ? FS.F_COLS : catchup ? FS.C_COLS : FS.A_COLS).filter(c => !(c.av && !catchup && day === 1));   // Already vaccinated is hidden on campaign day 1   // all official columns are always shown
-FS.vitOn = (B) => FS.caps(B).vit_a_needed === "yes";                                              // Vitamin A cells can be typed only if the plan questionnaire says capsules are needed
+FS.vitOn = (B) => FS.caps(B).vit_a_needed === "yes";
+/* a capsule colour is asked about only when the campaign question is Yes AND a quantity (> 0) was configured for that colour */
+FS.capQty = (B, color) => FS.vitOn(B) ? Math.max(0, +FS.caps(B)["vit_" + color] || 0) : 0;
+FS.capOn = (B, color) => FS.capQty(B, color) > 0;
+FS.capCol = (c) => c.k === "vitamin_a_blue" ? "blue" : "red";
+/* capsules used so far in the campaign, with the unsaved entries of the screen (draft[team_no][key], for one day) replacing the saved ones */
+FS.capUsed = (B, color, draft, day, catchup) => { const k = "vitamin_a_" + color; let n = 0;
+  (B.reports || []).forEach(r => { if (draft && r.campaign_day === day && !!r.is_catchup === !!catchup && draft[r.team_no] && draft[r.team_no][k] !== undefined) return; n += +r[k] || 0; });
+  if (draft) Object.keys(draft).forEach(tn => { if (draft[tn][k] !== undefined) n += Math.max(0, +draft[tn][k] || 0); }); return n; };
+/* warnings only — a legitimate report is never blocked, because the quantity is the planned requirement and real use can differ */
+FS.capWarn = (B, draft, day, catchup) => ["blue", "red"].filter(c => FS.capOn(B, c)).map(c => { const used = FS.capUsed(B, c, draft, day, catchup), qty = FS.capQty(B, c); return used > qty ? `${c === "blue" ? "Blue" : "Red"} capsules used so far (${used}) are more than the quantity configured for the campaign (${qty}) — please check.` : ""; }).filter(Boolean);
 FS.LEGACY = { missed_na: (r) => (+r.missed_children_under_12m || 0) + (+r.missed_children_12_59m || 0), missed_refusal: (r) => (+r.refusal_under_12m || 0) + (+r.refusal_12_59m || 0), covered_na: (r) => +r.catchup_covered || 0, mmp_vaccinated: (r) => +r.hrmp_vaccinated || 0, cu_cov: (r) => ["na_u12", "na_1259", "r_u12", "r_1259"].reduce((n, k) => n + (+r["cu_cov_" + k] || 0), 0) };
 FS.rv = (r, k) => { if (!r) return 0; const v = +r[k] || 0; return v || (FS.LEGACY[k] ? FS.LEGACY[k](r) : 0); };
 FS.dayDate = (B, day) => B.campaign.start_date ? FS.fmtDate(new Date(new Date(B.campaign.start_date + "T00:00:00").getTime() + (day - 1) * 864e5).toISOString().slice(0, 10)) : "";
