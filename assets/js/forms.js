@@ -256,29 +256,30 @@ FS.renderSm = (B, edit) => {
 
 /* ---------------- Official 2A forms (campaign days and catch-up days) and the UC 2B ----------------
    Layout follows "Daily Performance, FLW's Attendance and Vaccine Recording and Reporting" (2A). Anything not reported shows 0. */
+FS.AV = { k: "already_vaccinated", s: 1, l: "Already vaccinated children", av: 1 };   // asked from campaign day 2 onward (and on every catch-up day)
 FS.A_COLS = [
   { k: "hh_target", g: "Number of households", l: "Target (micro plan)", calc: "hh" }, { k: "households_visited", g: "Number of households", l: "Visited by team" },
   { k: "ch_target", s: 1, l: "Children in HH from micro plan (0–5 yrs)", calc: "ch" }, { k: "children_vaccinated_first_visit", s: 1, l: "Vaccinated children of HH, first visit (0–5 yrs)" },
   { k: "missed_na", g: "Recorded missed children (0–5 yrs)", l: "N.A", calc: "missed" }, { k: "missed_refusal", g: "Recorded missed children (0–5 yrs)", l: "Refusal" },
   { k: "covered_na", g: "Covered missed children, same-day catch-up", l: "N.A" }, { k: "covered_refusal", g: "Covered missed children, same-day catch-up", l: "Refusal" },
-  { k: "school_madrassa_children", s: 1, l: "School / Madrassa children", calc: "school" }, { k: "guest_vaccinated", s: 1, l: "Guest vaccinated" }, { k: "street_vaccinated", s: 1, l: "Children vaccinated in streets" },
+  FS.AV, { k: "school_madrassa_children", s: 1, l: "School / Madrassa children", calc: "school" }, { k: "guest_vaccinated", s: 1, l: "Guest vaccinated" }, { k: "street_vaccinated", s: 1, l: "Children vaccinated in streets" },
   { k: "mmp_registered", g: "Total MMP children", l: "Registered", calc: "mmp" }, { k: "mmp_vaccinated", g: "Total MMP children", l: "Vaccinated" },
   { k: "zero_zero_houses", s: 1, l: "Total 0/0 houses" }, { k: "lock_houses", s: 1, l: "Total lock houses" },
   { k: "vaccine_doses_received", g: "Vaccine recorded doses", l: "Received" }, { k: "vaccine_doses_used", g: "Vaccine recorded doses", l: "Used" }, { k: "vd_remaining", g: "Vaccine recorded doses", l: "Remaining", calc: "rem" },
   { k: "finger_markers_received", s: 1, l: "Finger markers received" }, { k: "afp_cases_notified", s: 1, l: "AFP cases notified" }, { k: "zero_dose_ri_recorded", s: 1, l: "Zero dose for RI recorded" },
   { k: "vitamin_a_red", g: "Vitamin A capsules used", l: "Red", vit: 1 }, { k: "vitamin_a_blue", g: "Vitamin A capsules used", l: "Blue", vit: 1 }];
-const cuGroup = (g, p) => [["na_u12", "NA <12 M"], ["na_1259", "NA 12–59 M"], ["r_u12", "R <12 M"], ["r_1259", "R 12–59 M"]].map(([k, l]) => (p === "still" ? { k: `cu_still_${k}`, g, l, calc: "still", t: `cu_target_${k}`, cv: `cu_cov_${k}` } : { k: `cu_${p}_${k}`, g, l }));
-FS.C_COLS = [...cuGroup("Target for catch-up day", "target"), ...cuGroup("Covered missed children, catch-up day", "cov"), ...cuGroup("Still missed children, catch-up day", "still"),
+FS.C_COLS = [{ k: "cu_target", g: "Target for catch-up day", l: "Total children", calc: "cut" }, { k: "cu_cov", g: "Covered missed children, catch-up day", l: "Total children" },
+  { k: "cu_still", g: "Still missed children, catch-up day", l: "Total children", calc: "still", t: "cu_target", cv: "cu_cov" }, FS.AV,
   { k: "guest_vaccinated", s: 1, l: "Guest vaccinated" }, { k: "street_vaccinated", s: 1, l: "Children vaccinated in streets" }, { k: "persistent_missed", s: 1, l: "Persistently missed children" },
   { k: "vaccine_doses_received", g: "Vaccine recorded doses", l: "Received" }, { k: "vaccine_doses_used", g: "Vaccine recorded doses", l: "Used" }, { k: "vd_remaining", g: "Vaccine recorded doses", l: "Remaining", calc: "rem" },
   { k: "finger_markers_received", g: "Finger markers", l: "Received" }, { k: "finger_markers_returned", g: "Finger markers", l: "Returned" }, { k: "fm_remaining", g: "Finger markers", l: "Remaining", calc: "fm" },
   { k: "afp_cases_notified", s: 1, l: "AFP cases notified" }, { k: "zero_dose_ri_recorded", s: 1, l: "Zero dose for RI recorded" },
   { k: "vitamin_a_red", g: "Vitamin A capsules used", l: "Red", vit: 1 }, { k: "vitamin_a_blue", g: "Vitamin A capsules used", l: "Blue", vit: 1 }];
-FS.F_COLS = [{ k: "children_vaccinated_first_visit", s: 1, l: "Number of children vaccinated" }, { k: "vaccine_doses_received", g: "Vaccine recorded doses", l: "Received" }, { k: "vaccine_doses_used", g: "Vaccine recorded doses", l: "Used" }, { k: "vaccine_doses_returned", g: "Vaccine recorded doses", l: "Returned" },
+FS.F_COLS = [{ k: "children_vaccinated_first_visit", s: 1, l: "Number of children vaccinated" }, FS.AV, { k: "vaccine_doses_received", g: "Vaccine recorded doses", l: "Received" }, { k: "vaccine_doses_used", g: "Vaccine recorded doses", l: "Used" }, { k: "vaccine_doses_returned", g: "Vaccine recorded doses", l: "Returned" },
   { k: "finger_markers_received", g: "Finger markers", l: "Received" }, { k: "finger_markers_returned", g: "Finger markers", l: "Returned" }, { k: "afp_cases_notified", s: 1, l: "AFP cases notified" }, { k: "zero_dose_ri_recorded", s: 1, l: "Zero dose for RI recorded" }];
-FS.colsFor = (B, catchup, fixed) => (fixed ? FS.F_COLS : catchup ? FS.C_COLS : FS.A_COLS);   // all official columns are always shown
+FS.colsFor = (B, catchup, fixed, day) => (fixed ? FS.F_COLS : catchup ? FS.C_COLS : FS.A_COLS).filter(c => !(c.av && !catchup && day === 1));   // Already vaccinated is hidden on campaign day 1   // all official columns are always shown
 FS.vitOn = (B) => FS.caps(B).vit_a_needed === "yes";                                              // Vitamin A cells can be typed only if the plan questionnaire says capsules are needed
-FS.LEGACY = { missed_na: (r) => (+r.missed_children_under_12m || 0) + (+r.missed_children_12_59m || 0), missed_refusal: (r) => (+r.refusal_under_12m || 0) + (+r.refusal_12_59m || 0), covered_na: (r) => +r.catchup_covered || 0, mmp_vaccinated: (r) => +r.hrmp_vaccinated || 0 };
+FS.LEGACY = { missed_na: (r) => (+r.missed_children_under_12m || 0) + (+r.missed_children_12_59m || 0), missed_refusal: (r) => (+r.refusal_under_12m || 0) + (+r.refusal_12_59m || 0), covered_na: (r) => +r.catchup_covered || 0, mmp_vaccinated: (r) => +r.hrmp_vaccinated || 0, cu_cov: (r) => ["na_u12", "na_1259", "r_u12", "r_1259"].reduce((n, k) => n + (+r["cu_cov_" + k] || 0), 0) };
 FS.rv = (r, k) => { if (!r) return 0; const v = +r[k] || 0; return v || (FS.LEGACY[k] ? FS.LEGACY[k](r) : 0); };
 FS.dayDate = (B, day) => B.campaign.start_date ? FS.fmtDate(new Date(new Date(B.campaign.start_date + "T00:00:00").getTime() + (day - 1) * 864e5).toISOString().slice(0, 10)) : "";
 FS.nDays = (B) => Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7);
@@ -295,7 +296,8 @@ FS.cell = (B, t, day, catchup, c, vals) => { const r = FS.rep(B, t.team_no, day,
     case "school": return catchup ? 0 : (+p.school_children || 0);                                              // school / madrassa children from the plan
     case "mmp": return catchup ? 0 : (+p.mmp_children || 0);                                                    // MMP children from the plan
     case "missed": return catchup ? 0 : Math.max(0, FS.cell(B, t, day, false, { calc: "ch" }) - g("children_vaccinated_first_visit") - g("missed_refusal"));   // remaining = target - covered - refusals
-    case "still": return Math.max(0, g(c.t) - g(c.cv));                                                          // remaining after covering; covered may exceed the target
+    case "cut": return FS.cuTarget(B, t, day);
+    case "still": return Math.max(0, (c.t === "cu_target" ? FS.cuTarget(B, t, day) : g(c.t)) - g(c.cv));                                                          // remaining after covering; covered may exceed the target
     case "rem": return Math.max(0, g("vaccine_doses_received") - g("vaccine_doses_used"));
     case "fm": return Math.max(0, g("finger_markers_received") - g("finger_markers_returned"));
     case "hhrem": return Math.max(0, FS.cell(B, t, day, false, { calc: "hh" }) - g("households_visited"));
@@ -303,10 +305,26 @@ FS.cell = (B, t, day, catchup, c, vals) => { const r = FS.rep(B, t.team_no, day,
     default: return g(c.k); } };
 const head2 = (cols, extra) => { const g = []; cols.forEach(c => { if (c.s) g.push({ s: 1, c }); else { const last = g[g.length - 1]; if (last && !last.s && last.g === c.g) last.n.push(c); else g.push({ g: c.g, n: [c] }); } });
   const r1 = g.map(x => x.s ? `<th rowspan="2">${E_(x.c.l)}</th>` : `<th colspan="${x.n.length}">${E_(x.g)}</th>`).join(""), r2 = g.filter(x => !x.s).map(x => x.n.map(c => `<th>${E_(c.l)}</th>`).join("")).join(""); return [r1 + extra[0], r2 + extra[1]]; };
-/* Expected vaccine use (shown to the Area Incharge as a guide; the Used figure is always typed by the AIC). Campaign days: required doses of the saved plan. Catch-up days: 1.11 x the targets entered. */
-FS.expectedDoses = (B, t, day, catchup, vals) => { const round2 = (v) => Math.round(v * 100) / 100;
-  if (catchup) { const g = (k) => (vals && vals[k] !== undefined) ? (+vals[k] || 0) : FS.rv(FS.rep(B, t.team_no, day, true), k); return round2(1.11 * ["na_u12", "na_1259", "r_u12", "r_1259"].reduce((n, k) => n + g("cu_target_" + k), 0)); }
-  const p = FS.planOf(B, t, day); return p.required_doses != null ? round2(+p.required_doses) : (p.total_children ? round2(+p.total_children * 1.11) : 0); };
+FS.DOSE = 1.11;   // doses per child (wastage factor already used by the Operational Plan: required_doses = total children x 1.11)
+/* Catch-up target of one team. First catch-up day = team target (campaign days) - children covered on those days; every later catch-up day = previous
+   catch-up target - children covered on the previous catch-up day. Never below 0. Always recalculated from the saved reports, so corrections flow through. */
+FS.cuTarget = (B, t, day) => { if (day > 1) return Math.max(0, FS.cuTarget(B, t, day - 1) - FS.rv(FS.rep(B, t.team_no, day - 1, true), "cu_cov"));
+  let target = 0, covered = 0; for (let d = 1; d <= FS.nDays(B); d++) { target += FS.cell(B, t, d, false, { calc: "ch" }); covered += FS.rv(FS.rep(B, t.team_no, d, false), "children_vaccinated_first_visit"); }
+  return Math.max(0, target - covered); };
+/* earlier reports a catch-up target depends on that have not been saved (flagged, never assumed to be zero) */
+FS.cuMissing = (B, t, day) => { const out = []; if (day > 1) { for (let k = 1; k < day; k++) if (!FS.rep(B, t.team_no, k, true)) out.push("Catch-up day " + (FS.nDays(B) + k)); } else for (let d = 1; d <= FS.nDays(B); d++) if (!FS.rep(B, t.team_no, d, false)) out.push("Day " + d); return out; };
+/* Expected vaccine use (a guide shown greyed in the Used box; the Used figure is always typed by the AIC and never filled in from this).
+   = max(0, expected doses before adjustment - doses for already-vaccinated children). Before adjustment: the plan's required doses (children x 1.11), plus 1.11 per child
+   covered above the target, so exceeding the target never lowers it. */
+FS.expectedDoses = (B, t, day, catchup, vals) => { const round2 = (v) => Math.round(v * 100) / 100, r = FS.rep(B, t.team_no, day, catchup);
+  const g = (k) => (vals && vals[k] !== undefined) ? Math.max(0, +vals[k] || 0) : Math.max(0, FS.rv(r, k)), av = (!catchup && day === 1) ? 0 : g("already_vaccinated");
+  let before;
+  if (catchup) before = FS.DOSE * Math.max(FS.cuTarget(B, t, day), g("cu_cov"));
+  else { const p = FS.planOf(B, t, day), planned = p.required_doses != null ? +p.required_doses : (p.total_children ? +p.total_children * FS.DOSE : 0), ch = FS.cell(B, t, day, false, { calc: "ch" });
+    before = planned + FS.DOSE * Math.max(0, g("children_vaccinated_first_visit") - ch); }
+  return round2(Math.max(0, before - FS.DOSE * av)); };
+/* warning text when Already vaccinated looks larger than the children this team is expected to see */
+FS.avWarn = (B, t, day, catchup, vals) => { const v = +((vals || {}).already_vaccinated) || 0; if (v < 0) return "Already vaccinated cannot be negative."; const lim = catchup ? FS.cuTarget(B, t, day) : FS.cell(B, t, day, false, { calc: "ch" }); return (lim > 0 && v > lim) ? `Team ${t.team_no}: already vaccinated (${v}) is more than the children expected (${lim}) — please check.` : ""; };
 FS.members = (t) => (t.workers || []).slice().sort((a, b) => (a.member_role === "leader" ? -1 : b.member_role === "leader" ? 1 : FS.nat(a.member_no ?? 0, b.member_no ?? 0))).map(m => E_(m.staff?.full_name || "")).filter(Boolean).join(", ");
 const SIG = ['<th colspan="2">Signature</th>', "<th>Morning</th><th>Evening</th>"];
 FS.render2AOfficial = (B, aic, day, catchup, onlyTeamId) => {
@@ -314,7 +332,7 @@ FS.render2AOfficial = (B, aic, day, catchup, onlyTeamId) => {
   const mob = ts.filter(t => (t.team_type || "mobile") === "mobile"), fx = ts.filter(t => t.team_type === "fixed" || t.team_type === "transit"), nd = FS.nDays(B);
   const label = catchup ? `Catchup Day ${nd + day}` : `Campaign Day ${day}`, date = FS.dayDate(B, catchup ? nd + day : day);
   const reported = ts.filter(t => FS.rep(B, t.team_no, day, catchup)).length, cnt = (k) => ts.filter(t => (t.team_type || "mobile") === k).length;
-  const cols = FS.colsFor(B, catchup, false), fcols = FS.colsFor(B, catchup, true), z = (v) => Number.isInteger(v) ? v : Math.round(v * 100) / 100;
+  const cols = FS.colsFor(B, catchup, false, day), fcols = FS.colsFor(B, catchup, true, day), z = (v) => Number.isInteger(v) ? v : Math.round(v * 100) / 100;
   const totals = (list, cl) => cl.map(c => z(list.reduce((n, t) => n + FS.cell(B, t, day, catchup, c), 0)));
   const [h1, h2] = head2(cols, SIG), [f1, f2] = head2(fcols, SIG);
   const mrows = mob.map(t => `<tr><td><b>${E_(t.team_no)}</b></td><td class="l">${FS.members(t)}</td>${cols.map(c => `<td>${z(FS.cell(B, t, day, catchup, c))}</td>`).join("")}<td></td><td></td></tr>`).join("") || `<tr><td colspan="${cols.length + 4}" class="fx-miss">No mobile / CBV teams</td></tr>`;
@@ -339,7 +357,7 @@ FS.render2ADays = (B, aic) => { const nd = FS.nDays(B), out = [], ids = new Set(
   return out.join(""); };
 
 /* ---- 2B: UC consolidated, one row per Area Incharge ---- */
-FS.sumReports = (B, teams, day, catchup) => { const cols = FS.colsFor(B, catchup, false), days = day === "all" ? Array.from({ length: FS.nDays(B) }, (_, i) => i + 1) : [day];
+FS.sumReports = (B, teams, day, catchup) => { const cols = FS.colsFor(B, catchup, false, day), days = day === "all" ? Array.from({ length: FS.nDays(B) }, (_, i) => i + 1) : [day];
   const tot = Object.fromEntries(cols.map(c => [c.k, 0])); let last = null, n = 0;
   teams.forEach(t => days.forEach(d => { const r = FS.rep(B, t.team_no, d, catchup); if (r) { n++; const u = r.updated_at || r.created_at; if (u && (!last || u > last)) last = u; } cols.forEach(c => { tot[c.k] += FS.cell(B, t, d, catchup, c); }); }));
   return { tot, last, n, cols }; };

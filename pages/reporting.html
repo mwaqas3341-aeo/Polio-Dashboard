@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Reporting — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261013e"><link rel="stylesheet" href="../assets/css/forms.css?v=20261013e">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261013f"><link rel="stylesheet" href="../assets/css/forms.css?v=20261013f">
 <style> #pp { display:none; } .grid td input { width:64px; padding:4px 5px; text-align:center; } .grid th { white-space:normal; min-width:58px; font-size:.66rem; } .grid td.calc { background:var(--s2); font-weight:800; } .saved { color:var(--ok); font-weight:700; }
   @media print { .entry { display:none !important; } #pp { display:block !important; } } </style>
 </head>
@@ -34,7 +34,7 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="../assets/js/config.js?v=20261013e"></script><script src="../assets/js/supabaseClient.js?v=20261013e"></script><script src="../assets/js/nav.js?v=20261013e"></script><script src="../assets/js/forms.js?v=20261013e"></script><script src="../assets/js/pdfx.js?v=20261013e"></script>
+<script src="../assets/js/config.js?v=20261013f"></script><script src="../assets/js/supabaseClient.js?v=20261013f"></script><script src="../assets/js/nav.js?v=20261013f"></script><script src="../assets/js/forms.js?v=20261013f"></script><script src="../assets/js/pdfx.js?v=20261013f"></script>
 <script>
 const $ = (id) => document.getElementById(id), E = FS.esc;
 let B = null, me = null, uid = null, draft = {};
@@ -66,28 +66,30 @@ function inputsTable(ts, cols, fixed) {
   const all = (!fixed && !catchup) ? cols.concat(EXTRA) : cols, h = all.map(c => `<th>${c.g ? E(c.g) + "<br>" : ""}${E(c.l)}</th>`).join("");
   return `<table class="fx grid"><thead><tr><th>Team</th>${h}</tr></thead><tbody>${ts.map(t => `<tr data-t="${E(t.team_no)}" data-fixed="${fixed ? 1 : 0}"><td><b>${E(t.team_no)}</b><br><small>${E(t.team_type || "")}</small></td>${all.map(c => c.calc
     ? `<td class="calc" data-ck="${c.k}">${FS.cell(B, t, day, catchup, c, rowVals(t))}</td>`
-    : `<td><input type="number" min="0" step="any" ${c.vit && !FS.vitOn(B) ? 'disabled title="Locked: Vitamin A capsules are not marked Yes in the plan questionnaire"' : ""} data-k="${E(t.team_no)}|${c.k}" value="${E((draft[t.team_no] || {})[c.k] ?? FS.cell(B, t, day, catchup, c))}">${c.k === "vaccine_doses_used" && !fixed ? `<div class="muted exp" data-exp="1" style="font-size:.68rem;margin-top:2px">Expected: <b>${FS.expectedDoses(B, t, day, catchup, rowVals(t))}</b></div>` : ""}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    : `<td><input type="number" min="0" step="any" ${c.vit && !FS.vitOn(B) ? 'disabled title="Locked: Vitamin A capsules are not marked Yes in the plan questionnaire"' : ""} data-k="${E(t.team_no)}|${c.k}" ${c.k === "vaccine_doses_used" && !fixed ? `placeholder="${FS.expectedDoses(B, t, day, catchup, rowVals(t))}"` : ""} value="${E((draft[t.team_no] || {})[c.k] ?? ((c.k === "vaccine_doses_used" && !FS.rep(B, t.team_no, day, catchup)) ? "" : FS.cell(B, t, day, catchup, c)))}">${c.k === "vaccine_doses_used" && !fixed ? `<div class="muted exp" data-exp="1" style="font-size:.68rem;margin-top:2px;color:#9aa0a6">Expected: <b>${FS.expectedDoses(B, t, day, catchup, rowVals(t))}</b></div>` : ""}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
 }
 const rowVals = (t) => draft[t.team_no] || undefined;
 function drawGrid() {
   const a = curAic(); if (!a) { $("gridM").innerHTML = `<p class="muted">No Area Incharge found.</p>`; $("gridF").innerHTML = ""; return; }
   const { catchup, day } = dayInfo(), ts = FS.teamsOf(B, a.id), mob = ts.filter(t => (t.team_type || "mobile") === "mobile"), fx = ts.filter(t => t.team_type === "fixed" || t.team_type === "transit");
-  $("gridM").innerHTML = inputsTable(mob, FS.colsFor(B, catchup, false), false); $("gridF").innerHTML = inputsTable(fx, FS.colsFor(B, catchup, true), true);
-  $("msg").innerHTML = `${ts.length} team(s) · ${catchup ? "Catch-up day" : "Campaign day"} ${day}` + (FS.vitOn(B) ? "" : ` · <b>Vitamin A capsule columns are locked</b> — they open only when the plan questionnaire says capsules are needed (<a href="plan-setup.html">open questionnaire</a>).`);
+  $("gridM").innerHTML = inputsTable(mob, FS.colsFor(B, catchup, false, day), false); $("gridF").innerHTML = inputsTable(fx, FS.colsFor(B, catchup, true, day), true);
+  const miss = catchup ? ts.map(t => { const m = FS.cuMissing(B, t, day); return m.length ? `Team ${t.team_no}: ${m.join(", ")}` : ""; }).filter(Boolean) : [];
+  $("msg").innerHTML = (miss.length ? `<div class="error-text">Catch-up targets need earlier reports that are not saved yet — missing: ${E(miss.join(" · "))}. Targets are calculated from what is saved so far.</div>` : "") + `${ts.length} team(s) · ${catchup ? "Catch-up day" : "Campaign day"} ${day}` + (FS.vitOn(B) ? "" : ` · <b>Vitamin A capsule columns are locked</b> — they open only when the plan questionnaire says capsules are needed (<a href="plan-setup.html">open questionnaire</a>).`);
 }
 function draw() { drawGrid(); $("full").innerHTML = allPages(); }
 function onInput(e) { const k = e.target.dataset.k; if (!k) return; const [tn, f] = k.split("|"); (draft[tn] = draft[tn] || {})[f] = e.target.value; $("msg").textContent = "Unsaved changes";
   const tr = e.target.closest("tr"), a = curAic(), t = FS.teamsOf(B, a.id).find(x => String(x.team_no) === tn), { day, catchup } = dayInfo(), fixed = tr.dataset.fixed === "1", vals = {};
   tr.querySelectorAll("[data-k]").forEach(i => { vals[i.dataset.k.split("|")[1]] = i.value; });                         // live values of the row, so remaining figures update as you type
-  const cols = FS.colsFor(B, catchup, fixed).concat(EXTRA); tr.querySelectorAll("[data-ck]").forEach(td => { const c = cols.find(x => x.k === td.dataset.ck); if (c) td.textContent = FS.cell(B, t, day, catchup, c, vals); });
-  const ex = tr.querySelector("[data-exp] b"); if (ex) ex.textContent = FS.expectedDoses(B, t, day, catchup, vals); }
+  const cols = FS.colsFor(B, catchup, fixed, day).concat(EXTRA); tr.querySelectorAll("[data-ck]").forEach(td => { const c = cols.find(x => x.k === td.dataset.ck); if (c) td.textContent = FS.cell(B, t, day, catchup, c, vals); });
+  const ex = tr.querySelector("[data-exp] b"), expv = FS.expectedDoses(B, t, day, catchup, vals); if (ex) ex.textContent = expv; const ui = tr.querySelector('[data-k$="|vaccine_doses_used"]'); if (ui) ui.placeholder = expv;
+  const w = FS.avWarn(B, t, day, catchup, vals); if (w) $("msg").innerHTML = `<span class="error-text">${E(w)}</span>`; }
 async function save() {
   const a = curAic(); if (!a) return; $("saveBtn").disabled = true; const { day, catchup } = dayInfo(), rows = [];
-  FS.teamsOf(B, a.id).forEach(t => { const fixed = t.team_type === "fixed" || t.team_type === "transit", cols = FS.colsFor(B, catchup, fixed), d = draft[t.team_no] || {},
+  FS.teamsOf(B, a.id).forEach(t => { const fixed = t.team_type === "fixed" || t.team_type === "transit", cols = FS.colsFor(B, catchup, fixed, day), d = draft[t.team_no] || {},
       row = { campaign_id: B.campaign.id, team_no: Number(t.team_no), campaign_day: day, is_catchup: catchup, reported_by: uid };
     if (!fixed && !catchup) { row.households_target = FS.cell(B, t, day, false, { calc: "hh" }); row.children_target = FS.cell(B, t, day, false, { calc: "ch" }); }
     const vals = {}; cols.filter(c => !c.calc).forEach(c => { vals[c.k] = Math.max(0, Number(d[c.k] ?? FS.cell(B, t, day, catchup, c)) || 0); if (!(c.vit && !FS.vitOn(B))) row[c.k] = vals[c.k]; });   // no upper limit: covered may be more than the target
-    cols.filter(c => c.calc && ["missed", "school", "mmp", "still"].includes(c.calc)).forEach(c => { row[c.k] = FS.cell(B, t, day, catchup, c, vals); });   // store the calculated figures too
+    cols.filter(c => c.calc && ["missed", "school", "mmp", "still", "cut"].includes(c.calc)).forEach(c => { row[c.k] = FS.cell(B, t, day, catchup, c, vals); });   // store the calculated figures too
     rows.push(row); });
   if (!rows.length) { $("saveBtn").disabled = false; return; }
   const { data, error } = await supabaseClient.from("daily_reports").upsert(rows, { onConflict: "campaign_id,team_no,campaign_day,is_catchup" }).select();
