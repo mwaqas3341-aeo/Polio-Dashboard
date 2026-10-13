@@ -325,6 +325,12 @@ FS.expectedDoses = (B, t, day, catchup, vals) => { const round2 = (v) => Math.ro
   return round2(Math.max(0, before - FS.DOSE * av)); };
 /* warning text when Already vaccinated looks larger than the children this team is expected to see */
 FS.avWarn = (B, t, day, catchup, vals) => { const v = +((vals || {}).already_vaccinated) || 0; if (v < 0) return "Already vaccinated cannot be negative."; const lim = catchup ? FS.cuTarget(B, t, day) : FS.cell(B, t, day, false, { calc: "ch" }); return (lim > 0 && v > lim) ? `Team ${t.team_no}: already vaccinated (${v}) is more than the children expected (${lim}) — please check.` : ""; };
+/* teams of an Area Incharge that have no saved report for the day (a 2A is only "prepared" when none are missing) */
+FS.missingReports = (B, aic, day, catchup) => FS.teamsOf(B, aic.id).filter(t => !FS.rep(B, t.team_no, day, catchup));
+/* record that this AIC's 2A for the day was prepared; re-preparing updates the same row, so there are never duplicates */
+FS.markPrepared = async (B, aic, day, catchup) => { const ts = FS.teamsOf(B, aic.id);
+  return await supabaseClient.from("prepared_forms").upsert({ campaign_id: B.campaign.id, aic_staff_id: aic.id, form_type: "2a", campaign_day: day, is_catchup: !!catchup, teams_total: ts.length, teams_reported: ts.length - FS.missingReports(B, aic, day, catchup).length, prepared_at: new Date().toISOString() }, { onConflict: "campaign_id,aic_staff_id,form_type,campaign_day,is_catchup" }); };
+FS.dayLabel = (B, day, catchup) => catchup ? `Catch-up Day ${FS.nDays(B) + day}` : `Campaign Day ${day}`;
 FS.members = (t) => (t.workers || []).slice().sort((a, b) => (a.member_role === "leader" ? -1 : b.member_role === "leader" ? 1 : FS.nat(a.member_no ?? 0, b.member_no ?? 0))).map(m => E_(m.staff?.full_name || "")).filter(Boolean).join(", ");
 const SIG = ['<th colspan="2">Signature</th>', "<th>Morning</th><th>Evening</th>"];
 FS.render2AOfficial = (B, aic, day, catchup, onlyTeamId) => {
