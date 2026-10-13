@@ -250,3 +250,8 @@ This is a static site — enable GitHub Pages on this repo (Settings → Pages
 - Entered on `pages/reporting.html` (new `daily_reports` columns, all existing columns kept); the UC 2B (`pages/report-2b.html`) sums the same figures per Area Incharge.
 - Note: in the sample sheet the "Returned" figure for Mobile teams equalled the doses given; here it is calculated as Given − Used.
 - 2A automations: households, household children, school/madrassa children and MMP children come from the saved Operational Plan; recorded missed (N.A) = children target − covered − refusals; catch-up "still missed" = target − covered; vaccine/finger-marker remaining are calculated. Covered figures are never capped at the target (remaining never goes below 0).
+
+## Simplified PDF downloads and 2A history
+- `pages/pdf-downloads.html` — UCMO / admin: (1) all AIC CNICs in one PDF, (2) all teams AIC-wise as a separate PDF per AIC, (3) all AICs with their teams in one PDF. Area Incharge: one PDF with the 2A forms of the days reported plus the team lists (CNIC cards). It shows how many people have no CNIC picture uploaded.
+- `pages/reporting-history.html` — previous 2A forms by campaign and day. Saving a report on `pages/reporting.html` downloads that day's 2A form automatically.
+- The older stand-alone pages (cnic-lists, staff-pdf, ddm-cards, payments, two-a-form) are no longer linked from the menu.

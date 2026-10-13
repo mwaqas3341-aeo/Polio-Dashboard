@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Previous reporting — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css?v=20261013c"><link rel="stylesheet" href="../assets/css/forms.css?v=20261013c">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar-mount"></aside>
+  <main class="main">
+    <div class="topbar"><h1>Previous reporting (2A forms)</h1></div>
+    <p class="muted">Every report that was submitted, by campaign and day. Download the 2A form of any day again, or all days in one PDF.</p>
+    <div class="dl-panel"><div class="dl-row"><div><label>Campaign</label><select id="campSel"></select></div><div><label>Area Incharge</label><select id="aicSel"></select></div></div><div id="msg" class="muted" style="margin-top:6px"></div></div>
+    <div class="card"><div class="table-wrap" id="list"><p class="muted">Loading…</p></div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="allBtn"><i class="bi bi-file-earmark-pdf"></i> Download all submitted days (one PDF)</button></div></div>
+  </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="../assets/js/config.js?v=20261013c"></script><script src="../assets/js/supabaseClient.js?v=20261013c"></script><script src="../assets/js/nav.js?v=20261013c"></script><script src="../assets/js/forms.js?v=20261013c"></script>
+<script>
+const $ = (id) => document.getElementById(id), E = FS.esc; let B = null, me = null, camps = [];
+const curAic = () => B.aics.find(a => a.id === $("aicSel").value);
+(async () => {
+  const session = await requireAuth(); if (!session) return; renderSidebar("reporting-history.html");
+  { const { data: pr } = await supabaseClient.from("profiles").select("role, staff_id").eq("id", session.user.id).single(); me = pr || { role: "viewer" }; }
+  const { data: cs } = await supabaseClient.from("campaigns").select("id, name, status").order("start_date", { ascending: false }); camps = cs || [];
+  $("campSel").innerHTML = camps.map(c => `<option value="${c.id}">${E(c.name)}${c.status === "closed" ? " (closed)" : ""}</option>`).join("") || `<option value="">No campaign yet</option>`;
+  $("campSel").onchange = load; $("aicSel").onchange = draw; $("allBtn").onclick = () => pdf(allDays());
+  $("list").addEventListener("click", (e) => { const b = e.target.closest("[data-d]"); if (b) pdf([{ d: Number(b.dataset.d), cu: b.dataset.cu === "1" }]); });
+  if ($("campSel").value) await load(); else $("list").innerHTML = `<p class="muted">No campaign yet.</p>`;
+})();
+async function load() { $("list").innerHTML = `<p class="muted">Loading…</p>`; B = await FS.loadBase($("campSel").value);
+  $("aicSel").innerHTML = B.aics.map(a => `<option value="${a.id}">AIC ${E(a.aic_no)} — ${E(a.full_name)}</option>`).join("") || `<option value="">No Area Incharge</option>`;
+  if (me.role === "aic" && me.staff_id) { $("aicSel").value = me.staff_id; $("aicSel").disabled = true; } draw(); }
+function rows() { const a = curAic(); if (!a) return []; const ts = FS.teamsOf(B, a.id), ids = new Set(ts.map(t => String(t.team_no))), nd = FS.nDays(B), out = [];
+  const mk = (d, cu) => { const rs = (B.reports || []).filter(r => r.campaign_day === d && !!r.is_catchup === cu && ids.has(String(r.team_no))); if (!rs.length) return; const last = rs.map(r => r.updated_at || r.created_at).filter(Boolean).sort().pop();
+    out.push({ d, cu, n: rs.length, of: ts.length, last, label: cu ? `Catch-up Day ${nd + d}` : `Campaign Day ${d}`, date: FS.dayDate(B, cu ? nd + d : d) }); };
+  for (let d = 1; d <= nd; d++) mk(d, false); for (let d = 1; d <= 3; d++) mk(d, true); return out; }
+const allDays = () => rows().map(r => ({ d: r.d, cu: r.cu }));
+function draw() { const r = rows();
+  $("list").innerHTML = r.length ? `<table><thead><tr><th>Day</th><th>Date</th><th>Teams reported</th><th>Last update</th><th></th></tr></thead><tbody>${r.map(x => `<tr><td><b>${x.label}</b></td><td>${x.date}</td><td>${x.n} of ${x.of}</td><td>${x.last ? new Date(x.last).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</td><td><button class="btn small" data-d="${x.d}" data-cu="${x.cu ? 1 : 0}"><i class="bi bi-download"></i> 2A PDF</button></td></tr>`).join("")}</tbody></table>` : `<p class="muted">No report has been submitted for this campaign yet.</p>`;
+  $("allBtn").style.display = r.length ? "" : "none"; }
+async function pdf(list) { const a = curAic(); if (!a || !list.length) return; $("msg").textContent = "Creating PDF…";
+  const pages = list.map(x => FS.render2AOfficial(B, a, x.d, x.cu)), box = document.createElement("div"); box.style.cssText = "position:fixed;left:-99999px;top:0;width:1123px;background:#fff"; box.innerHTML = pages.map((h, i) => `<div style="${i ? "break-before:page;" : ""}">${h}</div>`).join(""); document.body.appendChild(box);
+  await html2pdf().set({ margin: [3, 3, 3, 3], filename: `2A_${(B.campaign.name || "").replace(/\W+/g, "_")}_AIC${a.aic_no}_${list.length > 1 ? "all_days" : (list[0].cu ? "Catchup" : "Day") + list[0].d}.pdf`, image: { type: "jpeg", quality: .95 }, html2canvas: { scale: 2, windowWidth: 1123 }, jsPDF: { unit: "mm", format: "a4", orientation: "landscape" }, pagebreak: { mode: ["css", "avoid-all"] } }).from(box).save(); box.remove(); $("msg").textContent = "PDF downloaded."; }
+</script>
+</body>
+</html>
