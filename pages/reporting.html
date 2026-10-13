@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Reporting — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261014b"><link rel="stylesheet" href="../assets/css/forms.css?v=20261014b">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014c"><link rel="stylesheet" href="../assets/css/forms.css?v=20261014c">
 <style> #pp { display:none; } .grid td input { width:64px; padding:4px 5px; text-align:center; } .grid th { white-space:normal; min-width:58px; font-size:.66rem; } .grid td.calc { background:var(--s2); font-weight:800; } .saved { color:var(--ok); font-weight:700; }
   @media print { .entry { display:none !important; } #pp { display:block !important; } } </style>
 </head>
@@ -36,7 +36,7 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="../assets/js/config.js?v=20261014b"></script><script src="../assets/js/supabaseClient.js?v=20261014b"></script><script src="../assets/js/nav.js?v=20261014b"></script><script src="../assets/js/forms.js?v=20261014b"></script><script src="../assets/js/pdfx.js?v=20261014b"></script>
+<script src="../assets/js/config.js?v=20261014c"></script><script src="../assets/js/supabaseClient.js?v=20261014c"></script><script src="../assets/js/nav.js?v=20261014c"></script><script src="../assets/js/forms.js?v=20261014c"></script><script src="../assets/js/pdfx.js?v=20261014c"></script>
 <script>
 const $ = (id) => document.getElementById(id), E = FS.esc;
 let B = null, me = null, uid = null, draft = {};
@@ -58,7 +58,7 @@ async function load() {
   B = await FS.loadBase($("campSel").value);
   $("aicSel").innerHTML = B.aics.map(a => `<option value="${a.id}">AIC ${E(a.aic_no)} — ${E(a.full_name)}</option>`).join("") || `<option value="">No Area Incharge</option>`;
   if (me.role === "aic" && me.staff_id) { $("aicSel").value = me.staff_id; $("aicSel").disabled = true; }
-  const nd = FS.nDays(B); $("daySel").innerHTML = Array.from({ length: nd }, (_, i) => `<option value="d${i + 1}">Campaign Day ${i + 1} — ${FS.dayDate(B, i + 1)}</option>`).join("") + [1, 2, 3].map(k => `<option value="c${k}">Catch-up Day ${nd + k} — ${FS.dayDate(B, nd + k)}</option>`).join("");
+  const nd = FS.nDays(B); $("daySel").innerHTML = Array.from({ length: nd }, (_, i) => `<option value="d${i + 1}">Campaign Day ${i + 1} — ${FS.dayDate(B, i + 1)}</option>`).join("") + Array.from({ length: FS.nCatch(B) }, (_, i) => i + 1).map(k => `<option value="c${k}">Catch-up Day ${nd + k} — ${FS.dayDate(B, nd + k)}</option>`).join("");
   draft = {}; draw();
 }
 const allPages = () => { const a = curAic(); return a ? FS.render2ADays(B, a) : ""; };
@@ -105,7 +105,8 @@ async function save() {
 
 /* ---- final campaign day: each team confirms the children who are STILL MISSED (existing missed_children register; nothing is silently left out) ---- */
 let MC = { rows: [], conf: {} };
-const isFinalDay = () => { const { day, catchup } = dayInfo(); return !catchup && day === FS.nDays(B); };
+const finalDayNo = () => FS.nDays(B) + FS.nCatch(B);   // last day of the campaign, catch-up included
+const isFinalDay = () => { const { day, catchup } = dayInfo(); return (catchup ? FS.nDays(B) + day : day) === finalDayNo(); };
 async function loadMC() {
   const el = $("mcCard"), a = curAic(); if (!el) return; if (!a || !isFinalDay()) { el.innerHTML = ""; return; }
   const ts = FS.teamsOf(B, a.id), nos = ts.map(t => t.team_no); if (!nos.length) { el.innerHTML = ""; return; }
@@ -132,7 +133,7 @@ async function mcAdd(tn) {
   const g = (p) => $(p + tn).value.trim(), name = g("mn"); if (!name) return mcErr("Child's name is required.");
   const age = g("ma") === "" ? null : Number(g("ma")), house = g("mh") === "" ? null : Number(g("mh")); if ((age !== null && age < 0) || (house !== null && house < 0)) return mcErr("Age and house number cannot be negative.");
   if (!g("mad") && house === null) return mcErr("Give an address or a house number.");
-  const { error } = await supabaseClient.from("missed_children").insert({ campaign_id: B.campaign.id, child_name: name, father_name: g("mf") || null, age_months: age, address: g("mad") || null, house_no: house, team_no: tn, campaign_day: FS.nDays(B), source: "entered" });
+  const { error } = await supabaseClient.from("missed_children").insert({ campaign_id: B.campaign.id, child_name: name, father_name: g("mf") || null, age_months: age, address: g("mad") || null, house_no: house, team_no: tn, campaign_day: finalDayNo(), source: "entered" });
   if (error) return mcErr(error.message); await supabaseClient.from("missed_children_confirmations").delete().eq("campaign_id", B.campaign.id).eq("team_no", tn); loadMC(); }
 async function mcCovered(id) { const { error } = await supabaseClient.from("missed_children").update({ status: "vaccinated" }).eq("id", id); if (error) return mcErr(error.message); const r = MC.rows.find(x => x.id === id); if (r) await supabaseClient.from("missed_children_confirmations").delete().eq("campaign_id", B.campaign.id).eq("team_no", r.team_no); loadMC(); }
 async function mcConfirm(tn, none) { const note = none ? ($("mnote" + tn).value || "").trim() : null;

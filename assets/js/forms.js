@@ -42,7 +42,7 @@ FS.score = (vals) => { const a = vals.filter(v => v === "1" || v === "0"), ones 
 FS.db = () => supabaseClient;
 FS.loadBase = async (campaignId) => {
   const db = FS.db(), B = { forms: {} };
-  const { data: c } = await db.from("campaigns").select("id, name, status, uc_id, start_date, end_date, total_days, campaign_type").eq("id", campaignId).single(); B.campaign = c;
+  const { data: c } = await db.from("campaigns").select("id, name, status, uc_id, start_date, end_date, total_days, catchup_days, campaign_type").eq("id", campaignId).single(); B.campaign = c;
   B.geo = { uc: "", tehsil: "", district: "" };
   if (c.uc_id) { const { data: uc } = await db.from("union_councils").select("name, tehsils(name, districts(name))").eq("id", c.uc_id).single(); B.geo = { uc: uc?.name || "", tehsil: uc?.tehsils?.name || "", district: uc?.tehsils?.districts?.name || "" }; }
   let q = db.from("staff").select("id, full_name, aic_no, area_map_path, uc_id, phone, designation").eq("designation", "aic").eq("status", "active").order("aic_no"); if (c.uc_id) q = q.eq("uc_id", c.uc_id);
@@ -99,7 +99,7 @@ FS.planComplete = (B, t, days) => t.team_type === "mobile" ? days.every(d => { c
   : days.every(d => { const p = B.ft.find(x => x.team_id === t.id && x.campaign_day === d); return p && p.place_name && p.expected_children != null; });
 FS.deskAuto = (B, aic, t) => {
   B.dayMaps = B.dayMaps || []; B.mmpRows = B.mmpRows || [];
-  const A = new Array(41).fill(""), set = (i, v) => { A[i] = v; }, yes = (c) => c ? "1" : "0", days = [1, 2, 3], fig = B.figs.get(aic.id), mob = FS.teamsOf(B, aic.id).filter(x => x.team_type === "mobile").length;
+  const A = new Array(41).fill(""), set = (i, v) => { A[i] = v; }, yes = (c) => c ? "1" : "0", days = Array.from({ length: FS.nDays(B) }, (_, i) => i + 1), fig = B.figs.get(aic.id), mob = FS.teamsOf(B, aic.id).filter(x => x.team_type === "mobile").length;
   const st = FS.setupAns(B, aic.id, t.team_no), sm = FS.getForm(B, "sm_plan", null), ucm = FS.getForm(B, "uc_summary", null), rows = (k) => ((sm.rows || {})[k] || []).filter(r => (r || []).some(x => x));
   const mmpN = B.mmpRows.filter(r => String(r.team_no) === String(t.team_no)).length, dm = new Set(B.dayMaps.filter(m => m.team_id === t.id && m.storage_path).map(m => m.campaign_day));
   const capsOk = ["yes", "no"].includes(FS.caps(B).vit_a_needed);
@@ -292,6 +292,7 @@ FS.capWarn = (B, draft, day, catchup) => ["blue", "red"].filter(c => FS.capOn(B,
 FS.LEGACY = { missed_na: (r) => (+r.missed_children_under_12m || 0) + (+r.missed_children_12_59m || 0), missed_refusal: (r) => (+r.refusal_under_12m || 0) + (+r.refusal_12_59m || 0), covered_na: (r) => +r.catchup_covered || 0, mmp_vaccinated: (r) => +r.hrmp_vaccinated || 0, cu_cov: (r) => ["na_u12", "na_1259", "r_u12", "r_1259"].reduce((n, k) => n + (+r["cu_cov_" + k] || 0), 0) };
 FS.rv = (r, k) => { if (!r) return 0; const v = +r[k] || 0; return v || (FS.LEGACY[k] ? FS.LEGACY[k](r) : 0); };
 FS.dayDate = (B, day) => B.campaign.start_date ? FS.fmtDate(new Date(new Date(B.campaign.start_date + "T00:00:00").getTime() + (day - 1) * 864e5).toISOString().slice(0, 10)) : "";
+FS.nCatch = (B) => { const v = parseInt(B.campaign.catchup_days); return Number.isFinite(v) ? Math.min(Math.max(v, 0), 5) : 3; };   // catch-up days configured for the campaign (starts on day nDays + 1)
 FS.nDays = (B) => Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7);
 FS.rep = (B, teamNo, day, catchup) => (B.reports || []).find(x => String(x.team_no) === String(teamNo) && x.campaign_day === day && !!x.is_catchup === !!catchup);
 FS.tgt = (B, teamNo, day) => (B.targets || []).find(x => String(x.team_no) === String(teamNo) && x.campaign_day === day);
