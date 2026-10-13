@@ -308,8 +308,11 @@ const head2 = (cols, extra) => { const g = []; cols.forEach(c => { if (c.s) g.pu
 FS.DOSE = 1.11;   // doses per child (wastage factor already used by the Operational Plan: required_doses = total children x 1.11)
 /* Catch-up target of one team. First catch-up day = team target (campaign days) - children covered on those days; every later catch-up day = previous
    catch-up target - children covered on the previous catch-up day. Never below 0. Always recalculated from the saved reports, so corrections flow through. */
+FS.dayTarget = (B, t, day) => { const p = FS.planOf(B, t, day), tg = FS.tgt(B, t.team_no, day) || {}, parts = FS.cell(B, t, day, false, { calc: "ch" }) + (+p.school_children || 0) + (+p.mmp_children || 0);
+  return parts || +p.total_children || +tg.target_children || 0; };                                       // household + MMP + school children of the day (Operational Plan)
+FS.dayCovered = (B, t, day) => { const r = FS.rep(B, t.team_no, day, false); return r ? FS.rv(r, "children_vaccinated_first_visit") + FS.cell(B, t, day, false, { calc: "school" }) + FS.rv(r, "mmp_vaccinated") : 0; };   // household + school + MMP children covered
 FS.cuTarget = (B, t, day) => { if (day > 1) return Math.max(0, FS.cuTarget(B, t, day - 1) - FS.rv(FS.rep(B, t.team_no, day - 1, true), "cu_cov"));
-  let target = 0, covered = 0; for (let d = 1; d <= FS.nDays(B); d++) { target += FS.cell(B, t, d, false, { calc: "ch" }); covered += FS.rv(FS.rep(B, t.team_no, d, false), "children_vaccinated_first_visit"); }
+  let target = 0, covered = 0; for (let d = 1; d <= FS.nDays(B); d++) { target += FS.dayTarget(B, t, d); covered += FS.dayCovered(B, t, d); }
   return Math.max(0, target - covered); };
 /* earlier reports a catch-up target depends on that have not been saved (flagged, never assumed to be zero) */
 FS.cuMissing = (B, t, day) => { const out = []; if (day > 1) { for (let k = 1; k < day; k++) if (!FS.rep(B, t.team_no, k, true)) out.push("Catch-up day " + (FS.nDays(B) + k)); } else for (let d = 1; d <= FS.nDays(B); d++) if (!FS.rep(B, t.team_no, d, false)) out.push("Day " + d); return out; };
@@ -320,11 +323,11 @@ FS.expectedDoses = (B, t, day, catchup, vals) => { const round2 = (v) => Math.ro
   const g = (k) => (vals && vals[k] !== undefined) ? Math.max(0, +vals[k] || 0) : Math.max(0, FS.rv(r, k)), av = (!catchup && day === 1) ? 0 : g("already_vaccinated");
   let before;
   if (catchup) before = FS.DOSE * Math.max(FS.cuTarget(B, t, day), g("cu_cov"));
-  else { const p = FS.planOf(B, t, day), planned = p.required_doses != null ? +p.required_doses : (p.total_children ? +p.total_children * FS.DOSE : 0), ch = FS.cell(B, t, day, false, { calc: "ch" });
-    before = planned + FS.DOSE * Math.max(0, g("children_vaccinated_first_visit") - ch); }
+  else { const p = FS.planOf(B, t, day), planned = p.required_doses != null ? +p.required_doses : (p.total_children ? +p.total_children * FS.DOSE : 0);
+    before = planned + FS.DOSE * Math.max(0, g("children_vaccinated_first_visit") + g("mmp_vaccinated") + FS.cell(B, t, day, false, { calc: "school" }) - FS.dayTarget(B, t, day)); }
   return round2(Math.max(0, before - FS.DOSE * av)); };
 /* warning text when Already vaccinated looks larger than the children this team is expected to see */
-FS.avWarn = (B, t, day, catchup, vals) => { const v = +((vals || {}).already_vaccinated) || 0; if (v < 0) return "Already vaccinated cannot be negative."; const lim = catchup ? FS.cuTarget(B, t, day) : FS.cell(B, t, day, false, { calc: "ch" }); return (lim > 0 && v > lim) ? `Team ${t.team_no}: already vaccinated (${v}) is more than the children expected (${lim}) — please check.` : ""; };
+FS.avWarn = (B, t, day, catchup, vals) => { const v = +((vals || {}).already_vaccinated) || 0; if (v < 0) return "Already vaccinated cannot be negative."; const lim = catchup ? FS.cuTarget(B, t, day) : FS.dayTarget(B, t, day); return (lim > 0 && v > lim) ? `Team ${t.team_no}: already vaccinated (${v}) is more than the children expected (${lim}) — please check.` : ""; };
 /* teams of an Area Incharge that have no saved report for the day (a 2A is only "prepared" when none are missing) */
 FS.missingReports = (B, aic, day, catchup) => FS.teamsOf(B, aic.id).filter(t => !FS.rep(B, t.team_no, day, catchup));
 /* record that this AIC's 2A for the day was prepared; re-preparing updates the same row, so there are never duplicates */
