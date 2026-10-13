@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CNIC lists — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261013c">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261013d">
 <style>
   .btn.small { padding:.3rem .8rem; } .btn.ghost { background:#fff; color:inherit; border:1px solid var(--line); }
   .chk { display:flex; flex-wrap:wrap; gap:.4rem .9rem; margin:.3rem 0; } .chk label { font-weight:normal; }
@@ -45,12 +45,13 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-<script src="../assets/js/config.js?v=20261013c"></script>
-<script src="../assets/js/supabaseClient.js?v=20261013c"></script>
-<script src="../assets/js/nav.js?v=20261013c"></script>
-<script src="../assets/js/crud.js?v=20261013c"></script>
-<script src="../assets/js/validators.js?v=20261013c"></script>
-<script src="../assets/js/cnicpdf.js?v=20261013c"></script>
+<script src="../assets/js/config.js?v=20261013d"></script>
+<script src="../assets/js/supabaseClient.js?v=20261013d"></script>
+<script src="../assets/js/nav.js?v=20261013d"></script>
+<script src="../assets/js/crud.js?v=20261013d"></script>
+<script src="../assets/js/validators.js?v=20261013d"></script>
+<script src="../assets/js/cnicpdf.js?v=20261013d"></script>
+<script src="../assets/js/pdfx.js?v=20261013d"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 let ucs = [], camps = [], aics = [], lastBlob = null, lastName = "cnic-list.pdf";
@@ -130,21 +131,28 @@ async function preload(paths, onTick) {
   const worker = async () => { while (i < paths.length) { const p = paths[i++]; try { cache.set(p, await loadImage(p)); } catch { cache.set(p, null); } onTick(++done, paths.length); } };
   await Promise.all([worker(), worker(), worker(), worker()]); return cache;
 }
+async function makeBytes() {
+  const groups = await fetchGroups(), people = groups.flatMap(g => g.teams.flatMap(t => t.people));
+  if (!people.length) throw new PDFX.NoData("Nothing matches these filters — there is nobody to list.");
+  const paths = [...new Set(people.flatMap(p => [p.frontPath, p.backPath]).filter(Boolean))];
+  const cache = await preload(paths, (d, n) => { $("progBar").style.width = (100 * d / n) + "%"; $("progTxt").textContent = `Loading pictures ${d} of ${n}…`; });
+  $("progTxt").textContent = "Building the PDF…"; await new Promise(r => setTimeout(r, 30));
+  const f = info();
+  const { doc, stats } = buildCnicPdf({ jsPDF: window.jspdf.jsPDF, title: f.title, subtitle: `Campaign: ${f.camp}   |   UC: ${f.uc}   |   ${stats0(people)}`, groups, getImage: (p) => cache.get(p) || null, textImage: PDFX.textImage, generatedOn: "Generated " + new Date().toLocaleString("en-GB") });
+  $("summary").textContent = `${stats.people} person(s), ${stats.pages} page(s) — ${stats.people - stats.missing} with both pictures, ${stats.missing} with a picture missing.`;
+  return doc.output("arraybuffer");
+}
+function info() {
+  const kind = $("kind").value, uc = ucs.find(u => u.id === $("ucSel").value)?.name || "", camp = $("campSel").value || "";
+  const titles = { aic: "CNIC List — Area Incharges", driver: "CNIC List — Drivers", both: "CNIC List — Area Incharges and Drivers", team: "CNIC List — Team Members" };
+  return { kind, uc, camp, title: titles[kind], filename: `CNIC_List_${kind}_${camp}_${uc}.pdf`.replace(/[^\w.\-]+/g, "_") };
+}
 async function run(download) {
-  $("err").style.display = "none"; const btns = [$("prevBtn"), $("dlBtn")]; btns.forEach(b => b.disabled = true); $("prog").style.display = "block";
+  $("err").style.display = "none"; const btns = [$("prevBtn"), $("dlBtn")]; btns.forEach(b => b.disabled = true); $("prog").style.display = "block"; $("prevBox").style.display = "none";
   try {
-    const groups = await fetchGroups(), people = groups.flatMap(g => g.teams.flatMap(t => t.people));
-    if (!people.length && !groups.some(g => g.teams.length)) throw new Error("Nothing matches these filters.");
-    const paths = [...new Set(people.flatMap(p => [p.frontPath, p.backPath]).filter(Boolean))];
-    const cache = await preload(paths, (d, n) => { $("progBar").style.width = (100 * d / n) + "%"; $("progTxt").textContent = `Loading pictures ${d} of ${n}…`; });
-    $("progTxt").textContent = "Building the PDF…"; await new Promise(r => setTimeout(r, 30));
-    const kind = $("kind").value, uc = ucs.find(u => u.id === $("ucSel").value)?.name || "", camp = $("campSel").value || "";
-    const titles = { aic: "CNIC List — Area Incharges", driver: "CNIC List — Drivers", both: "CNIC List — Area Incharges and Drivers", team: "CNIC List — Team Members" };
-    const { doc, stats } = buildCnicPdf({ jsPDF: window.jspdf.jsPDF, title: titles[kind], subtitle: `Campaign: ${camp}   |   UC: ${uc}   |   ${stats0(people)}`, groups, getImage: (p) => cache.get(p) || null, generatedOn: "Generated " + new Date().toLocaleString("en-GB") });
-    lastBlob = doc.output("blob"); lastName = `CNIC_List_${kind}_${camp}_${uc}.pdf`.replace(/[^\w.\-]+/g, "_");
-    const url = URL.createObjectURL(lastBlob); $("prevFrame").src = url; $("openTab").href = url; $("prevBox").style.display = "block";
-    $("summary").textContent = `${stats.people} person(s), ${stats.pages} page(s) — ${stats.people - stats.missing} with both pictures, ${stats.missing} with a picture missing.`;
-    if (download) { const a = document.createElement("a"); a.href = url; a.download = lastName; a.click(); } else $("prevBox").scrollIntoView({ behavior: "smooth" });
+    const f = info();
+    if (download) await PDFX.download({ filename: f.filename, makeBytes, say: (t, bad) => { if (bad) showErr(new Error(t)); else $("progTxt").textContent = t; } });
+    else await PDFX.preview({ title: f.title, filename: f.filename, makeBytes });
   } catch (e) { showErr(e); } finally { btns.forEach(b => b.disabled = false); $("prog").style.display = "none"; }
 }
 const stats0 = (p) => `${p.length} person(s)`;

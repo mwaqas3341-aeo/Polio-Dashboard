@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>2B form — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261013c"><link rel="stylesheet" href="../assets/css/forms.css?v=20261013c">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261013d"><link rel="stylesheet" href="../assets/css/forms.css?v=20261013d">
 <style> .stat { display:flex; gap:10px; flex-wrap:wrap; align-items:center; } .dot { width:9px; height:9px; border-radius:50%; background:var(--ok); display:inline-block; animation:pulse 2s infinite; } @keyframes pulse { 50% { opacity:.3; } }
   .newrep { background:var(--warn-bg); border:1px solid var(--warn); border-radius:8px; padding:6px 10px; font-weight:700; font-size:.85rem; display:none; } </style>
 </head>
@@ -17,14 +17,14 @@
       <div><label>Campaign</label><select id="campSel"></select></div>
       <div><label>Day</label><select id="daySel"></select></div>
       <div><label>Catch-up day?</label><select id="cuSel"><option value="0">No</option><option value="1">Yes</option></select></div>
-      <div style="flex:0 0 auto;display:flex;gap:6px"><button class="btn" id="pdfBtn"><i class="bi bi-file-earmark-pdf"></i> Download PDF</button><button class="btn secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button></div>
+      <div style="flex:0 0 auto;display:flex;gap:6px"><button class="btn secondary" id="prevBtn"><i class="bi bi-eye"></i> Preview</button><button class="btn" id="pdfBtn"><i class="bi bi-file-earmark-pdf"></i> Download PDF</button><button class="btn secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button></div>
     </div><div class="stat" style="margin-top:8px"><span class="dot"></span><span class="muted" id="live">Live</span><span class="newrep" id="newrep"></span></div></div>
-    <div id="sheet"><p class="muted">Loading…</p></div>
+    <div id="pdfMsg" class="muted" style="margin:.3rem 0"></div><div id="sheet"><p class="muted">Loading…</p></div>
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="../assets/js/config.js?v=20261013c"></script><script src="../assets/js/supabaseClient.js?v=20261013c"></script><script src="../assets/js/nav.js?v=20261013c"></script><script src="../assets/js/forms.js?v=20261013c"></script>
+<script src="../assets/js/config.js?v=20261013d"></script><script src="../assets/js/supabaseClient.js?v=20261013d"></script><script src="../assets/js/nav.js?v=20261013d"></script><script src="../assets/js/forms.js?v=20261013d"></script><script src="../assets/js/pdfx.js?v=20261013d"></script>
 <script>
 const $ = (id) => document.getElementById(id), E = FS.esc; let B = null, me = null, sig = "";
 const curDay = () => $("daySel").value === "all" ? "all" : Number($("daySel").value), curCU = () => $("cuSel").value === "1";
@@ -34,7 +34,7 @@ const curDay = () => $("daySel").value === "all" ? "all" : Number($("daySel").va
   if (me.role === "aic") { $("sheet").innerHTML = `<div class="card">The 2B form is prepared for the UCMO. Area Incharges enter their daily figures on the <a href="reporting.html">Reporting</a> page.</div>`; document.querySelector(".dl-panel").style.display = "none"; return; }
   const { data: cs } = await supabaseClient.from("campaigns").select("id, name, status").order("start_date", { ascending: false }), list = cs || [];
   $("campSel").innerHTML = list.map(c => `<option value="${c.id}">${E(c.name)}${c.status === "closed" ? " (closed)" : ""}</option>`).join("") || `<option value="">No campaign yet</option>`; const act = list.find(c => c.status !== "closed"); if (act) $("campSel").value = act.id;
-  $("campSel").onchange = load; $("daySel").onchange = $("cuSel").onchange = draw; $("pdfBtn").onclick = pdf;
+  $("campSel").onchange = load; $("daySel").onchange = $("cuSel").onchange = draw; $("pdfBtn").onclick = pdf; $("prevBtn").onclick = previewPdf;
   if ($("campSel").value) { await load(); setInterval(refresh, 30000); }
 })();
 async function load() { B = await FS.loadBase($("campSel").value); const n = Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7);
@@ -45,10 +45,13 @@ function draw() { $("sheet").innerHTML = FS.render2B(B, curDay(), curCU()); cons
   $("live").textContent = `${got} of ${B.aics.length} Area Incharges have reported · checked ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`; }
 async function refresh() { if (!B) return; const { data } = await supabaseClient.from("daily_reports").select("*").eq("campaign_id", B.campaign.id); const ns = JSON.stringify((data || []).map(r => r.updated_at || r.created_at));
   if (ns !== sig) { const before = (B.reports || []).length; B.reports = data || []; sig = ns; draw(); $("newrep").style.display = "inline-block"; $("newrep").textContent = "New report received — 2B updated"; setTimeout(() => $("newrep").style.display = "none", 8000); } else draw(); }
-async function pdf() {
-  const box = document.createElement("div"); box.style.cssText = "position:fixed;left:-99999px;top:0;width:1123px;background:#fff"; box.innerHTML = FS.render2B(B, curDay(), curCU()); document.body.appendChild(box);
-  await html2pdf().set({ margin: [3, 3, 3, 3], filename: `2B_${(B.geo.uc || "UC").replace(/\W+/g, "_")}_${curDay() === "all" ? "all_days" : "Day" + curDay()}.pdf`, image: { type: "jpeg", quality: .95 }, html2canvas: { scale: 2, windowWidth: 1123 }, jsPDF: { unit: "mm", format: "a4", orientation: "landscape" }, pagebreak: { mode: ["css", "avoid-all"] } }).from(box).save(); box.remove();
+function pdfJob() {
+  if (!B) return null;
+  return { title: `2B form — ${B.geo.uc || "UC"} — ${curDay() === "all" ? "all days" : "Day " + curDay()}`, filename: `2B_${(B.geo.uc || "UC").replace(/\W+/g, "_")}_${curDay() === "all" ? "all_days" : "Day" + curDay()}.pdf`,
+    makeBytes: async () => await PDFX.fromPages([FS.render2B(B, curDay(), curCU())]) };
 }
+async function pdf() { const j = pdfJob(); if (j) await PDFX.download({ filename: j.filename, makeBytes: j.makeBytes, say: (t, err) => { const m = document.getElementById("pdfMsg"); if (m) m.innerHTML = err ? `<span class="error-text">${FS.esc(t)}</span>` : FS.esc(t); } }); }
+function previewPdf() { const j = pdfJob(); if (j) PDFX.preview(j); }
 </script>
 </body>
 </html>

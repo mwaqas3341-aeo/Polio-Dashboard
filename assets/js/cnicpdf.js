@@ -3,8 +3,19 @@
    groups: [{ heading, teams: [{ heading|null, note|null, people: [{ name, father, cnic, cell, detail, frontPath, backPath }] }] }] */
 const CARD_W_MM = 85.60, CARD_H_MM = 53.98, CARD_SCALE = 1.05;
 
-function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn }) {
+function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn, textImage }) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  // jsPDF's built-in fonts cannot draw Urdu / other non-Latin letters (they come out blank or garbled). When the caller supplies
+  // textImage(str, {bold, pt, maxMm, color}) -> {dataUrl, wMm, hMm}, such text is drawn as a picture instead.
+  const NONLATIN = /[^\u0000-\u00FF]/;
+  const put = (str, x, yy, o = {}) => {
+    str = String(str ?? "");
+    if (textImage && NONLATIN.test(str)) {
+      const im = textImage(str, { bold: o.bold, pt: o.pt || 10, maxMm: o.maxWidth || 180, color: o.color || "#141414" });
+      if (im) { doc.addImage(im.dataUrl, "PNG", x, yy - im.hMm * 0.72, im.wMm, im.hMm, undefined, "FAST"); return; }
+    }
+    const { bold, pt, color, ...rest } = o; doc.text(str, x, yy, rest);
+  };
   const PW = 210, PH = 297, M = 10, HEAD_BOTTOM = 25.5, FOOT_Y = 293, BOTTOM = 289.5;
   const FW = CARD_W_MM * CARD_SCALE, FH = CARD_H_MM * CARD_SCALE, GAP = 6;
   const FRAME_TOP = 7.5, BLOCK_H = FRAME_TOP + FH + 1.6;   // bold name / cell line, frames, small gap -> 4 CNICs per page
@@ -12,10 +23,10 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn })
   let y = HEAD_BOTTOM, curGroup = "", curTeam = "";
 
   const header = () => {
-    doc.setFont("helvetica", "bold").setFontSize(14).setTextColor(20); doc.text(title, M, 11);
-    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(70); doc.text(subtitle, M, 16);
+    doc.setFont("helvetica", "bold").setFontSize(14).setTextColor(20); put(title, M, 11, { bold: true, pt: 14, maxWidth: PW - 2 * M });
+    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(70); put(subtitle, M, 16, { pt: 9, maxWidth: PW - 2 * M, color: "#464646" });
     doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(20);
-    const where = [curGroup, curTeam].filter(Boolean).join("   |   "); if (where) doc.text(where, M, 21.3, { maxWidth: PW - 2 * M });
+    const where = [curGroup, curTeam].filter(Boolean).join("   |   "); if (where) put(where, M, 21.3, { bold: true, pt: 10, maxWidth: PW - 2 * M });
     doc.setDrawColor(150).setLineWidth(0.3).line(M, 24, PW - M, 24);
   };
   const newPage = () => { doc.addPage(); stats.pages++; y = HEAD_BOTTOM; header(); };
@@ -23,7 +34,7 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn })
   const ensure = (h) => { if (y + h > BOTTOM) newPage(); };
 
   const drawFrame = (x, yy, label, img, caption) => {
-    doc.setFont("helvetica", "bold").setFontSize(12.5).setTextColor(10); doc.text(String(caption || ""), x, yy - 1.8, { maxWidth: FW });   // bold line above the picture: name over the front, cell number over the back
+    doc.setFont("helvetica", "bold").setFontSize(12.5).setTextColor(10); put(String(caption || ""), x, yy - 1.8, { bold: true, pt: 12.5, maxWidth: FW });   // bold line above the picture: name over the front, cell number over the back
     doc.setDrawColor(120).setLineWidth(0.25);
     if (!img) {
       doc.setLineDashPattern([1.2, 1.2], 0); doc.rect(x, yy, FW, FH); doc.setLineDashPattern([], 0);
@@ -43,9 +54,9 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn })
       curTeam = t.heading || "";
       const barH = t.heading ? 8 : 0, gH = groupDrawn || !g.heading ? 0 : 10;
       ensure(gH + barH + (t.people.length ? BLOCK_H : 6));   // headings never sit alone at the bottom of a page
-      if (gH) { curGroup = g.heading; doc.setFillColor(40, 70, 60).rect(M, y, PW - 2 * M, 7.5, "F"); doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(255); doc.text(g.heading, M + 2, y + 5.2); doc.setTextColor(20); y += gH; groupDrawn = true; }
-      if (t.heading) { doc.setFillColor(232, 239, 237).rect(M, y, PW - 2 * M, 6.5, "F"); doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(20); doc.text(t.heading, M + 2, y + 4.6); y += barH; }
-      if (t.note) { doc.setFont("helvetica", "italic").setFontSize(9).setTextColor(120); doc.text(t.note, M + 2, y + 4); y += 6; }
+      if (gH) { curGroup = g.heading; doc.setFillColor(40, 70, 60).rect(M, y, PW - 2 * M, 7.5, "F"); doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(255); put(g.heading, M + 2, y + 5.2, { bold: true, pt: 11, color: "#ffffff", maxWidth: PW - 2 * M - 4 }); doc.setTextColor(20); y += gH; groupDrawn = true; }
+      if (t.heading) { doc.setFillColor(232, 239, 237).rect(M, y, PW - 2 * M, 6.5, "F"); doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(20); put(t.heading, M + 2, y + 4.6, { bold: true, pt: 10, maxWidth: PW - 2 * M - 4 }); y += barH; }
+      if (t.note) { doc.setFont("helvetica", "italic").setFontSize(9).setTextColor(120); put(t.note, M + 2, y + 4, { pt: 9, color: "#787878", maxWidth: PW - 2 * M - 4 }); y += 6; }
       for (const p of t.people) {
         ensure(BLOCK_H);
         const top = y;

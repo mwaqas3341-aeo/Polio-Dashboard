@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDF Downloads — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261013c"><link rel="stylesheet" href="../assets/css/forms.css?v=20261013c">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261013d"><link rel="stylesheet" href="../assets/css/forms.css?v=20261013d">
 <style> .big { padding:.8rem 1.4rem; font-size:1rem; } .prog { height:10px; background:var(--s2); border-radius:99px; overflow:hidden; margin-top:10px; display:none; } .prog i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--brand),var(--ok)); transition:width .2s; }
   details.miss summary { cursor:pointer; font-weight:700; } details.miss ul { margin:.4rem 0 0 1rem; font-size:.85rem; } </style>
 </head>
@@ -17,7 +17,8 @@
         <div><label>Campaign</label><select id="campSel"></select></div>
         <div id="optWrap"><label>What do you want to download?</label><select id="opt"></select></div>
       </div>
-      <div style="margin-top:12px"><button class="btn big" id="dlBtn"><i class="bi bi-download"></i> <span id="dlTxt">Download PDF</span></button></div>
+      <div id="aicWrap" style="display:none;margin-top:10px"><label>Area Incharge to preview</label><select id="aicPick"></select></div>
+      <div style="margin-top:12px;display:flex;gap:.6rem;flex-wrap:wrap"><button class="btn big secondary" id="prevBtn"><i class="bi bi-eye"></i> Preview</button><button class="btn big" id="dlBtn"><i class="bi bi-download"></i> <span id="dlTxt">Download PDF</span></button></div>
       <div class="prog" id="prog"><i id="progBar"></i></div><div id="msg" class="muted" style="margin-top:8px"></div>
     </div>
     <div class="card" id="info"></div>
@@ -28,7 +29,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-<script src="../assets/js/config.js?v=20261013c"></script><script src="../assets/js/supabaseClient.js?v=20261013c"></script><script src="../assets/js/nav.js?v=20261013c"></script><script src="../assets/js/forms.js?v=20261013c"></script><script src="../assets/js/cnicpdf.js?v=20261013c"></script>
+<script src="../assets/js/config.js?v=20261013d"></script><script src="../assets/js/supabaseClient.js?v=20261013d"></script><script src="../assets/js/nav.js?v=20261013d"></script><script src="../assets/js/forms.js?v=20261013d"></script><script src="../assets/js/pdfx.js?v=20261013d"></script><script src="../assets/js/cnicpdf.js?v=20261013d"></script>
 <script>
 const $ = (id) => document.getElementById(id), E = FS.esc, natural = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true });
 const COLS = "id, full_name, cnic, phone, designation, status, aic_no, cnic_pic_front_path, cnic_pic_back_path";
@@ -41,7 +42,7 @@ const OPTS = [["all_aic", "1. All Area Incharges' CNICs — one PDF"], ["aic_tea
   const { data: cs } = await supabaseClient.from("campaigns").select("id, name, status, uc_id").order("start_date", { ascending: false }); camps = cs || [];
   $("campSel").innerHTML = camps.map(c => `<option value="${c.id}">${E(c.name)}${c.status === "closed" ? " (closed)" : ""}</option>`).join("") || `<option value="">No campaign yet</option>`; const act = camps.find(c => c.status !== "closed"); if (act) $("campSel").value = act.id;
   if (isAic) { $("optWrap").style.display = "none"; $("dlTxt").textContent = "Download my PDF (2A forms + team lists)"; } else { $("opt").innerHTML = OPTS.map(o => `<option value="${o[0]}">${o[1]}</option>`).join(""); $("plansLink").style.display = "block"; }
-  $("campSel").onchange = loadInfo; $("dlBtn").onclick = go; await loadInfo();
+  $("campSel").onchange = async () => { await loadInfo(); syncPick(); }; $("opt").onchange = syncPick; $("dlBtn").onclick = go; $("prevBtn").onclick = preview; await loadInfo(); syncPick();
 })();
 const say = (t, err) => { $("msg").innerHTML = err ? `<span class="error-text">${E(t)}</span>` : E(t); }, tick = (d, n) => { $("prog").style.display = "block"; $("progBar").style.width = Math.round(100 * d / Math.max(1, n)) + "%"; };
 const person = (s) => ({ name: s.full_name || "", cnic: s.cnic, cell: s.phone, frontPath: s.cnic_pic_front_path, backPath: s.cnic_pic_back_path, _s: s });
@@ -80,7 +81,7 @@ async function loadImage(path) {
 async function preload(paths) { const cache = new Map(); let done = 0, i = 0; const w = async () => { while (i < paths.length) { const p = paths[i++]; try { cache.set(p, await loadImage(p)); } catch { cache.set(p, null); } tick(++done, paths.length); } }; await Promise.all([w(), w(), w(), w()]); return cache; }
 async function cnicPdf(groups, title, subtitle) {
   const paths = [...new Set(peopleOf(groups).flatMap(p => [p.frontPath, p.backPath]).filter(Boolean))]; const cache = await preload(paths);
-  const { doc } = buildCnicPdf({ jsPDF: window.jspdf.jsPDF, title, subtitle, groups, getImage: (p) => cache.get(p) || null, generatedOn: "Generated " + new Date().toLocaleString("en-GB") }); return doc.output("arraybuffer");
+  const { doc } = buildCnicPdf({ jsPDF: window.jspdf.jsPDF, title, subtitle, groups, getImage: (p) => cache.get(p) || null, textImage: PDFX.textImage, generatedOn: "Generated " + new Date().toLocaleString("en-GB") }); return doc.output("arraybuffer");
 }
 /* ---- 2A forms (official layout), only the days that have a submitted report ---- */
 async function twoAPdf(aic) {
@@ -88,30 +89,46 @@ async function twoAPdf(aic) {
   for (let d = 1; d <= nd; d++) if ((B.reports || []).some(r => !r.is_catchup && r.campaign_day === d && ids.has(String(r.team_no)))) pages.push(FS.render2AOfficial(B, a, d, false));
   for (let d = 1; d <= 3; d++) if ((B.reports || []).some(r => r.is_catchup && r.campaign_day === d && ids.has(String(r.team_no)))) pages.push(FS.render2AOfficial(B, a, d, true));
   if (!pages.length) return null;
-  const box = document.createElement("div"); box.style.cssText = "position:fixed;left:-99999px;top:0;width:1123px;background:#fff"; box.innerHTML = pages.map((h, i) => `<div style="${i ? "break-before:page;" : ""}">${h}</div>`).join(""); document.body.appendChild(box);
-  try { return await html2pdf().set({ margin: [3, 3, 3, 3], image: { type: "jpeg", quality: .95 }, html2canvas: { scale: 2, windowWidth: 1123 }, jsPDF: { unit: "mm", format: "a4", orientation: "landscape" }, pagebreak: { mode: ["css", "avoid-all"] } }).from(box).outputPdf("arraybuffer"); } finally { box.remove(); }
+  return await PDFX.fromPages(pages);
 }
 async function merge(buffers) { const out = await PDFLib.PDFDocument.create(); for (const b of buffers.filter(Boolean)) { const src = await PDFLib.PDFDocument.load(b), pg = await out.copyPages(src, src.getPageIndices()); pg.forEach(p => out.addPage(p)); } return await out.save(); }
-function save(bytes, name) { const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" })), a = document.createElement("a"); a.href = url; a.download = name.replace(/[^\w.\-]+/g, "_"); document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 20000); }
 const sub = () => `Campaign: ${D.camp?.name || ""}   |   Generated ${new Date().toLocaleDateString("en-GB")}`;
+const NoData = PDFX.NoData;
+async function cnicBytes(groups, title) { if (!peopleOf(groups).length) throw new NoData("There is nobody to list for this selection yet — add the people on Staff Management first."); return await cnicPdf(groups, title, sub()); }
 
+/* every option becomes a list of jobs {title, filename, makeBytes}; Preview shows one job, Download saves all of them with the same generator */
+async function jobs() {
+  D = await loadData(); const base = D.camp?.name || "Campaign";
+  if (isAic) {
+    const a = D.aics[0]; if (!a) throw new NoData("Your Area Incharge record was not found.");
+    return [{ title: `My PDF — AIC ${a.aic_no} ${a.full_name}`, filename: `${base}_AIC${a.aic_no}_2A_and_Team_lists.pdf`, makeBytes: async () => {
+      say("Preparing your 2A forms…"); const twoA = await twoAPdf(a), g = groupsFor(D, "aic_teams", a);
+      say("Loading CNIC pictures…"); const lists = peopleOf(g).length ? await cnicPdf(g, `Team Lists — AIC ${a.aic_no} ${a.full_name}`, sub()) : null;
+      if (!twoA && !lists) throw new NoData("Nothing to put in your PDF yet: no team members are listed and no 2A report has been submitted.");
+      say("Combining into one PDF…"); return await merge([twoA, lists]); } }];
+  }
+  const kind = $("opt").value;
+  if (kind === "aic_teams") { if (!D.aics.length) throw new NoData("No Area Incharge found in this union council."); return D.aics.map(a => ({ id: a.id, title: `Team CNICs — AIC ${a.aic_no} ${a.full_name}`, filename: `${base}_AIC${a.aic_no}_${a.full_name}_teams.pdf`, makeBytes: () => cnicBytes(groupsFor(D, kind, a), `Team CNICs — AIC ${a.aic_no} ${a.full_name}`) })); }
+  const t = kind === "all_aic" ? "CNICs — Area Incharges" : "CNICs — Area Incharges and their teams";
+  return [{ title: t, filename: `${base}_${kind === "all_aic" ? "AIC_CNICs" : "AICs_with_teams"}.pdf`, makeBytes: () => cnicBytes(groupsFor(D, kind), t) }];
+}
+function syncPick() { const show = !isAic && $("opt").value === "aic_teams" && D && D.aics.length > 0; $("aicWrap").style.display = show ? "block" : "none"; if (show) { const cur = $("aicPick").value; $("aicPick").innerHTML = D.aics.map(a => `<option value="${a.id}">AIC ${a.aic_no} — ${E(a.full_name)}</option>`).join(""); if (D.aics.some(a => a.id === cur)) $("aicPick").value = cur; } $("dlTxt").textContent = isAic ? "Download my PDF (2A forms + team lists)" : $("opt").value === "aic_teams" ? "Download all (one PDF per Area Incharge)" : "Download PDF"; }
+const busy = (b) => { $("dlBtn").disabled = $("prevBtn").disabled = b; if (!b) $("prog").style.display = "none"; };
+
+async function preview() {
+  busy(true); say("");
+  try { const js = await jobs(), j = js.length > 1 ? (js.find(x => x.id === $("aicPick").value) || js[0]) : js[0];
+    await PDFX.preview({ title: j.title, filename: j.filename, makeBytes: j.makeBytes }); say(""); }
+  catch (e) { say(e instanceof NoData ? e.message : "Could not prepare the preview: " + (e.message || e), !(e instanceof NoData)); }
+  busy(false);
+}
 async function go() {
-  $("dlBtn").disabled = true; $("prog").style.display = "none";
-  try {
-    D = await loadData(); const base = (D.camp?.name || "Campaign");
-    if (isAic) {
-      const a = D.aics[0]; if (!a) throw new Error("Your Area Incharge record was not found");
-      say("Preparing your 2A forms…"); const twoA = await twoAPdf(a);
-      say("Loading CNIC pictures…"); const lists = await cnicPdf(groupsFor(D, "aic_teams", a), `Team Lists — AIC ${a.aic_no} ${a.full_name}`, sub());
-      say("Combining into one PDF…"); save(await merge([twoA, lists]), `${base}_AIC${a.aic_no}_2A_and_Team_lists.pdf`);
-      say(twoA ? "Done — one PDF with your 2A forms and team lists." : "Done — team lists. (No 2A report submitted yet, so no 2A pages.)");
-    } else {
-      const kind = $("opt").value;
-      if (kind === "aic_teams") { let i = 0; for (const a of D.aics) { i++; say(`Creating PDF ${i} of ${D.aics.length}: AIC ${a.aic_no}…`); save(await cnicPdf(groupsFor(D, kind, a), `Team CNICs — AIC ${a.aic_no} ${a.full_name}`, sub()), `${base}_AIC${a.aic_no}_${a.full_name}_teams.pdf`); await new Promise(r => setTimeout(r, 700)); } say(`Done — ${D.aics.length} PDF file(s) saved (one per Area Incharge). If only one arrived, allow multiple downloads in your browser.`); }
-      else { say("Loading CNIC pictures…"); const t = kind === "all_aic" ? "CNICs — Area Incharges" : "CNICs — Area Incharges and their teams"; save(await cnicPdf(groupsFor(D, kind), t, sub()), `${base}_${kind === "all_aic" ? "AIC_CNICs" : "AICs_with_teams"}.pdf`); say("Done — PDF saved."); }
-    }
-  } catch (e) { console.error(e); say("Could not create the PDF: " + (e.message || e), true); }
-  $("dlBtn").disabled = false; $("prog").style.display = "none";
+  busy(true);
+  try { const js = await jobs(); let ok = 0;
+    for (let i = 0; i < js.length; i++) { const j = js[i]; const done = await PDFX.download({ filename: j.filename, makeBytes: j.makeBytes, say: (t, err) => say(js.length > 1 ? `(${i + 1} of ${js.length}) ${t}` : t, err) }); if (done) ok++; if (js.length > 1) await new Promise(r => setTimeout(r, 700)); }
+    if (js.length > 1) say(ok === js.length ? `Done — ${ok} PDFs downloaded. If fewer arrived, allow multiple downloads in your browser.` : `${ok} of ${js.length} PDFs were created; see the message above for the others.`, ok < js.length && ok === 0); }
+  catch (e) { say(e instanceof NoData ? e.message : "Could not create the PDF: " + (e.message || e), !(e instanceof NoData)); }
+  busy(false);
 }
 </script>
 </body>
