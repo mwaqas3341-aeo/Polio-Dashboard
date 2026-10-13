@@ -27,13 +27,40 @@ const PDFX = (() => {
     if (!pages.length) throw new NoData();
     if (!window.html2pdf) throw new Error("The PDF library did not load. Check your internet connection and reload the page.");
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const fit = landscape && pages.every(h => String(h).includes("fx-2a"));       // 2A / 2B forms: exactly one landscape page each, nothing clipped
     const box = document.createElement("div");
     box.style.cssText = "width:1123px;background:#fff;";            // NO position / left / top here — see the note at the top of this file
-    box.innerHTML = pages.map((h, i) => `<div style="${i ? "break-before:page;" : ""}">${h}</div>`).join("");
-    const imgs = [...box.querySelectorAll("img")];                    // images must be decoded before the page is photographed
-    await Promise.all(imgs.map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
-    return await html2pdf().set({ margin: [3, 3, 3, 3], image: { type: "jpeg", quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, windowWidth: 1123, scrollY: 0 },
-      jsPDF: { unit: "mm", format: "a4", orientation: landscape ? "landscape" : "portrait" }, pagebreak: { mode: ["css", "avoid-all"] } }).from(box).outputPdf("arraybuffer");
+    let W = 1123;
+    if (fit) {
+      const st = document.createElement("style");                    // larger, bolder type for the printed form
+      st.textContent = `.pdf-fit .fx-wrap{overflow:visible!important} .pdf-fit .fx-page{border-width:2px;margin:0;box-sizing:border-box}
+        .pdf-fit .fx-2a h1{font-size:23px;font-weight:900} .pdf-fit .fx-2a h2{font-size:17px;font-weight:900} .pdf-fit .fx-2a .fx-hdr{font-size:14.5px;font-weight:700;padding:4px 8px}
+        .pdf-fit .fx-2a table.fx{font-size:13.5px} .pdf-fit .fx-2a table.fx th{font-size:11.5px;font-weight:900;padding:3px 3px;line-height:1.15} .pdf-fit .fx-2a table.fx td{padding:3px 3px;font-weight:600}
+        .pdf-fit .fx-2a table.fx-main tbody tr{height:auto} .pdf-fit .fx-2a .fx-note,.pdf-fit .fx-2a .fx-sig{font-size:14px;font-weight:800}`;
+      box.className = "pdf-fit"; box.appendChild(st);
+    }
+    const wrap = pages.map((h, i) => { const d = document.createElement("div"); d.className = "pdf-pg"; d.style.cssText = i ? "break-before:page;" : ""; d.innerHTML = h; return d; });
+    wrap.forEach(d => box.appendChild(d));
+    document.body.appendChild(box);                                  // measured in the document, then photographed
+    try {
+      if (fit) {                                                     // choose the layout width: wide enough for the widest table, tall enough that no form needs a second page
+        const need = () => { let w = 0, h = 0; wrap.forEach(d => { const pg = d.firstElementChild; w = Math.max(w, pg ? pg.scrollWidth : 0); h = Math.max(h, d.scrollHeight); }); return { w, h }; };
+        for (let i = 0; i < 40; i++) {
+          box.style.width = W + "px"; const n = need(), availH = Math.floor(W * 204 / 291) - 2;
+          if (n.w > W + 1) { W = Math.ceil(n.w) + 2; continue; }
+          if (n.h > availH) { W = Math.ceil(W * 1.03); continue; }
+          break;
+        }
+        const availH = Math.floor(W * 204 / 291) - 2; wrap.forEach(d => { d.style.height = availH + "px"; d.style.overflow = "hidden"; });
+        PDFX.lastFit = { layoutWidth: W, scale: +(291 / W).toFixed(3) };
+      } else box.style.width = "1123px";
+      const imgs = [...box.querySelectorAll("img")];                 // images must be decoded before the page is photographed
+      await Promise.all(imgs.map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+      const job = html2pdf().set({ margin: [3, 3, 3, 3], image: { type: "jpeg", quality: 0.95 }, html2canvas: { scale: fit ? Math.min(3, 2 * 1400 / W + 0.5) : 2, useCORS: true, width: fit ? W : undefined, windowWidth: W, x: 0, scrollX: 0, scrollY: 0 },
+        jsPDF: { unit: "mm", format: "a4", orientation: landscape ? "landscape" : "portrait" }, pagebreak: { mode: fit ? ["css"] : ["css", "avoid-all"] } }).from(box);
+      if (!fit) return await job.outputPdf("arraybuffer");
+      return await job.toContainer().then(function () { const c = this.prop.container; c.style.width = W + "px"; c.style.left = "0"; c.style.right = "auto"; c.style.margin = "0"; }).toCanvas().toPdf().output("arraybuffer");   // html2pdf's own container is page-wide and centred, which clipped wide forms
+    } finally { box.remove(); }
   }
 
   /* ---------- checking ---------- */
