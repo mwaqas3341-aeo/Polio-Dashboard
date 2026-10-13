@@ -276,7 +276,8 @@ FS.C_COLS = [...cuGroup("Target for catch-up day", "target"), ...cuGroup("Covere
   { k: "vitamin_a_red", g: "Vitamin A capsules used", l: "Red", vit: 1 }, { k: "vitamin_a_blue", g: "Vitamin A capsules used", l: "Blue", vit: 1 }];
 FS.F_COLS = [{ k: "children_vaccinated_first_visit", s: 1, l: "Number of children vaccinated" }, { k: "vaccine_doses_received", g: "Vaccine recorded doses", l: "Received" }, { k: "vaccine_doses_used", g: "Vaccine recorded doses", l: "Used" }, { k: "vaccine_doses_returned", g: "Vaccine recorded doses", l: "Returned" },
   { k: "finger_markers_received", g: "Finger markers", l: "Received" }, { k: "finger_markers_returned", g: "Finger markers", l: "Returned" }, { k: "afp_cases_notified", s: 1, l: "AFP cases notified" }, { k: "zero_dose_ri_recorded", s: 1, l: "Zero dose for RI recorded" }];
-FS.colsFor = (B, catchup, fixed) => (fixed ? FS.F_COLS : catchup ? FS.C_COLS : FS.A_COLS).filter(c => !c.vit || FS.caps(B).vit_a_needed !== "no");
+FS.colsFor = (B, catchup, fixed) => (fixed ? FS.F_COLS : catchup ? FS.C_COLS : FS.A_COLS);   // all official columns are always shown
+FS.vitOn = (B) => FS.caps(B).vit_a_needed === "yes";                                              // Vitamin A cells can be typed only if the plan questionnaire says capsules are needed
 FS.LEGACY = { missed_na: (r) => (+r.missed_children_under_12m || 0) + (+r.missed_children_12_59m || 0), missed_refusal: (r) => (+r.refusal_under_12m || 0) + (+r.refusal_12_59m || 0), covered_na: (r) => +r.catchup_covered || 0, mmp_vaccinated: (r) => +r.hrmp_vaccinated || 0 };
 FS.rv = (r, k) => { if (!r) return 0; const v = +r[k] || 0; return v || (FS.LEGACY[k] ? FS.LEGACY[k](r) : 0); };
 FS.dayDate = (B, day) => B.campaign.start_date ? FS.fmtDate(new Date(new Date(B.campaign.start_date + "T00:00:00").getTime() + (day - 1) * 864e5).toISOString().slice(0, 10)) : "";
