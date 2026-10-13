@@ -89,4 +89,13 @@ function renderSidebar(activeHref) {
   }));
   document.addEventListener("click", () => mount.querySelectorAll(".nav-group.open").forEach(x => x.classList.remove("open")));
   applyPlanGate(mount);
+  applyRoleGate(mount);
+}
+/* Login accounts are for administrators and UCMOs only. This hides the menu item; the staff-accounts function and the
+   database refuse everybody else on the server side, so a direct link or hand-made request cannot get around it. */
+async function applyRoleGate(mount) {
+  try {
+    const p = typeof loadCurrentProfile === "function" ? await loadCurrentProfile() : null; if (!p || !p.role) return;
+    if (!["admin", "ucmo"].includes(p.role)) mount.querySelectorAll('a[href$="accounts.html"]').forEach(a => a.remove());
+  } catch (e) { /* the menu stays as it is; the server still enforces the rule */ }
 }

@@ -122,6 +122,7 @@ Phase 1 (Campaign Details + Staff Management), applied in order after `0010`:
 
 - `0028_school_mmp_move_guard.sql` — **pending, run once**: moving a school/MMP row to another team or day now also respects a submitted plan at the old position
 - `0029_aic_microplan_figures.sql` — **pending, run once (after 0028)**: `aic_microplan_figures` (one row per campaign x AIC) for the AIC Summary MP fields stored nowhere else (DDM cards, supplies, refusals, zero-dose, madaris, ...); RLS: an AIC only sees/edits their own
+- `0035_aic_scoped_reports_and_registers.sql` — **pending, run once**: 2A daily reports, house registrations, DDM cards and supervision visits become AIC-scoped (an AIC reaches only their own teams' rows); other roles unchanged
 
 Notes: staff, AICs and teams are permanent records that carry over between campaigns. A keep-alive ping runs inside Supabase
 (`pg_cron` every 6 hours calling `public.heartbeat()`); `ops/heartbeat.yml` is an unused GitHub Actions alternative.

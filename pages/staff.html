@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Staff — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261013d">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261013e">
 <style>
   .hdr { display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; }
   .hdr > div { min-width:14rem; flex:1; }
@@ -83,12 +83,12 @@
 </div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../assets/js/config.js?v=20261013d"></script>
-<script src="../assets/js/supabaseClient.js?v=20261013d"></script>
-<script src="../assets/js/nav.js?v=20261013d"></script>
-<script src="../assets/js/crud.js?v=20261013d"></script>
-<script src="../assets/js/validators.js?v=20261013d"></script>
-<script src="../assets/js/images.js?v=20261013d"></script>
+<script src="../assets/js/config.js?v=20261013e"></script>
+<script src="../assets/js/supabaseClient.js?v=20261013e"></script>
+<script src="../assets/js/nav.js?v=20261013e"></script>
+<script src="../assets/js/crud.js?v=20261013e"></script>
+<script src="../assets/js/validators.js?v=20261013e"></script>
+<script src="../assets/js/images.js?v=20261013e"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const PAGE = 15;
@@ -133,6 +133,7 @@ const showErr = (e) => { const el = $("pErr"); el.textContent = friendly(e); el.
 (async () => {
   const session = await requireAuth(); if (!session) return;
   renderSidebar("staff.html");
+  { const { data: pr0 } = await supabaseClient.from("profiles").select("role").eq("id", session.user.id).maybeSingle(); ME = pr0?.role || null; }
   const [{ data: ucs }, { data: bk }, { data: camps }] = await Promise.all([
     supabaseClient.from("union_councils").select("id, name").order("name"),
     supabaseClient.from("banks").select("code, name, iban_code").order("name"),
@@ -187,13 +188,14 @@ async function removeStaffRow(who, label) {
   return null;
 }
 
+let ME = null;   // role of the signed-in user: an Area Incharge sees only their own block and cannot add a UCMO / AICs or change the structure
 function renderBoard() {
-  const { plan, ucmo, aics, drivers, teams } = B;
-  if (!ucmo) { $("board").innerHTML = `<div class="card"><h2>Step 1 — Add the UCMO</h2><p>Start with the UCMO of this union council. You will be asked how many Area Incharges and how many teams there will be.</p>
+  const { plan, ucmo, aics, drivers, teams } = B, AICM = ME === "aic";
+  if (!ucmo && !AICM) { $("board").innerHTML = `<div class="card"><h2>Step 1 — Add the UCMO</h2><p>Start with the UCMO of this union council. You will be asked how many Area Incharges and how many teams there will be.</p>
       <button class="btn" onclick="openPerson({kind:'ucmo'})">+ Add UCMO</button></div>`; return; }
   const nA = plan?.total_aics ?? Math.max(0, ...aics.map(a => a.aic_no)), nT = plan?.total_teams ?? Math.max(0, ...teams.map(t => t.team_no));
   const haveA = aics.length, haveT = teams.length, pc = (a, b) => b ? Math.min(100, Math.round(a * 100 / b)) : 0;
-  let h = `<div class="card ucmo"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
+  let h = AICM ? `<div class="card"><b>Your Area Incharge record</b><br><span class="muted">Add and edit your team members and your driver here. The UCMO and the administrator manage the Area Incharge list and the logins.</span></div>` : `<div class="card ucmo"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
       <div><span class="tag">UCMO</span> <span class="big">${esc(ucmo.full_name)}</span><br><span class="muted">${esc(ucmo.phone)} · ${cnicLine(ucmo)}</span> ${cnicBox(ucmo)}</div>
       <div><button class="btn small" onclick="openPerson({kind:'ucmo',staff:'${ucmo.id}'})">Edit</button> <button class="btn small ghost" onclick="openPlan()">Change numbers</button></div></div>
       <div style="margin-top:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
@@ -201,18 +203,18 @@ function renderBoard() {
         <div>Teams: <b>${haveT}</b> of ${nT}<div class="bar"><i style="width:${pc(haveT, nT)}%"></i></div></div></div></div>`;
   const untyped = teams.filter(t => !t.team_type);
   if (untyped.length) h += `<div class="card" style="border-color:#e0a0a0;"><b>${untyped.length} team(s) still need a type</b> (Fixed, Transit or Mobile). <button class="btn small" onclick="openBulkTypes()">Set team types</button></div>`;
-  if (!plan) h += `<div class="card"><b>Tell the system how many Area Incharges and teams this union council will have.</b> <button class="btn small" onclick="openPlan()">Set the numbers</button></div>`;
+  if (!plan && !AICM) h += `<div class="card"><b>Tell the system how many Area Incharges and teams this union council will have.</b> <button class="btn small" onclick="openPlan()">Set the numbers</button></div>`;
   if (aics.length) h += `<div style="text-align:right;margin:.4rem 0 0;"><button class="btn small ghost" onclick="setAllAics(true)">Collapse all</button> <button class="btn small ghost" onclick="setAllAics(false)">Expand all</button></div>`;
-  for (let n = 1; n <= nA; n++) {
+  const nums = AICM ? aics.map(a => a.aic_no).sort((x, y) => x - y) : Array.from({ length: nA }, (_, i) => i + 1);
+  for (const n of nums) {
     const a = aics.find(x => x.aic_no === n);
     if (!a) { h += `<div class="aic empty"><span><b>AIC ${n}</b> — not added yet</span><button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n}})">+ Add AIC ${n}</button></div>`; continue; }
     const drv = drivers.find(d => d.aic_staff_id === a.id), mine = teams.filter(t => t.aic_staff_id === a.id);
     const isCol = collapsedAics.has(a.id);
     h += `<div class="aic"><div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
         <div><button class="btn small ghost" onclick="toggleAic('${a.id}')" title="Show or hide this Area Incharge's driver and teams">${isCol ? "▸" : "▾"}</button> <span class="tag">AIC ${n}</span> <span class="big">${esc(a.full_name)}</span> ${a.status !== "active" ? badge(a.status) : ""}<br><span class="muted">${esc([a.official_designation, a.department, a.place_of_posting].filter(Boolean).join(" · "))}</span><br><span class="muted">${esc(a.phone)} · ${cnicLine(a)}</span> ${cnicBox(a)}<br><span class="muted">${a.area_map_path ? `Area map ✓ <a href="#" onclick="viewAreaMap('${a.area_map_path}');return false;">View</a>` : `<b style="color:#9b1c1c">Area map missing</b>`}</span></div>
-        <div><button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n},staff:'${a.id}'})">Edit</button>
-          <button class="btn small ghost" onclick="openTeamPicker('${a.id}')">+ Add team</button>
-          <button class="btn small ghost" style="color:#9b1c1c;" onclick="deleteStaff('${a.id}','aic')">Delete AIC</button></div></div>
+        <div>${AICM ? "" : `<button class="btn small" onclick="openPerson({kind:'aic',aicNo:${n},staff:'${a.id}'})">Edit</button> `}<button class="btn small ghost" onclick="openTeamPicker('${a.id}')">+ Add team</button>
+          ${AICM ? "" : `<button class="btn small ghost" style="color:#9b1c1c;" onclick="deleteStaff('${a.id}','aic')">Delete AIC</button>`}</div></div>
       ${isCol ? `<p class="muted" style="margin:.4rem 0 0;">${mine.length} team(s)${drv ? " · driver " + esc(drv.full_name) : ""} — hidden. Press ▸ to show.</p>` : `
       <div style="margin-top:.3rem;">Driver: ${drv ? `<b>${esc(drv.full_name)}</b> <span class="muted">${esc(drv.father_name ? "s/o " + drv.father_name + " · " : "")}${esc(drv.phone || "")} · ${cnicLine(drv)}</span> ${cnicBox(drv)} <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n},staff:'${drv.id}'})">Edit</button> <button class="btn small ghost" style="color:#9b1c1c;" onclick="deleteStaff('${drv.id}','driver')">Delete driver</button>`
         : `<span class="muted">none</span> <button class="btn small ghost" onclick="openPerson({kind:'driver',aic:'${a.id}',aicNo:${n}})">+ Add driver</button>`}</div>
