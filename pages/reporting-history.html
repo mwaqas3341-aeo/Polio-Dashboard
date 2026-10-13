@@ -45,7 +45,7 @@ function draw() { const r = rows();
 function pdfJob(list) {
   const a = curAic(); if (!a || !list.length) return null;
   return { title: `2A form — AIC ${a.aic_no} — ${list.length > 1 ? "all days" : list[0].label || ""}`, filename: `2A_${(B.campaign.name || "").replace(/\W+/g, "_")}_AIC${a.aic_no}_${list.length > 1 ? "all_days" : (list[0].cu ? "Catchup" : "Day") + list[0].d}.pdf`,
-    makeBytes: async () => await PDFX.fromPages(list.map(x => FS.render2AOfficial(B, a, x.d, x.cu))) };
+    makeBytes: async () => await PDFX.fromPages(list.map(x => FS.render2AOfficial(B, a, x.d, x.cu)), { fitOne: true }) };
 }
 async function pdf(list) { const j = pdfJob(list); if (!j) return; await PDFX.download({ filename: j.filename, makeBytes: j.makeBytes, say: (t, err) => $("msg").innerHTML = err ? `<span class="error-text">${FS.esc(t)}</span>` : FS.esc(t) }); }
 function previewPdf(list) { const j = pdfJob(list); if (j) PDFX.preview(j); }

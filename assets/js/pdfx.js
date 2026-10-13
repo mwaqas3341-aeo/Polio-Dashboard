@@ -6,7 +6,7 @@
    WITHOUT any positioning, waits for fonts, and refuses to hand back a PDF whose first page is blank.
 
    Public API
-     PDFX.fromPages(pages, {landscape})      html pages (strings) -> Promise<ArrayBuffer>  (throws PDFX.NoData when empty)
+     PDFX.fromPages(pages, {landscape, fitOne})  html pages (fitOne = each page exactly one landscape sheet) (strings) -> Promise<ArrayBuffer>  (throws PDFX.NoData when empty)
      PDFX.verify(bytes)                      Promise<{pages}>  throws when the first page is blank / file is unreadable
      PDFX.save(bytes, filename)              download the bytes
      PDFX.download({filename, makeBytes, say})   generate -> verify -> save   (say(text, isError) shows messages)
@@ -22,18 +22,30 @@ const PDFX = (() => {
   const pdfjs = () => libP || (libP = (window.pdfjsLib ? Promise.resolve() : loadScript(CFG.pdfjs)).then(() => { if (!pdfjsLib.GlobalWorkerOptions.workerSrc) pdfjsLib.GlobalWorkerOptions.workerSrc = CFG.worker; return pdfjsLib; }).catch(e => { libP = null; throw e; }));
 
   /* ---------- html pages -> PDF ---------- */
-  async function fromPages(pages, { landscape = true } = {}) {
+  /* fitOne: every html page must land on exactly ONE landscape A4 sheet. The virtual page width is widened until the content
+     (measured, not guessed) is no taller than a sheet; html2pdf then scales that width onto the sheet, so nothing is clipped or split. */
+  const SHEET = { w: 297 - 6, h: 210 - 6 };                              // printable mm with the 3 mm margins
+  function fitWidth(pages) {
+    const probe = document.createElement("div"); probe.style.cssText = "position:absolute;left:-99999px;top:0;background:#fff;visibility:hidden;"; document.body.appendChild(probe);
+    let W = 1123;
+    try { for (let k = 0; k < 8; k++) { probe.style.width = W + "px"; probe.innerHTML = pages.map(h => `<div class="pvx-probe">${h}</div>`).join("");
+        const tallest = Math.max(...[...probe.children].map(c => c.scrollHeight)), need = Math.ceil(tallest * SHEET.w / SHEET.h) + 4; if (need <= W) break; W = need; } }
+    finally { probe.remove(); }
+    return W;
+  }
+  async function fromPages(pages, { landscape = true, fitOne = false } = {}) {
     pages = (pages || []).filter(h => h && String(h).trim());
     if (!pages.length) throw new NoData();
     if (!window.html2pdf) throw new Error("The PDF library did not load. Check your internet connection and reload the page.");
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const W = fitOne ? fitWidth(pages) : 1123, H = Math.floor(W * SHEET.h / SHEET.w) - 3;
     const box = document.createElement("div");
-    box.style.cssText = "width:1123px;background:#fff;";            // NO position / left / top here — see the note at the top of this file
-    box.innerHTML = pages.map((h, i) => `<div style="${i ? "break-before:page;" : ""}">${h}</div>`).join("");
+    box.style.cssText = `width:${W}px;background:#fff;`;               // NO position / left / top here — see the note at the top of this file
+    box.innerHTML = pages.map((h, i) => `<div style="${i ? "break-before:page;" : ""}${fitOne ? `height:${H}px;overflow:hidden;` : ""}">${h}</div>`).join("");
     const imgs = [...box.querySelectorAll("img")];                    // images must be decoded before the page is photographed
     await Promise.all(imgs.map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
-    return await html2pdf().set({ margin: [3, 3, 3, 3], image: { type: "jpeg", quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, windowWidth: 1123, scrollY: 0 },
-      jsPDF: { unit: "mm", format: "a4", orientation: landscape ? "landscape" : "portrait" }, pagebreak: { mode: ["css", "avoid-all"] } }).from(box).outputPdf("arraybuffer");
+    return await html2pdf().set({ margin: [3, 3, 3, 3], image: { type: "jpeg", quality: 0.95 }, html2canvas: { scale: fitOne && W > 1500 ? 3 : 2, useCORS: true, windowWidth: W, scrollY: 0 },
+      jsPDF: { unit: "mm", format: "a4", orientation: landscape ? "landscape" : "portrait" }, pagebreak: { mode: fitOne ? ["css"] : ["css", "avoid-all"] } }).from(box).outputPdf("arraybuffer");
   }
 
   /* ---------- checking ---------- */

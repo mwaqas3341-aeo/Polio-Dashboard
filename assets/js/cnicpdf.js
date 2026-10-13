@@ -3,7 +3,7 @@
    groups: [{ heading, teams: [{ heading|null, note|null, people: [{ name, father, cnic, cell, detail, frontPath, backPath }] }] }] */
 const CARD_W_MM = 85.60, CARD_H_MM = 53.98, CARD_SCALE = 1.05;
 
-function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn, textImage }) {
+function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn, textImage, failedPaths }) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   // jsPDF's built-in fonts cannot draw Urdu / other non-Latin letters (they come out blank or garbled). When the caller supplies
   // textImage(str, {bold, pt, maxMm, color}) -> {dataUrl, wMm, hMm}, such text is drawn as a picture instead.
@@ -33,12 +33,12 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn, t
   header();
   const ensure = (h) => { if (y + h > BOTTOM) newPage(); };
 
-  const drawFrame = (x, yy, label, img, caption) => {
+  const drawFrame = (x, yy, label, img, caption, path) => {
     doc.setFont("helvetica", "bold").setFontSize(12.5).setTextColor(10); put(String(caption || ""), x, yy - 1.8, { bold: true, pt: 12.5, maxWidth: FW });   // bold line above the picture: name over the front, cell number over the back
     doc.setDrawColor(120).setLineWidth(0.25);
     if (!img) {
       doc.setLineDashPattern([1.2, 1.2], 0); doc.rect(x, yy, FW, FH); doc.setLineDashPattern([], 0);
-      doc.setFont("helvetica", "italic").setFontSize(9).setTextColor(150); doc.text(`${label} picture not uploaded`, x + FW / 2, yy + FH / 2, { align: "center" });
+      doc.setFont("helvetica", "italic").setFontSize(9).setTextColor(150); doc.text((path && failedPaths && failedPaths.has(path)) ? `${label} picture could not be loaded` : `${label} picture not uploaded`, x + FW / 2, yy + FH / 2, { align: "center" });
       return false;
     }
     doc.rect(x, yy, FW, FH);                                   // the official card outline
@@ -61,8 +61,8 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn, t
         ensure(BLOCK_H);
         const top = y;
         const fy = y + FRAME_TOP;
-        const a = drawFrame(M, fy, "FRONT", p.frontPath ? getImage(p.frontPath) : null, p.name || "(name missing)");
-        const b = drawFrame(M + FW + GAP, fy, "BACK", p.backPath ? getImage(p.backPath) : null, p.cell || "(cell no. missing)");
+        const a = drawFrame(M, fy, "FRONT", p.frontPath ? getImage(p.frontPath) : null, p.name || "(name missing)", p.frontPath);
+        const b = drawFrame(M + FW + GAP, fy, "BACK", p.backPath ? getImage(p.backPath) : null, p.cell || "(cell no. missing)", p.backPath);
         stats.people++; if (a && b) stats.withBoth++; else stats.missing++;
         stats.blocks.push({ page: doc.getCurrentPageInfo ? doc.getCurrentPageInfo().pageNumber : stats.pages, top, bottom: fy + FH, name: p.name });
         y = top + BLOCK_H;
@@ -75,4 +75,42 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn, t
     doc.text(`${generatedOn || ""}`, M, FOOT_Y); doc.text(`Page ${i} of ${n}`, PW - M, FOOT_Y, { align: "right" }); }
   return { doc, stats, frame: { w: FW, h: FH } };
 }
+
+/* CnicImages — shared picture loader for every CNIC PDF. Signed URL -> bytes -> decoded -> downscaled JPEG.
+   Old loader swallowed every failure (and a rejected createImageBitmap option on some browsers) and the PDF then said
+   "picture not uploaded" even though the file was in storage. This one retries, has an <img> decoder fallback, and records WHY a picture failed. */
+const CnicImages = (() => {
+  async function decode(blob) {
+    if (window.createImageBitmap) {
+      try { return await createImageBitmap(blob, { imageOrientation: "from-image" }); } catch (e) {}
+      try { return await createImageBitmap(blob); } catch (e) {}
+    }
+    const url = URL.createObjectURL(blob);
+    try { const im = new Image(); im.decoding = "async"; im.src = url; await im.decode(); return im; }
+    finally { setTimeout(() => URL.revokeObjectURL(url), 5000); }
+  }
+  async function loadOne(client, path) {
+    let last;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const { data, error } = await client.storage.from("staff-documents").createSignedUrl(path, 600);
+        if (error || !data?.signedUrl) throw new Error("access refused / file not found (" + (error?.message || "no URL") + ")");
+        const res = await fetch(data.signedUrl); if (!res.ok) throw new Error("download failed, HTTP " + res.status);
+        const blob = await res.blob(); if (!blob.size) throw new Error("the stored file is empty");
+        const bmp = await decode(blob), w0 = bmp.width || bmp.naturalWidth, h0 = bmp.height || bmp.naturalHeight; if (!w0 || !h0) throw new Error("the file is not a readable picture");
+        const k = Math.min(1, 1500 / Math.max(w0, h0)), c = document.createElement("canvas"); c.width = Math.round(w0 * k); c.height = Math.round(h0 * k);
+        const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+        return { dataUrl: c.toDataURL("image/jpeg", 0.85), w: c.width, h: c.height };
+      } catch (e) { last = e; }
+    }
+    throw last;
+  }
+  /* -> { cache: Map(path -> image|null), failed: [{path, reason}] } */
+  async function preload(client, paths, onTick) {
+    const cache = new Map(), failed = []; let done = 0, i = 0;
+    const worker = async () => { while (i < paths.length) { const p = paths[i++]; try { cache.set(p, await loadOne(client, p)); } catch (e) { cache.set(p, null); failed.push({ path: p, reason: e.message || String(e) }); } onTick && onTick(++done, paths.length); } };
+    await Promise.all([worker(), worker(), worker(), worker()]); return { cache, failed };
+  }
+  return { preload, loadOne };
+})();
 if (typeof module !== "undefined") module.exports = { buildCnicPdf, CARD_W_MM, CARD_H_MM, CARD_SCALE };

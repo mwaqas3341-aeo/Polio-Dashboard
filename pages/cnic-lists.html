@@ -117,29 +117,16 @@ async function refresh() {
 }
 function showErr(e) { $("err").textContent = e.message || String(e); $("err").style.display = "block"; }
 
-/* ---- pictures: signed URL -> downscaled JPEG, 4 at a time, only for the selected people ---- */
-async function loadImage(path) {
-  const { data } = await supabaseClient.storage.from("staff-documents").createSignedUrl(path, 300); if (!data?.signedUrl) return null;
-  const blob = await (await fetch(data.signedUrl)).blob();
-  const bmp = await createImageBitmap(blob, { imageOrientation: "from-image" }).catch(() => null); if (!bmp) return null;
-  const s = Math.min(1, 1500 / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas"); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
-  const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(bmp, 0, 0, c.width, c.height);
-  return { dataUrl: c.toDataURL("image/jpeg", 0.85), w: c.width, h: c.height };
-}
-async function preload(paths, onTick) {
-  const cache = new Map(); let done = 0, i = 0;
-  const worker = async () => { while (i < paths.length) { const p = paths[i++]; try { cache.set(p, await loadImage(p)); } catch { cache.set(p, null); } onTick(++done, paths.length); } };
-  await Promise.all([worker(), worker(), worker(), worker()]); return cache;
-}
 async function makeBytes() {
   const groups = await fetchGroups(), people = groups.flatMap(g => g.teams.flatMap(t => t.people));
   if (!people.length) throw new PDFX.NoData("Nothing matches these filters — there is nobody to list.");
   const paths = [...new Set(people.flatMap(p => [p.frontPath, p.backPath]).filter(Boolean))];
-  const cache = await preload(paths, (d, n) => { $("progBar").style.width = (100 * d / n) + "%"; $("progTxt").textContent = `Loading pictures ${d} of ${n}…`; });
+  const { cache, failed } = await CnicImages.preload(supabaseClient, paths, (d, n) => { $("progBar").style.width = (100 * d / n) + "%"; $("progTxt").textContent = `Loading pictures ${d} of ${n}…`; });
   $("progTxt").textContent = "Building the PDF…"; await new Promise(r => setTimeout(r, 30));
   const f = info();
-  const { doc, stats } = buildCnicPdf({ jsPDF: window.jspdf.jsPDF, title: f.title, subtitle: `Campaign: ${f.camp}   |   UC: ${f.uc}   |   ${stats0(people)}`, groups, getImage: (p) => cache.get(p) || null, textImage: PDFX.textImage, generatedOn: "Generated " + new Date().toLocaleString("en-GB") });
+  const { doc, stats } = buildCnicPdf({ jsPDF: window.jspdf.jsPDF, title: f.title, subtitle: `Campaign: ${f.camp}   |   UC: ${f.uc}   |   ${stats0(people)}`, groups, getImage: (p) => cache.get(p) || null, failedPaths: new Set(failed.map(f => f.path)), textImage: PDFX.textImage, generatedOn: "Generated " + new Date().toLocaleString("en-GB") });
   $("summary").textContent = `${stats.people} person(s), ${stats.pages} page(s) — ${stats.people - stats.missing} with both pictures, ${stats.missing} with a picture missing.`;
+  if (failed.length) $("summary").textContent += ` WARNING: ${failed.length} uploaded picture(s) could not be loaded (${failed[0].reason}).`;
   return doc.output("arraybuffer");
 }
 function info() {

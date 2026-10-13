@@ -71,17 +71,13 @@ async function loadInfo() {
     ${miss.length ? `<details class="miss"><summary>Who has no CNIC picture uploaded? (they print with a “picture not uploaded” box)</summary><ul>${miss.map(p => `<li>${E(p.name)} — ${p.frontPath ? "" : "front "}${p.backPath ? "" : "back "}missing</li>`).join("")}</ul><div class="muted" style="margin-top:6px">Upload the pictures in Staff Management (open the person → CNIC front / back) and they appear in the PDF automatically.</div></details>` : ""}`;
 }
 
-/* ---- pictures: signed URL -> downscaled JPEG, 4 at a time ---- */
-async function loadImage(path) {
-  const { data } = await supabaseClient.storage.from("staff-documents").createSignedUrl(path, 300); if (!data?.signedUrl) return null;
-  const blob = await (await fetch(data.signedUrl)).blob(), bmp = await createImageBitmap(blob, { imageOrientation: "from-image" }).catch(() => null); if (!bmp) return null;
-  const s = Math.min(1, 1500 / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas"); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
-  const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(bmp, 0, 0, c.width, c.height); return { dataUrl: c.toDataURL("image/jpeg", 0.85), w: c.width, h: c.height };
-}
-async function preload(paths) { const cache = new Map(); let done = 0, i = 0; const w = async () => { while (i < paths.length) { const p = paths[i++]; try { cache.set(p, await loadImage(p)); } catch { cache.set(p, null); } tick(++done, paths.length); } }; await Promise.all([w(), w(), w(), w()]); return cache; }
+/* ---- pictures: shared robust loader (cnicpdf.js). A picture that exists but cannot be loaded is reported, never silently replaced by "not uploaded" ---- */
 async function cnicPdf(groups, title, subtitle) {
-  const paths = [...new Set(peopleOf(groups).flatMap(p => [p.frontPath, p.backPath]).filter(Boolean))]; const cache = await preload(paths);
-  const { doc } = buildCnicPdf({ jsPDF: window.jspdf.jsPDF, title, subtitle, groups, getImage: (p) => cache.get(p) || null, textImage: PDFX.textImage, generatedOn: "Generated " + new Date().toLocaleString("en-GB") }); return doc.output("arraybuffer");
+  const paths = [...new Set(peopleOf(groups).flatMap(p => [p.frontPath, p.backPath]).filter(Boolean))];
+  const { cache, failed } = await CnicImages.preload(supabaseClient, paths, tick);
+  if (failed.length) { const names = peopleOf(groups).filter(p => failed.some(f => f.path === p.frontPath || f.path === p.backPath)).map(p => p.name).slice(0, 6).join(", ");
+    say(`${failed.length} of ${paths.length} uploaded CNIC picture(s) could not be loaded (${failed[0].reason}). Affected: ${names}${failed.length > 3 ? "…" : ""}. Those boxes show “picture could not be loaded”.`, true); console.warn("CNIC pictures failed", failed); }
+  const { doc } = buildCnicPdf({ jsPDF: window.jspdf.jsPDF, title, subtitle, groups, getImage: (p) => cache.get(p) || null, failedPaths: new Set(failed.map(f => f.path)), textImage: PDFX.textImage, generatedOn: "Generated " + new Date().toLocaleString("en-GB") }); return doc.output("arraybuffer");
 }
 /* ---- 2A forms (official layout), only the days that have a submitted report ---- */
 async function twoAPdf(aic) {
@@ -89,7 +85,7 @@ async function twoAPdf(aic) {
   for (let d = 1; d <= nd; d++) if ((B.reports || []).some(r => !r.is_catchup && r.campaign_day === d && ids.has(String(r.team_no)))) pages.push(FS.render2AOfficial(B, a, d, false));
   for (let d = 1; d <= 3; d++) if ((B.reports || []).some(r => r.is_catchup && r.campaign_day === d && ids.has(String(r.team_no)))) pages.push(FS.render2AOfficial(B, a, d, true));
   if (!pages.length) return null;
-  return await PDFX.fromPages(pages);
+  return await PDFX.fromPages(pages, { fitOne: true });
 }
 async function merge(buffers) { const out = await PDFLib.PDFDocument.create(); for (const b of buffers.filter(Boolean)) { const src = await PDFLib.PDFDocument.load(b), pg = await out.copyPages(src, src.getPageIndices()); pg.forEach(p => out.addPage(p)); } return await out.save(); }
 const sub = () => `Campaign: ${D.camp?.name || ""}   |   Generated ${new Date().toLocaleDateString("en-GB")}`;

@@ -99,7 +99,7 @@ const pagesOf = (html) => html.split('<div class="fx-page').map((x, i) => i ? '<
 function pdfJob(which) {
   const a = curAic(); if (!a) return null; const { day, catchup } = dayInfo();
   return { title: `2A form — AIC ${a.aic_no} — ${which === "all" ? "all days" : (catchup ? "Catch-up day " : "Day ") + day}`, filename: `2A_AIC${a.aic_no}_${which === "all" ? "all_days" : (catchup ? "Catchup" : "Day") + day}.pdf`,
-    makeBytes: async () => { const html = which === "all" ? allPages() : FS.render2AOfficial(B, a, day, catchup); return await PDFX.fromPages(pagesOf(html)); } };
+    makeBytes: async () => { const html = which === "all" ? allPages() : FS.render2AOfficial(B, a, day, catchup); return await PDFX.fromPages(pagesOf(html), { fitOne: true }); } };
 }
 async function pdf(which) { const j = pdfJob(which); if (!j) return; const ok = await PDFX.download({ filename: j.filename, makeBytes: j.makeBytes, say: (t, err) => $("msg").innerHTML = err ? `<span class="error-text">${E(t)}</span>` : E(t) }); if (ok) $("msg").textContent = "PDF downloaded."; }
 function previewPdf(which) { const j = pdfJob(which); if (j) PDFX.preview(j); }
