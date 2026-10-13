@@ -56,7 +56,7 @@ async function load() {
   B = await FS.loadBase($("campSel").value);
   $("aicSel").innerHTML = B.aics.map(a => `<option value="${a.id}">AIC ${E(a.aic_no)} — ${E(a.full_name)}</option>`).join("") || `<option value="">No Area Incharge</option>`;
   if (me.role === "aic" && me.staff_id) { $("aicSel").value = me.staff_id; $("aicSel").disabled = true; }
-  const nd = FS.nDays(B); $("daySel").innerHTML = Array.from({ length: nd }, (_, i) => `<option value="d${i + 1}">Campaign Day ${i + 1} — ${FS.dayDate(B, i + 1)}</option>`).join("") + [1, 2, 3].map(k => `<option value="c${k}">Catch-up Day ${nd + k} — ${FS.dayDate(B, nd + k)}</option>`).join("");
+  const nd = FS.nDays(B); $("daySel").innerHTML = Array.from({ length: nd }, (_, i) => `<option value="d${i + 1}">Campaign Day ${i + 1} — ${FS.dayDate(B, i + 1)}</option>`).join("");
   draft = {}; draw();
 }
 const allPages = () => { const a = curAic(); return a ? FS.render2ADays(B, a) : ""; };

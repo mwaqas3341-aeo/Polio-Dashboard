@@ -171,7 +171,7 @@ FS.tourDefault = (B, t, d, i) => { const op = B.plans.find(p => p.team_id === t.
 FS.renderTour = (B, aic, edit) => {
   const ts = teamCols(B, aic); if (!ts.length) return empty(`AIC ${E_(aic.aic_no)} has no teams yet — the tour plan lists the teams to visit.`);
   const D = FS.getForm(B, "tour_plan", aic.id), days = Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7), cell = (d, t, i) => ({ ...FS.tourDefault(B, t, d, i), ...(((D.days || {})[d] || {})[t.team_no] || {}) });
-  const dayHtml = (d) => `<div style="margin-top:6px"><div class="fx-ur" dir="rtl" style="display:flex;justify-content:space-between;font-weight:800;font-size:14px;"><span>${FS.URDU_DAYS[d - 1]}</span><span dir="ltr">Date: ${FS.fmtDate(B.campaign.start_date ? new Date(new Date(B.campaign.start_date + "T00:00:00").getTime() + (d - 1) * 864e5).toISOString().slice(0, 10) : "")}</span></div>
+  const dayHtml = (d) => `<div style="margin-top:6px"><div class="fx-ur" dir="rtl" style="display:flex;justify-content:space-between;font-weight:800;font-size:14px;"><span>${FS.URDU_DAYS[d - 1]}</span><span dir="ltr">Date: ${FS.dayDate(B, d)}</span></div>
     <div class="fx-wrap"><table class="fx fx-ur" dir="rtl"><thead><tr><th>نمبر شمار</th><th>ٹائم پہلا وزٹ</th><th>ٹائم دوسرا وزٹ</th><th>ٹیم نمبر</th><th>علاقے کا نام</th><th>اس ٹیم کے معائنہ کی وجہ</th><th>تاثرات</th></tr></thead><tbody>
     ${ts.map((t, i) => { const c = cell(d, t, i), k = `${d}|${E_(t.team_no)}`; return `<tr><td>${i + 1}</td><td dir="ltr">${edit ? `<input type="time" data-tp="${k}|t1" value="${E_(c.t1)}">` : E_(c.t1)}</td><td dir="ltr">${edit ? `<input type="time" data-tp="${k}|t2" value="${E_(c.t2)}">` : E_(c.t2)}</td><td><b>${E_(t.team_no)}</b></td>
       <td>${edit ? `<input data-tp="${k}|area" value="${E_(c.area)}">` : E_(c.area)}</td><td>${edit ? `<textarea data-tp="${k}|reason" rows="2">${E_(c.reason)}</textarea>` : E_(c.reason).replace(/\n/g, "<br>")}</td><td>${edit ? `<textarea data-tp="${k}|remark" rows="2">${E_(c.remark)}</textarea>` : E_(c.remark)}</td></tr>`; }).join("")}</tbody></table></div></div>`;
@@ -280,7 +280,8 @@ FS.colsFor = (B, catchup, fixed) => (fixed ? FS.F_COLS : catchup ? FS.C_COLS : F
 FS.vitOn = (B) => FS.caps(B).vit_a_needed === "yes";                                              // Vitamin A cells can be typed only if the plan questionnaire says capsules are needed
 FS.LEGACY = { missed_na: (r) => (+r.missed_children_under_12m || 0) + (+r.missed_children_12_59m || 0), missed_refusal: (r) => (+r.refusal_under_12m || 0) + (+r.refusal_12_59m || 0), covered_na: (r) => +r.catchup_covered || 0, mmp_vaccinated: (r) => +r.hrmp_vaccinated || 0 };
 FS.rv = (r, k) => { if (!r) return 0; const v = +r[k] || 0; return v || (FS.LEGACY[k] ? FS.LEGACY[k](r) : 0); };
-FS.dayDate = (B, day) => B.campaign.start_date ? FS.fmtDate(new Date(new Date(B.campaign.start_date + "T00:00:00").getTime() + (day - 1) * 864e5).toISOString().slice(0, 10)) : "";
+FS.dayDate = (B, day) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(B.campaign.start_date || ""); if (!m) return ""; const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + (day - 1)));   // pure calendar arithmetic: no time-zone shift (was showing the day before in UTC+5)
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`; };
 FS.nDays = (B) => Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7);
 FS.rep = (B, teamNo, day, catchup) => (B.reports || []).find(x => String(x.team_no) === String(teamNo) && x.campaign_day === day && !!x.is_catchup === !!catchup);
 FS.tgt = (B, teamNo, day) => (B.targets || []).find(x => String(x.team_no) === String(teamNo) && x.campaign_day === day);
