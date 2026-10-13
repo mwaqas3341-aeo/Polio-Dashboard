@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Maps — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261013j">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014a">
 <style>
   .sheet { background:#fff; border:2px solid #1b2430; border-radius:6px; margin:0 0 1.2rem; padding:.6rem; }
   .sheet h2 { margin:0 0 .4rem; font-size:1.25rem; font-weight:800; display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
@@ -44,9 +44,9 @@
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../assets/js/config.js?v=20261013j"></script>
-<script src="../assets/js/supabaseClient.js?v=20261013j"></script>
-<script src="../assets/js/nav.js?v=20261013j"></script>
+<script src="../assets/js/config.js?v=20261014a"></script>
+<script src="../assets/js/supabaseClient.js?v=20261014a"></script>
+<script src="../assets/js/nav.js?v=20261014a"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -60,7 +60,7 @@ async function url(bucket, path) {
 (async () => {
   const session = await requireAuth(); if (!session) return; renderSidebar("maps.html");
   const { data: p } = await supabaseClient.from("profiles").select("role, staff_id, uc_id").eq("id", session.user.id).single(); me = p || { role: "viewer" };
-  const { data: cs } = await supabaseClient.from("campaigns").select("id, name, uc_id, start_date").order("start_date", { ascending: false }); camps = cs || [];
+  const { data: cs } = await supabaseClient.from("campaigns").select("id, name, uc_id, start_date, total_days").order("start_date", { ascending: false }); camps = cs || [];
   $("campSel").innerHTML = camps.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("") || `<option value="">No campaign yet</option>`;
   $("campSel").onchange = loadCampaign; $("aicSel").onchange = render; $("allAics").onchange = render;
   if (camps.length) await loadCampaign(); else $("out").innerHTML = `<p class="muted">No campaign yet.</p>`;
@@ -91,11 +91,12 @@ async function render() {
   html += sheet("12MP", "UC Map", "یونین کونسل کا نقشہ", ucUrl, `<div>UCMO: ${esc(ucmo?.full_name || "—")}</div>`);
   const sel = $("allAics").checked ? aics : aics.filter(a => a.id === $("aicSel").value);
   for (const a of sel) {
-    const { data: dm } = await supabaseClient.from("operational_day_maps").select("campaign_day, storage_path").eq("campaign_id", campaign.id).eq("aic_staff_id", a.id);
-    const byDay = Object.fromEntries((dm || []).map(m => [m.campaign_day, m.storage_path]));
+    const { data: ts } = await supabaseClient.from("teams").select("id, team_no").eq("aic_staff_id", a.id).eq("team_type", "mobile").order("team_no");
+    const { data: tm } = (ts || []).length ? await supabaseClient.from("team_day_maps").select("team_id, campaign_day, storage_path").eq("campaign_id", campaign.id).in("team_id", ts.map(t => t.id)) : { data: [] };
+    const by = Object.fromEntries((tm || []).map(m => [m.team_id + "|" + m.campaign_day, m.storage_path])), nd = campaign.total_days || 3;
     const who = `<div>Area Incharge: AIC ${a.aic_no} — ${esc(a.full_name)}</div>`;
-    html += sheet("8MP", "AIC Area Map (all teams, coloured)", "ایریا انچارج کا نقشہ", await url("staff-documents", a.area_map_path), who);
-    for (const d of [1, 2, 3]) html += sheet("7MP", `Route Map — Day ${d}`, `ٹیم روٹ نقشہ — دن ${d}`, await url("operational-plans", byDay[d]), who + `<div>Day: ${d}</div>`);
+    html += sheet("8MP", "AIC Area Map (all teams, coloured)", "ایریا انچارج کا نقشہ", await url("staff-documents", a.area_map_path), who);   // one per AIC
+    for (const t of ts || []) for (let d = 1; d <= nd; d++) html += sheet("7MP", `Team ${t.team_no} Route Map — Day ${d}`, `ٹیم ${t.team_no} روٹ نقشہ — دن ${d}`, await url("operational-plans", by[t.id + "|" + d]), who + `<div>Team: ${t.team_no} · Day: ${d}</div>`);   // one per team per day
   }
   $("out").innerHTML = html;
 }

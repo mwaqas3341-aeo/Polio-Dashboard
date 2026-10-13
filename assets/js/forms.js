@@ -58,7 +58,7 @@ FS.loadBase = async (campaignId) => {
     db.from("aic_microplan_figures").select("aic_staff_id, figures").eq("campaign_id", campaignId),
     db.from("campaign_forms").select("id, aic_staff_id, form_type, data").eq("campaign_id", campaignId),
     B.teams.length ? db.from("missed_children").select("team_no").eq("campaign_id", campaignId).not("carried_from_campaign_id", "is", null).in("team_no", B.teams.map(t => t.team_no)) : none,
-    db.from("operational_day_maps").select("aic_staff_id, campaign_day, storage_path").eq("campaign_id", campaignId),
+    db.from("team_day_maps").select("team_id, campaign_day, storage_path").eq("campaign_id", campaignId),
     db.from("mmp_assignments").select("team_no").eq("campaign_id", campaignId),
     db.from("team_targets").select("team_no, campaign_day, target_households, target_children").eq("campaign_id", campaignId),
     db.from("daily_reports").select("*").eq("campaign_id", campaignId),
@@ -101,7 +101,7 @@ FS.deskAuto = (B, aic, t) => {
   B.dayMaps = B.dayMaps || []; B.mmpRows = B.mmpRows || [];
   const A = new Array(41).fill(""), set = (i, v) => { A[i] = v; }, yes = (c) => c ? "1" : "0", days = [1, 2, 3], fig = B.figs.get(aic.id), mob = FS.teamsOf(B, aic.id).filter(x => x.team_type === "mobile").length;
   const st = FS.setupAns(B, aic.id, t.team_no), sm = FS.getForm(B, "sm_plan", null), ucm = FS.getForm(B, "uc_summary", null), rows = (k) => ((sm.rows || {})[k] || []).filter(r => (r || []).some(x => x));
-  const mmpN = B.mmpRows.filter(r => String(r.team_no) === String(t.team_no)).length, dm = new Set(B.dayMaps.filter(m => m.aic_staff_id === aic.id && m.storage_path).map(m => m.campaign_day));
+  const mmpN = B.mmpRows.filter(r => String(r.team_no) === String(t.team_no)).length, dm = new Set(B.dayMaps.filter(m => m.team_id === t.id && m.storage_path).map(m => m.campaign_day));
   const capsOk = ["yes", "no"].includes(FS.caps(B).vit_a_needed);
   set(0, yes(FS.planComplete(B, t, [1]))); set(1, fig ? "1" : "0"); if (fig && fig.aic_govt) set(2, fig.aic_govt === "\u06c1\u0627\u06ba" ? "1" : "0");
   set(4, yes(FS.planComplete(B, t, days)));
@@ -114,7 +114,7 @@ FS.deskAuto = (B, aic, t) => {
   set(21, yes(!!ucm.training_date)); set(25, yes(rows("meeting").length || rows("influencer").length || rows("school").length || rows("masjid").length));
   set(27, yes(rows("masjid").length)); set(28, yes(rows("school").length)); set(29, yes(rows("parental").length));
   set(30, "1"); set(31, "1"); set(32, "1");                                     // the supervisory (tour) plan is generated from the team plan with dates, times and reasons
-  set(33, yes(!!B.ucmo?.area_map_path)); set(35, yes(!!aic.area_map_path)); set(38, yes([1, 2, 3].every(d => dm.has(d))));
+  set(33, yes(!!B.ucmo?.area_map_path)); set(35, yes(!!aic.area_map_path)); set(38, yes(Array.from({ length: FS.nDays(B) }, (_, i) => i + 1).every(d => dm.has(d))));
   return A;
 };
 FS.deskVal = (B, aic, t, i, D) => { const m = ((D.answers || {})[t.team_no] || {})[i]; if (m !== undefined && m !== "") return m; FS._dc = FS._dc || {}; const k = aic.id + "|" + t.team_no + "|" + (B.campaign.id); if (!FS._dc[k] || FS._dc.stamp !== B._stamp) { FS._dc[k] = FS.deskAuto(B, aic, t); FS._dc.stamp = B._stamp; } return FS._dc[k][i]; };
@@ -400,10 +400,11 @@ FS.imgData = async (bucket, path) => {
 };
 FS.mapPage = (B, code, title, urdu, img, extra = "") => `<div class="fx-page"><h1>${E_(title)} <small>(${code})</small> <span class="fx-ur" style="font-size:15px">${urdu}</span></h1>${hdrBlock(B, null, extra)}<div class="fx-pic">${img ? `<img src="${img}" alt="${E_(title)}">` : `<span class="fx-miss">Map picture not uploaded yet</span>`}</div><div class="fx-sig"><div>Prepared by</div><div>Signature / Date</div></div></div>`;
 FS.aicMaps = async (B, aic) => {
-  const { data: dm } = await supabaseClient.from("operational_day_maps").select("campaign_day, storage_path").eq("campaign_id", B.campaign.id).eq("aic_staff_id", aic.id);
-  const by = Object.fromEntries((dm || []).map(m => [m.campaign_day, m.storage_path])), who = `<div>Area Incharge: <b>AIC ${E_(aic.aic_no)} — ${E_(aic.full_name)}</b></div>`;
-  const out = [FS.mapPage(B, "8MP", "AIC Area Map (all teams, coloured)", "ایریا انچارج کا نقشہ", await FS.imgData("staff-documents", aic.area_map_path), who)];
-  for (const d of [1, 2, 3]) out.push(FS.mapPage(B, "7MP", `Route Map — Day ${d}`, `ٹیم روٹ نقشہ — دن ${d}`, await FS.imgData("operational-plans", by[d]), who + `<div>Day: <b>${d}</b></div>`));
+  const { data: tm } = await supabaseClient.from("team_day_maps").select("team_id, campaign_day, storage_path").eq("campaign_id", B.campaign.id);
+  const by = Object.fromEntries((tm || []).map(m => [m.team_id + "|" + m.campaign_day, m.storage_path])), who = `<div>Area Incharge: <b>AIC ${E_(aic.aic_no)} — ${E_(aic.full_name)}</b></div>`;
+  const out = [FS.mapPage(B, "8MP", "AIC Area Map (all teams, coloured)", "ایریا انچارج کا نقشہ", await FS.imgData("staff-documents", aic.area_map_path), who)];   // one per AIC
+  for (const t of FS.teamsOf(B, aic.id).filter(x => x.team_type === "mobile")) for (let d = 1; d <= FS.nDays(B); d++)                                              // one per team per day
+    out.push(FS.mapPage(B, "7MP", `Team ${t.team_no} Route Map — Day ${d}`, `ٹیم ${t.team_no} روٹ نقشہ — دن ${d}`, await FS.imgData("operational-plans", by[t.id + "|" + d]), who + `<div>Team: <b>${t.team_no}</b> · Day: <b>${d}</b></div>`));
   return out;
 };
 FS.ucMap = async (B) => FS.mapPage(B, "12MP", "UC Map", "یونین کونسل کا نقشہ", await FS.imgData("staff-documents", B.ucmo?.area_map_path), `<div>UCMO: <b>${E_(B.ucmo?.full_name || "—")}</b></div>`);

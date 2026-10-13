@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Operational Plan — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261013j">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014a">
 <style>
   .crumb { font-size:.9rem; color:#555; margin:.4rem 0; } .crumb b { color:#1a7f5a; }
   .tcard { border:1px solid var(--line); border-radius:var(--radius); background:#fff; padding:.7rem .9rem; margin:.7rem 0; }
@@ -39,10 +39,6 @@
       <div id="mcStatus" style="margin-top:.3rem;"></div>
     </div>
 
-    <div class="card"><h2>Campaign-day maps</h2>
-      <p class="muted">One map picture for each campaign day, uploaded separately. These are different from the AIC Area Map added when the AIC was registered.</p>
-      <div class="days" id="dayMaps"></div></div>
-
     <div id="teams"></div>
 
     <div class="card"><h2>Reports (Excel)</h2>
@@ -55,19 +51,19 @@
       <div class="error-text" id="repErr" style="display:none;"></div></div>
   </main>
 </div>
-<div class="overlay" id="overlay"><div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;"><h2 id="pTitle" style="margin:0;"></h2><button class="btn ghost small" onclick="closeEditor()">✕ Close</button></div><div class="crumb" id="pCrumb"></div><div class="tabs" id="tabs"></div><div id="pBody"></div></div></div>
+<div class="overlay" id="overlay"><div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;"><h2 id="pTitle" style="margin:0;"></h2><button class="btn ghost small" onclick="closeEditor()" style="font-weight:700">✕ Close</button></div><div class="crumb" id="pCrumb"></div><div class="tabs" id="tabs"></div><div id="pBody"></div></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="../assets/js/config.js?v=20261013j"></script>
-<script src="../assets/js/supabaseClient.js?v=20261013j"></script>
-<script src="../assets/js/nav.js?v=20261013j"></script>
-<script src="../assets/js/crud.js?v=20261013j"></script>
-<script src="../assets/js/validators.js?v=20261013j"></script>
-<script src="../assets/js/images.js?v=20261013j"></script>
+<script src="../assets/js/config.js?v=20261014a"></script>
+<script src="../assets/js/supabaseClient.js?v=20261014a"></script>
+<script src="../assets/js/nav.js?v=20261014a"></script>
+<script src="../assets/js/crud.js?v=20261014a"></script>
+<script src="../assets/js/validators.js?v=20261014a"></script>
+<script src="../assets/js/images.js?v=20261014a"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-let me = null, camps = [], campaign = null, ucName = "", aics = [], aic = null, teams = [], plans = {}, picCounts = {}, dayMaps = {}, ed = null;
+let me = null, camps = [], campaign = null, ucName = "", aics = [], aic = null, teams = [], plans = {}, picCounts = {}, teamMaps = {}, ed = null;
 const GROUPS = ["G1", "G2", "G3"];
 const MANAGER = () => ["admin", "district_coordinator", "ucmo"].includes(me.role);
 const num = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : 0; };
@@ -97,39 +93,42 @@ async function loadCampaign() {
 async function loadAic() {
   aic = aics.find(a => a.id === $("aicSel").value) || null;
   $("crumb").innerHTML = `<b>${esc(campaign?.name || "")}</b> → ${esc(ucName)} → ${aic ? `AIC ${aic.aic_no} (${esc(aic.full_name)})` : "—"}`;
-  if (!aic) { $("teams").innerHTML = `<div class="card"><p>No Area Incharge available.</p></div>`; $("dayMaps").innerHTML = ""; return; }
+  if (!aic) { $("teams").innerHTML = `<div class="card"><p>No Area Incharge available.</p></div>`; return; }
   const { data: ts } = await supabaseClient.from("teams").select("id, team_no, team_type, team_members(active, member_no, staff(full_name))").eq("aic_staff_id", aic.id).eq("team_type", "mobile").order("team_no");
   teams = (ts || []).map(t => ({ ...t, active: (t.team_members || []).filter(m => m.active).sort((a, b) => a.member_no - b.member_no) }));
   const ids = teams.map(t => t.id);
-  const [{ data: pl }, { data: dm }] = await Promise.all([
+  const [{ data: pl }, { data: tm }] = await Promise.all([
     ids.length ? supabaseClient.from("operational_plans").select("*").eq("campaign_id", campaign.id).in("team_id", ids) : { data: [] },
-    supabaseClient.from("operational_day_maps").select("campaign_day, storage_path").eq("campaign_id", campaign.id).eq("aic_staff_id", aic.id)]);
+    ids.length ? supabaseClient.from("team_day_maps").select("team_id, campaign_day, storage_path").eq("campaign_id", campaign.id).in("team_id", ids) : { data: [] }]);
   plans = {}; (pl || []).forEach(p => plans[p.team_id + "|" + p.campaign_day] = p);
-  dayMaps = {}; (dm || []).forEach(m => dayMaps[m.campaign_day] = m.storage_path);
+  teamMaps = {}; (tm || []).forEach(m => teamMaps[m.team_id + "|" + m.campaign_day] = m.storage_path);
   picCounts = {}; const pids = (pl || []).map(p => p.id);
   if (pids.length) { const { data: pc } = await supabaseClient.from("operational_plan_pictures").select("plan_id").in("plan_id", pids); (pc || []).forEach(x => picCounts[x.plan_id] = (picCounts[x.plan_id] || 0) + 1); }
-  renderDayMaps(); renderTeams();
+  renderTeams();
 }
 
-function renderDayMaps() {
-  $("dayMaps").innerHTML = [1, 2, 3].map(d => { const has = dayMaps[d];
-    return `<div class="day"><b>Day ${d} Map</b><small>${has ? '<span class="tag ok">Uploaded ✓</span>' : '<span class="tag bad">Not uploaded</span>'}</small>
-      <input type="file" id="map${d}" accept="image/jpeg,image/png" style="display:none" onchange="uploadDayMap(${d}, this.files[0])">
-      <button class="btn small" onclick="$('map${d}').click()">${has ? "Replace" : "Upload"}</button> ${has ? `<button class="btn small ghost" onclick="openFile('${has}')">View</button>` : ""}</div>`; }).join("");
-}
-async function uploadDayMap(d, file) {
-  if (!file) return;
-  try { const f = await compressImage(file); const path = `${aic.uc_id}/${campaign.id}/maps/${aic.id}/day${d}.${fileExt(f)}`;
+/* One route map per team per campaign day (team_day_maps: unique on campaign + team + day, so re-uploading replaces it and never adds a second one). */
+async function uploadTeamMap(file) {
+  if (!file || !ed) return; const { t, day } = ed, err = $("pErr"); err.style.display = "none";
+  try { const f = await compressImage(file); const path = `${aic.uc_id}/${campaign.id}/maps/team-${t.id}/day${day}.${fileExt(f)}`;
     const up = await supabaseClient.storage.from("operational-plans").upload(path, f, { upsert: true, contentType: f.type }); if (up.error) throw up.error;
-    const { error } = await supabaseClient.from("operational_day_maps").upsert({ campaign_id: campaign.id, aic_staff_id: aic.id, campaign_day: d, storage_path: path, updated_at: new Date().toISOString() }, { onConflict: "campaign_id,aic_staff_id,campaign_day" }); if (error) throw error;
-    dayMaps[d] = path; renderDayMaps(); } catch (e) { alert("Map not saved: " + msg(e)); }
+    const { error } = await supabaseClient.from("team_day_maps").upsert({ campaign_id: campaign.id, team_id: t.id, campaign_day: day, storage_path: path, updated_at: new Date().toISOString() }, { onConflict: "campaign_id,team_id,campaign_day" }); if (error) throw error;
+    teamMaps[t.id + "|" + day] = path; tabMap(); } catch (e) { err.textContent = "Map not saved: " + msg(e); err.style.display = "block"; }
 }
+function tabMap() {
+  const { t, day } = ed, has = teamMaps[t.id + "|" + day], ro = locked();
+  $("pBody").innerHTML = `<p class="muted">One route map for Team ${t.team_no}, Campaign Day ${day}. Uploading again replaces it. The AIC area map and the UC map are separate (added once, in Staff).</p>
+    <div class="slot"><b>Team ${t.team_no} — Day ${day} map</b> ${has ? '<span class="tag ok">Uploaded ✓</span>' : '<span class="tag bad">Not uploaded</span>'}<div id="mapPv"></div>
+      <input type="file" id="mapFile" accept="image/jpeg,image/png" style="display:none" onchange="uploadTeamMap(this.files[0])">
+      ${ro ? "" : `<button class="btn small" onclick="$('mapFile').click()">${has ? "Replace" : "Upload"}</button>`} ${has ? `<button class="btn small ghost" onclick="viewTeamMap()">Preview</button>` : ""}</div>`;
+}
+async function viewTeamMap() { const { t, day } = ed, path = teamMaps[t.id + "|" + day]; if (!path) return; const { data } = await supabaseClient.storage.from("operational-plans").createSignedUrl(path, 300); $("mapPv").innerHTML = data?.signedUrl ? `<img src="${data.signedUrl}" alt="Team ${t.team_no} day ${day} map">` : "Could not load"; }
 async function openFile(path, bucket = "operational-plans") { const { data } = await supabaseClient.storage.from(bucket).createSignedUrl(path, 300); if (data?.signedUrl) window.open(data.signedUrl, "_blank"); else alert("Could not open the picture"); }
 
 function dayCell(t, d) {
   const p = plans[t.id + "|" + d], pics = p ? (picCounts[p.id] || 0) : 0;
   const st = !p ? '<span class="tag">Not started</span>' : p.status === "submitted" ? '<span class="tag ok">Submitted ✓</span>' : '<span class="tag warn">Draft</span>';
-  return `<div class="day"><b>Day ${d}</b><small>${st}</small><small>${p ? `Doses ${Math.round(p.required_doses)} · Pictures ${pics}/3` : ""}</small><button class="btn small" onclick="openEditor('${t.id}', ${d})">${p ? "Open" : "Start"}</button></div>`;
+  return `<div class="day"><b>Day ${d}</b><small>${st}</small><small>${p ? `Doses ${Math.round(p.required_doses)} · Pictures ${pics}/3` : ""}</small><small>${teamMaps[t.id + "|" + d] ? '<span class="tag ok">Map ✓</span>' : '<span class="tag bad">Map missing</span>'}</small><button class="btn small" onclick="openEditor('${t.id}', ${d})">${p ? "Open" : "Start"}</button></div>`;
 }
 function renderTeams() {
   if (!teams.length) { $("teams").innerHTML = `<div class="card"><p>This Area Incharge has no <b>Mobile</b> team yet. Fixed and Transit teams do not need an Operational Plan. Add Mobile teams in Staff.</p></div>`; return; }
@@ -144,8 +143,11 @@ async function openEditor(teamId, day) {
   $("pTitle").textContent = `Team ${t.team_no} — Campaign Day ${day}`;
   $("pCrumb").innerHTML = `<b>${esc(campaign.name)}</b> → ${esc(ucName)} → AIC ${aic.aic_no} → Team ${t.team_no} (Mobile) → <b>Day ${day}</b>`;
   await reloadEd(); showTab("plan");
+  const body = $("pBody"); body.oninput = body.onchange = (e) => { if (ed && ed.tab === "plan" && e.target.type !== "file") ed.dirty = true; };
 }
-function closeEditor() { $("overlay").style.display = "none"; document.body.style.overflow = ""; ed = null; loadAic(); }
+function closeEditor(force) {
+  if (!force && ed && ed.dirty && !confirm("You have unsaved changes. Close without saving them?")) return;   // saved data is never lost; only unsaved typing is discarded
+  $("overlay").style.display = "none"; document.body.style.overflow = ""; ed = null; loadAic(); }
 async function reloadEd() {
   const { t, day } = ed;
   const [{ data: plan }, { data: sc }, { data: mm }, { data: carried }] = await Promise.all([
@@ -158,9 +160,11 @@ async function reloadEd() {
   const { count } = await supabaseClient.from("missed_children").select("id", { count: "exact", head: true }).eq("campaign_id", campaign.id).eq("team_no", t.team_no).eq("campaign_day", day).not("carried_from_campaign_id", "is", null); ed.carried = count || 0;
 }
 function showTab(tab) {
-  ed.tab = tab; const names = { plan: "1. Plan", pics: "2. Plan pictures", mmp: "3. MMP list", school: "4. School list (automatic)" };
+  if (ed.dirty && ed.tab === "plan" && tab !== "plan" && !confirm("You have unsaved changes on the plan. Leave this tab without saving?")) return;
+  if (tab !== "plan") ed.dirty = false;
+  ed.tab = tab; const names = { plan: "1. Plan", map: "2. Day map", pics: "3. Plan pictures", mmp: "4. MMP list", school: "5. School list (automatic)" };
   $("tabs").innerHTML = Object.entries(names).map(([k, v]) => `<button class="${k === tab ? "on" : ""}" onclick="showTab('${k}')">${v}</button>`).join("");
-  ({ plan: tabPlan, pics: tabPics, mmp: tabMmp, school: tabSchool })[tab]();
+  ({ plan: tabPlan, map: tabMap, pics: tabPics, mmp: tabMmp, school: tabSchool })[tab]();
 }
 const locked = () => ed.plan?.status === "submitted" && !MANAGER();
 
@@ -201,7 +205,7 @@ async function savePlan(silent) {
   try { const body = readPlan();
     const q = ed.plan ? supabaseClient.from("operational_plans").update(body).eq("id", ed.plan.id).select().single()
                       : supabaseClient.from("operational_plans").insert({ ...body, campaign_id: campaign.id, team_id: ed.t.id, campaign_day: ed.day }).select().single();
-    const { data, error } = await q; if (error) throw error; ed.plan = data; plans[ed.t.id + "|" + ed.day] = data; await reloadEd(); if (!silent) { showTab("plan"); } return true;
+    const { data, error } = await q; if (error) throw error; ed.plan = data; plans[ed.t.id + "|" + ed.day] = data; ed.dirty = false; await reloadEd(); if (!silent) { showTab("plan"); } return true;
   } catch (e) { err.textContent = msg(e); err.style.display = "block"; return false; }
 }
 async function submitPlan() {
@@ -209,8 +213,9 @@ async function submitPlan() {
   const err = $("pErr");
   const { error } = await supabaseClient.from("operational_plans").update({ status: "submitted" }).eq("id", ed.plan.id);
   if (error) { err.textContent = msg(error); err.style.display = "block"; return; }
-  await reloadEd(); showTab("plan"); alert("Operational Plan submitted.");
+  const done = `Team ${ed.t.team_no} — Day ${ed.day}: plan submitted ✓`; ed.dirty = false; closeEditor(true); flash(done);   // saved: close the form and go back to the team list
 }
+function flash(text) { const d = document.createElement("div"); d.textContent = text; d.style.cssText = "position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:#14633f;color:#fff;padding:.7rem 1.1rem;border-radius:8px;z-index:9999;max-width:90vw;text-align:center;box-shadow:0 2px 10px #0004"; document.body.appendChild(d); setTimeout(() => d.remove(), 3500); }
 async function reopenPlan() { if (!confirm("Reopen this plan so the AIC can correct it?")) return; const { error } = await supabaseClient.from("operational_plans").update({ status: "draft" }).eq("id", ed.plan.id); if (error) return alert(msg(error)); await reloadEd(); showTab("plan"); }
 
 /* ---- pictures: at least 3 required (5 places) ---- */
