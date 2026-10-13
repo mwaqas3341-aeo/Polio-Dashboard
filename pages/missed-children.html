@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Missed children — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261014a">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014b">
 </head>
 <body>
   <div class="app-shell">
@@ -32,6 +32,7 @@
 
       <div class="card">
         <h2>Missed-children register</h2>
+        <div class="muted" style="margin-bottom:.6rem">Children still missed at the end of a campaign are carried into the next campaign automatically. To bring them in manually: choose the earlier campaign here and the next campaign in “Show campaign”. <select id="cf_from" style="max-width:260px"></select> <button class="btn secondary" onclick="carryForward()">Carry forward</button> <span id="cf_msg"></span></div>
         <label>Show campaign</label>
         <select id="filterCampaign" style="max-width:320px;"></select>
         <div class="table-wrap" style="margin-top:0.75rem;">
@@ -45,10 +46,10 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../assets/js/config.js?v=20261014a"></script>
-  <script src="../assets/js/supabaseClient.js?v=20261014a"></script>
-  <script src="../assets/js/nav.js?v=20261014a"></script>
-  <script src="../assets/js/crud.js?v=20261014a"></script>
+  <script src="../assets/js/config.js?v=20261014b"></script>
+  <script src="../assets/js/supabaseClient.js?v=20261014b"></script>
+  <script src="../assets/js/nav.js?v=20261014b"></script>
+  <script src="../assets/js/crud.js?v=20261014b"></script>
   <script>
     (async () => {
       const session = await requireAuth();
@@ -57,6 +58,7 @@
       await Promise.all([
         populateCampaignSelect(document.getElementById("m_campaign"), { includeBlank: false }),
         populateCampaignSelect(document.getElementById("filterCampaign")),
+        populateCampaignSelect(document.getElementById("cf_from"), { includeBlank: false }),
       ]);
     })();
 
@@ -83,10 +85,25 @@
     document.getElementById("filterCampaign").addEventListener("change", (e) => loadTable(e.target.value));
 
     async function markCovered(id, campaignId) {
-      await supabaseClient.from("missed_children").update({ covered_this_round: true }).eq("id", id);
+      await supabaseClient.from("missed_children").update({ status: "vaccinated" }).eq("id", id);
       await loadTable(campaignId);
     }
     window.markCovered = markCovered;
+    async function assignChild(id, campaignId) {
+      const t = Number(document.getElementById("at_" + id)?.value), d = Number(document.getElementById("ad_" + id)?.value);
+      if (!t || !d) return alert("Enter the team number and the campaign day to assign this child.");
+      const { error } = await supabaseClient.from("missed_children").update({ team_no: t, campaign_day: d, review_flag: null }).eq("id", id);
+      if (error) return alert(error.message); await loadTable(campaignId);
+    }
+    window.assignChild = assignChild;
+    async function carryForward() {
+      const to = document.getElementById("filterCampaign").value, from = document.getElementById("cf_from").value, out = document.getElementById("cf_msg");
+      if (!to || !from) { out.textContent = "Choose both campaigns."; return; }
+      const { data, error } = await supabaseClient.rpc("carry_forward_missed_children", { p_from: from, p_to: to });
+      out.textContent = error ? error.message : `${data} child(ren) still missed in the earlier campaign were added to this campaign (children already there were not duplicated). Assign each to a team below.`;
+      if (!error) await loadTable(to);
+    }
+    window.carryForward = carryForward;
 
     async function loadTable(campaignId) {
       const tbody = document.querySelector("#table tbody");
@@ -96,7 +113,7 @@
       }
       const { data, error } = await supabaseClient
         .from("missed_children")
-        .select("id, child_name, father_name, age_months, address, team_no, campaign_day, covered_this_round")
+        .select("id, child_name, father_name, age_months, address, team_no, campaign_day, covered_this_round, status, source, review_flag, carried_from_campaign_id")
         .eq("campaign_id", campaignId)
         .order("team_no");
       if (error) {
@@ -109,10 +126,10 @@
       }
       tbody.innerHTML = data.map(r => `
         <tr>
-          <td>${r.child_name}</td><td>${r.father_name ?? "—"}</td><td>${r.age_months ?? "—"}</td>
-          <td>${r.address ?? "—"}</td><td>${r.team_no ?? "—"}</td><td>${r.campaign_day ?? "—"}</td>
-          <td><span class="badge ${r.covered_this_round ? "ok" : "attention"}">${r.covered_this_round ? "Covered" : "Still missed"}</span></td>
-          <td>${r.covered_this_round ? "" : `<button class="btn secondary" onclick="markCovered('${r.id}','${campaignId}')">Mark covered</button>`}</td>
+          <td>${r.child_name}${r.source !== "entered" || r.carried_from_campaign_id ? ` <span class="badge attention">${r.source === "import" ? "restored from earlier campaign" : "carried forward"}</span>` : ""}${r.review_flag ? ` <span class="badge attention">${r.review_flag === "assign_team" ? "assign team" : r.review_flag}</span>` : ""}</td><td>${r.father_name ?? "—"}</td><td>${r.age_months ?? "—"}</td>
+          <td>${r.address ?? "—"}</td><td>${r.team_no ?? `<input type="number" min="1" id="at_${r.id}" style="width:4.5rem" placeholder="Team">`}</td><td>${r.campaign_day ?? `<input type="number" min="1" id="ad_${r.id}" style="width:4rem" placeholder="Day">`}</td>
+          <td><span class="badge ${r.status !== "missed" ? "ok" : "attention"}">${r.status !== "missed" ? "Covered / resolved" : "Still missed"}</span></td>
+          <td>${r.team_no == null ? `<button class="btn secondary" onclick="assignChild('${r.id}','${campaignId}')">Assign</button> ` : ""}${r.status !== "missed" ? "" : `<button class="btn secondary" onclick="markCovered('${r.id}','${campaignId}')">Mark covered</button>`}</td>
         </tr>
       `).join("");
     }
