@@ -12,6 +12,14 @@
   .teamcard { border-top:4px solid var(--accent); } .teamcard.done { border-top-color:var(--ok); }
   .pbar { height:10px; background:var(--s2); border-radius:99px; overflow:hidden; } .pbar i { display:block; height:100%; background:linear-gradient(90deg,var(--brand),var(--ok)); width:0; transition:width .3s; }
   .st { font-size:.8rem; font-weight:700; } .st.ok { color:var(--ok); } .st.todo { color:var(--warn); }
+  .auto { background:#eef6ff; border:1px solid #cfe3fb; border-radius:var(--r2); padding:10px 12px; margin:6px 0; }
+  .auto .big { font-size:1.4rem; font-weight:800; } .stepno { display:inline-block; min-width:22px; height:22px; line-height:22px; text-align:center; border-radius:99px; background:var(--brand); color:#fff; font-size:.75rem; margin-right:6px; }
+  .item { border:1px solid var(--b0); border-radius:var(--r2); padding:8px 10px; margin:8px 0; background:#fff; } .item .nm { font-weight:700; }
+  .cvrow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:4px 0; } .cvrow input[type=number] { width:110px; } .cvrow select { width:auto; }
+  .master { color:#555; font-size:.85rem; } .actual { color:var(--ok); font-weight:700; } .warnt { color:var(--warn); font-weight:700; }
+  .review { border:2px solid var(--brand); border-radius:var(--r2); padding:10px 12px; margin-top:10px; } .review table { width:100%; border-collapse:collapse; font-size:.9rem; } .review td, .review th { padding:4px 6px; border-bottom:1px solid var(--b0); text-align:left; }
+  .scrollx { overflow-x:auto; } details.mc summary { cursor:pointer; color:var(--brand); font-weight:700; }
+  @media (max-width:640px) { .cvrow input[type=number] { width:90px; } .sub { margin-left:0; } }
 </style>
 </head>
 <body>
@@ -19,7 +27,7 @@
   <aside class="sidebar" id="sidebar-mount"></aside>
   <main class="main">
     <div class="topbar"><h1>Plan questionnaire</h1><span class="who" id="who"></span></div>
-    <p class="muted">Answer these questions first. Each team's details are only asked when the answer is Yes. When everything is answered, the rest of Plan Management opens. Answers save automatically.</p>
+    <p class="muted">Answer these questions first. Lists that already exist (missed children, MMP, schools) are fetched for you — you only confirm what happened. Questions that do not apply are skipped. When every team is confirmed, the rest of Plan Management opens.</p>
     <div class="card"><div class="form-grid"><div><label>Campaign</label><select id="campSel"></select></div><div><label>Area Incharge</label><select id="aicSel"></select></div></div>
       <div style="margin-top:12px"><div class="pbar"><i id="pbar"></i></div><div class="muted" id="ptxt" style="margin-top:4px"></div></div>
       <div id="doneBox"></div></div>
@@ -33,7 +41,7 @@
 <script src="../assets/js/config.js?v=20261013c"></script><script src="../assets/js/supabaseClient.js?v=20261013c"></script><script src="../assets/js/nav.js?v=20261013c"></script><script src="../assets/js/forms.js?v=20261013c"></script>
 <script>
 const $ = (id) => document.getElementById(id), E = FS.esc;
-let B = null, me = null, mmpCnt = {}, canCaps = false, saveT = {};
+let B = null, me = null, canCaps = false, saveT = {}, X = { prev: null, missed: [], mmp: [], sch: [], cov: [] };
 const TYPE = { mobile: "Mobile", fixed: "Fixed", transit: "Transit" };
 (async () => {
   const session = await requireAuth(); if (!session) return; renderSidebar("plan-setup.html");
@@ -43,16 +51,29 @@ const TYPE = { mobile: "Mobile", fixed: "Fixed", transit: "Transit" };
   $("campSel").innerHTML = (cs || []).map(c => `<option value="${c.id}">${E(c.name)}</option>`).join("") || `<option value="">No campaign yet</option>`;
   $("campSel").onchange = load; $("aicSel").onchange = draw;
   $("capsCard").addEventListener("click", capsClick); $("capsCard").addEventListener("input", capsInput);
-  $("teams").addEventListener("click", teamClick); $("teams").addEventListener("input", teamInput);
+  $("teams").addEventListener("click", teamClick); $("teams").addEventListener("change", teamChange);
   if ($("campSel").value) await load();
 })();
+
+/* ---------- load every list this questionnaire reads (all existing tables; nothing is copied) ---------- */
 async function load() {
   B = await FS.loadBase($("campSel").value);
-  const { data: m } = await supabaseClient.from("mmp_assignments").select("team_no").eq("campaign_id", B.campaign.id); mmpCnt = {}; (m || []).forEach(r => mmpCnt[r.team_no] = (mmpCnt[r.team_no] || 0) + 1);
+  const db = supabaseClient, cid = B.campaign.id;
   $("aicSel").innerHTML = `<option value="">All Area Incharges</option>` + B.aics.map(a => `<option value="${a.id}">AIC ${E(a.aic_no)} — ${E(a.full_name)}</option>`).join("");
   if (me.role === "aic" && me.staff_id) { $("aicSel").value = me.staff_id; $("aicSel").disabled = true; }
-  draw();
+  const [m, s] = await Promise.all([
+    db.from("mmp_assignments").select("id, team_no, campaign_day, house_count, child_count, mmp_contacts(full_name, cnic, phone, location)").eq("campaign_id", cid).order("campaign_day"),
+    db.from("school_assignments").select("id, team_no, campaign_day, target_children, schools(name, emis_code, head_teacher_name)").eq("campaign_id", cid).order("campaign_day")]);
+  let prev = null, missed = [], perr = null;
+  if (B.campaign.uc_id && B.campaign.start_date) {
+    const { data: p } = await db.from("campaigns").select("id, name, start_date").eq("uc_id", B.campaign.uc_id).lt("start_date", B.campaign.start_date).order("start_date", { ascending: false }).limit(1); prev = (p || [])[0] || null;
+  }
+  if (prev) { const r = await db.from("missed_children").select("id, child_name, father_name, age_months, address, team_no, campaign_day, covered_this_round").eq("campaign_id", prev.id); missed = r.data || []; perr = r.error; }
+  X = { prev, missed, mmp: m.data || [], sch: s.data || [], cov: [], err: m.error || s.error || perr };
+  await reloadCov(); draw();
 }
+async function reloadCov() { const { data, error } = await supabaseClient.from("coverage_entries").select("id, kind, team_no, mmp_assignment_id, school_assignment_id, campaign_day, children_covered").eq("campaign_id", B.campaign.id); X.cov = data || []; if (error) X.err = error; }
+
 const caps = () => FS.getForm(B, "campaign_setup", null);
 const ansOf = (aic, tn) => (((FS.getForm(B, "plan_setup", aic) || {}).teams || {})[tn]) || {};
 function yn(attr, cur, dis) { return `<span class="yn"><button type="button" ${dis ? "disabled" : ""} ${attr} data-v="yes" class="${cur === "yes" ? "on-yes" : ""}">Yes</button><button type="button" ${dis ? "disabled" : ""} ${attr} data-v="no" class="${cur === "no" ? "on-no" : ""}">No</button></span>`; }
@@ -68,36 +89,131 @@ function micro(t) {
   if (t.team_type === "mobile") { const done = [1, 2, 3].filter(d => { const p = B.plans.find(x => x.team_id === t.id && x.campaign_day === d); return p && p.village_area && p.total_households != null && p.total_children != null; }).length; return { done, of: 3, link: "operational-plan.html" }; }
   const done = [1, 2, 3].filter(d => { const p = B.ft.find(x => x.team_id === t.id && x.campaign_day === d); return p && p.place_name && p.expected_children != null; }).length; return { done, of: 3, link: "fixed-transit-plan.html" };
 }
+
+const sumN = (a, f) => a.reduce((n, x) => n + (Number(f(x)) || 0), 0);
+const norm = (v) => String(v || "").toLowerCase().replace(/\s+/g, " ").trim();
+const nDays = () => Number(B.campaign.total_days) || 3;
+
+/* previous-campaign missed children for one team: only children still missed, one child counted once */
+function missedOf(tn) {
+  const rows = X.missed.filter(r => String(r.team_no) === String(tn)), open = rows.filter(r => !r.covered_this_round), seen = new Map();
+  open.forEach(r => { const k = norm(r.child_name) + "|" + (norm(r.father_name) || norm(r.address)); if (!seen.has(k)) seen.set(k, r); });
+  return { list: [...seen.values()], total: seen.size, dups: open.length - seen.size, covered: rows.length - open.length };
+}
+const mmpOf = (tn) => X.mmp.filter(r => String(r.team_no) === String(tn)), schOf = (tn) => X.sch.filter(r => String(r.team_no) === String(tn));
+const covOf = (kind, id) => X.cov.filter(c => (kind === "mmp" ? c.mmp_assignment_id : c.school_assignment_id) === id).sort((a, b) => a.campaign_day - b.campaign_day);
+const covSum = (kind, id) => sumN(covOf(kind, id), c => c.children_covered);
+
+function missedBlock(t) {
+  const mo = missedOf(t.team_no);
+  if (!X.prev) return `<div class="auto"><b>No previous campaign found</b> for this union council, so there is no missed-children list to fetch.</div>`;
+  if (!mo.list.length && !mo.covered) return `<div class="auto"><b>No missed-children records found</b> for Team ${E(t.team_no)} in <i>${E(X.prev.name)}</i>. Nothing is assumed — the total stays blank/zero until records exist (<a href="missed-children.html">missed children list</a>).</div>`;
+  return `<div class="auto"><div class="muted">Fetched automatically from the missed-children list of <b>${E(X.prev.name)}</b></div><div class="big">${mo.total} <span style="font-size:.9rem;font-weight:600">children still missed — Team ${E(t.team_no)}</span></div>
+    ${mo.dups ? `<div class="warnt">${mo.dups} repeated record(s) were counted once.</div>` : ""}${mo.covered ? `<div class="muted">${mo.covered} more were marked covered later and are not counted.</div>` : ""}
+    <details class="mc"><summary>Show the ${mo.total} children</summary><div class="scrollx"><table style="width:100%;font-size:.85rem"><tr><th>Name</th><th>Father</th><th>Age (mo)</th><th>Address</th></tr>${mo.list.map(r => `<tr><td>${E(r.child_name)}</td><td>${E(r.father_name)}</td><td>${E(r.age_months ?? "")}</td><td>${E(r.address)}</td></tr>`).join("")}</table></div></details></div>`;
+}
+
+function covBlock(kind, a, t, A) {
+  const items = kind === "mmp" ? mmpOf(t.team_no) : schOf(t.team_no), dec = (kind === "mmp" ? A.mmp_cov : A.sch_cov) || {}, tn = E(t.team_no), ai = E(a.id);
+  if (!items.length) return `<div class="sub" style="display:block"><b class="warnt">${kind === "mmp" ? "No MMP is registered" : "No school is assigned"} to Team ${tn} for this campaign.</b> Add them in the <a href="${kind === "mmp" ? "mmp" : "schools"}.html">${kind === "mmp" ? "MMP list" : "school list"}</a>, or answer <b>No</b> above.</div>`;
+  return `<div class="sub" style="display:block">` + items.map(it => {
+    const ents = covOf(kind, it.id), used = new Set(ents.map(e => e.campaign_day)), master = kind === "mmp" ? it.child_count : it.target_children, got = covSum(kind, it.id), d = dec[it.id];
+    const name = kind === "mmp" ? (it.mmp_contacts?.full_name || "MMP") : (it.schools?.name || "School");
+    const sub = kind === "mmp" ? [it.mmp_contacts?.cnic, it.mmp_contacts?.phone, it.mmp_contacts?.location].filter(Boolean).join(" · ") : `EMIS: ${E(it.schools?.emis_code || "—")}${it.schools?.head_teacher_name ? " · " + E(it.schools.head_teacher_name) : ""}`;
+    const free = Array.from({ length: nDays() }, (_, i) => i + 1).filter(x => !used.has(x)), pre = free.includes(it.campaign_day) ? it.campaign_day : free[0];
+    return `<div class="item"><div class="nm">${E(name)}</div><div class="muted">${kind === "mmp" ? E(sub) : sub}</div>
+      <div class="master">Registered list: ${kind === "mmp" ? `${E(it.house_count)} houses · ` : ""}<b>${E(master)}</b> children${it.campaign_day ? ` · planned Day ${E(it.campaign_day)}` : ""} <i>(master figure — never changed here)</i></div>
+      <div style="margin:6px 0">${kind === "mmp" ? "Was this MMP covered?" : "Was this school covered?"} ${yn(`data-cv="${kind}|${E(it.id)}|${tn}|${ai}"`, d)}</div>
+      ${d === "yes" ? `${ents.map(e => `<div class="cvrow">Day <b>${E(e.campaign_day)}</b> — children covered <input type="number" min="0" value="${E(e.children_covered)}" data-ce="${E(e.id)}"> <button type="button" class="btn small secondary" data-del="${E(e.id)}">Remove</button></div>`).join("")}
+        ${free.length ? `<div class="cvrow" data-row="${kind}|${E(it.id)}">Covered on day <select class="cv-day">${free.map(x => `<option value="${x}" ${x === pre ? "selected" : ""}>${x}</option>`).join("")}</select> children <input type="number" min="0" class="cv-n" placeholder="number"> <button type="button" class="btn small" data-add="${kind}|${E(it.id)}">Add</button></div>` : `<div class="muted">Every campaign day already has an entry.</div>`}
+        <div class="master">Actual covered so far: <span class="${got > master ? "warnt" : "actual"}">${got}</span> of ${E(master)} registered${got > master ? " — more than the registered figure, please re-check" : ""}</div>` : ""}</div>`;
+  }).join("") + `</div>`;
+}
+
+function problems(t, A) {
+  const out = [], yes = (v) => v === "yes" || v === "no";
+  if (!yes(A.mmp)) out.push("Answer the MMP question."); if (!yes(A.schools)) out.push("Answer the school question.");
+  const chk = (kind, items, dec, label) => { if (!items.length) { out.push(`${label}: none registered for this team — add them or answer No.`); return; }
+    items.forEach(it => { const nm = kind === "mmp" ? (it.mmp_contacts?.full_name || "MMP") : (it.schools?.name || "School"), d = dec[it.id];
+      if (!yes(d)) out.push(`${nm}: say whether it was covered.`); else if (d === "yes" && !covOf(kind, it.id).length) out.push(`${nm}: add the day and number of children covered.`); }); };
+  if (A.mmp === "yes") chk("mmp", mmpOf(t.team_no), A.mmp_cov || {}, "MMP"); if (A.schools === "yes") chk("school", schOf(t.team_no), A.sch_cov || {}, "Schools");
+  return out;
+}
+function reviewBlock(a, t, A) {
+  const mo = missedOf(t.team_no), mm = mmpOf(t.team_no), sc = schOf(t.team_no), pr = problems(t, A), done = PS.teamDone(A);
+  const mmpCov = A.mmp === "yes" ? mm.filter(m => (A.mmp_cov || {})[m.id] === "yes") : [], schCov = A.schools === "yes" ? sc.filter(s => (A.sch_cov || {})[s.id] === "yes") : [];
+  return `<div class="review"><div class="qt"><span class="stepno">4</span> Review and confirm</div><div class="scrollx"><table>
+    <tr><th>Summary</th><th>Registered / master list</th><th>Actual this campaign</th></tr>
+    <tr><td>Missed children (previous campaign)</td><td>${X.prev ? mo.total : "—"}</td><td class="muted">carried as a planning figure</td></tr>
+    <tr><td>MMP</td><td>${A.mmp === "yes" ? `${mm.length} MMP · ${sumN(mm, m => m.child_count)} children` : A.mmp === "no" ? "None in this area" : "—"}</td><td>${A.mmp === "yes" ? `${mmpCov.length} covered · <span class="actual">${sumN(mmpCov, m => covSum("mmp", m.id))}</span> children` : ""}</td></tr>
+    <tr><td>Schools</td><td>${A.schools === "yes" ? `${sc.length} assigned · ${sumN(sc, s => s.target_children)} children` : A.schools === "no" ? "No school covered" : "—"}</td><td>${A.schools === "yes" ? `${schCov.length} covered · <span class="actual">${sumN(schCov, s => covSum("school", s.id))}</span> children` : ""}</td></tr></table></div>
+    ${pr.length ? `<ul class="warnt" style="margin:8px 0 0 18px">${pr.map(x => `<li>${E(x)}</li>`).join("")}</ul>` : ""}
+    <div style="margin-top:8px"><button type="button" class="btn" data-confirm="${E(t.team_no)}|${E(a.id)}" ${pr.length ? "disabled" : ""}>${done ? "Confirmed ✓ — confirm again after changes" : "Confirm this team's questionnaire"}</button>
+      <span class="st ${done ? "ok" : "todo"}">${done ? "Submitted" : "Not confirmed yet"}</span></div></div>`;
+}
 function teamCard(a, t) {
-  const A = ansOf(a.id, t.team_no), tn = E(t.team_no), key = (k) => `data-t="${tn}|${a.id}|${k}"`, dis = false, done = PS.teamDone(A), mp = micro(t);
-  const num = (k, lbl) => `<div><label>${lbl}</label><input type="number" min="0" data-tf="${tn}|${a.id}|${k}" value="${E(A[k] ?? "")}"></div>`;
-  return `<div class="card teamcard ${done ? "done" : ""}"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div><b>Team ${tn}</b> <span class="tag">${TYPE[t.team_type] || "Type not set"}</span> <span class="muted">AIC ${E(a.aic_no)} — ${E(a.full_name)}</span></div><span class="st ${done ? "ok" : "todo"}">${done ? "✓ Answered" : "Questions pending"}</span></div>
-  <div class="q"><div class="qt">1. Is there a Migrant / Mobile Population (MMP) in this team's area?</div>${yn(key("mmp"), A.mmp)}
-    ${A.mmp === "yes" ? `<div class="sub">${num("mmp_hh", "MMP households")}${num("mmp_children", "MMP children (under 5)")}<div class="muted">MMP entries saved so far: <b>${mmpCnt[t.team_no] || 0}</b> · <a href="mmp.html">open MMP list</a></div></div>` : ""}</div>
-  <div class="q"><div class="qt">2. Are there schools / madaris with under-5 children in this team's area?</div>${yn(key("schools"), A.schools)}
-    ${A.schools === "yes" ? `<div class="sub">${num("school_n", "Number of schools")}${num("madaris_n", "Number of madaris")}${num("school_children", "Under-5 children in them")}<div class="muted"><a href="schools.html">open school list</a></div></div>` : ""}</div>
-  <div class="q"><div class="qt">3. Are there missed children carried forward from the last campaign?</div>${yn(key("missed"), A.missed)}
-    ${A.missed === "yes" ? `<div class="sub">${num("missed_n", "Number of missed children")}<div class="muted"><a href="missed-children.html">open missed children</a></div></div>` : ""}</div>
-  <div class="q"><div class="qt">4. Are there refusal households in this team's area?</div>${yn(key("refusal"), A.refusal)}
-    ${A.refusal === "yes" ? `<div class="sub">${num("refusal_n", "Number of refusal households")}</div>` : ""}</div>
-  <div class="q"><div class="qt">5. Micro plan (last step) — day-wise plan of this team</div><div class="st ${mp.done === mp.of ? "ok" : "todo"}">${mp.done} of ${mp.of} days filled in</div> <a class="btn small" href="${mp.link}">${mp.done === mp.of ? "Review" : "Fill in"} the micro plan</a><span class="muted"> (opens after all questions above are answered)</span></div></div>`;
+  const A = ansOf(a.id, t.team_no), tn = E(t.team_no), key = (k) => `data-t="${tn}|${a.id}|${k}"`, done = PS.teamDone(A), mp = micro(t);
+  return `<div class="card teamcard ${done ? "done" : ""}"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div><b>Team ${tn}</b> <span class="tag">${TYPE[t.team_type] || "Type not set"}</span><div class="muted">${E(B.campaign.name)} · ${E(B.geo.uc)} · AIC ${E(a.aic_no)} — ${E(a.full_name)}</div></div><span class="st ${done ? "ok" : "todo"}">${done ? "✓ Confirmed" : "Questions pending"}</span></div>
+  <div class="q"><div class="qt"><span class="stepno">1</span> Missed children from the previous campaign</div>${missedBlock(t)}</div>
+  <div class="q"><div class="qt"><span class="stepno">2</span> Is there a Migrant / Mobile Population (MMP) in this team's area?</div>${yn(key("mmp"), A.mmp)}${A.mmp === "yes" ? covBlock("mmp", a, t, A) : ""}</div>
+  <div class="q"><div class="qt"><span class="stepno">3</span> Was any school covered by this team during the campaign?</div>${yn(key("schools"), A.schools)}${A.schools === "yes" ? covBlock("school", a, t, A) : ""}</div>
+  ${reviewBlock(a, t, A)}
+  <div class="q"><div class="qt">Micro plan (last step) — day-wise plan of this team</div><div class="st ${mp.done === mp.of ? "ok" : "todo"}">${mp.done} of ${mp.of} days filled in</div> <a class="btn small" href="${mp.link}">${mp.done === mp.of ? "Review" : "Fill in"} the micro plan</a><span class="muted"> (opens after every team is confirmed)</span></div></div>`;
 }
 function draw() {
   if (!B) return; drawCaps();
   const sel = $("aicSel").value, aics = B.aics.filter(a => !sel || a.id === sel);
-  $("teams").innerHTML = aics.map(a => { const ts = FS.teamsOf(B, a.id); return ts.length ? ts.map(t => teamCard(a, t)).join("") : `<div class="card muted">AIC ${E(a.aic_no)} — ${E(a.full_name)} has no teams yet. Add teams in Staff Management.</div>`; }).join("") || `<div class="card muted">No Area Incharges found for this campaign's union council.</div>`;
+  const err = X.err ? `<div class="card error-text">Could not load some lists: ${E(X.err.message || X.err)}</div>` : "";
+  $("teams").innerHTML = err + (aics.map(a => { const ts = FS.teamsOf(B, a.id); return ts.length ? ts.map(t => teamCard(a, t)).join("") : `<div class="card muted">AIC ${E(a.aic_no)} — ${E(a.full_name)} has no teams yet. Add teams in Staff Management.</div>`; }).join("") || `<div class="card muted">No Area Incharges found for this campaign's union council.</div>`);
   stats();
 }
-function teamClick(e) { const b = e.target.closest("[data-t]"); if (!b) return; const [tn, aic, k] = b.dataset.t.split("|"), val = b.dataset.v; FS.draft(B, "plan_setup", aic, d => { d.teams = d.teams || {}; const t = (d.teams[tn] = d.teams[tn] || {}); t[k] = val; if (val === "no") ({ mmp: ["mmp_hh", "mmp_children"], schools: ["school_n", "madaris_n", "school_children"], missed: ["missed_n"], refusal: ["refusal_n"] })[k].forEach(f => delete t[f]); });
-  const y = window.scrollY; draw(); window.scrollTo(0, y); persist("plan_setup", aic); }
-function teamInput(e) { const k = e.target.dataset.tf; if (!k) return; const [tn, aic, f] = k.split("|"); FS.draft(B, "plan_setup", aic, d => { d.teams = d.teams || {}; (d.teams[tn] = d.teams[tn] || {})[f] = e.target.value; }); persist("plan_setup", aic); stats(true); }
+const keep = async (fn) => { const y = window.scrollY; await fn(); draw(); window.scrollTo(0, y); };
+const unconfirm = (aic, tn) => FS.draft(B, "plan_setup", aic, d => { const t = ((d.teams = d.teams || {})[tn] = d.teams[tn] || {}); if (t.confirmed) { t.confirmed = false; delete t.confirmed_at; } });
+const need = (r) => { if (r && r.error) { alert(r.error.message || String(r.error)); return false; } return true; };
+
+async function teamClick(e) {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.t) { const [tn, aic, k] = b.dataset.t.split("|"), val = b.dataset.v, t = FS.teamsOf(B, aic).find(x => String(x.team_no) === tn); if (!t) return;
+    await keep(async () => {
+      if (val === "no") { const kind = k === "mmp" ? "mmp" : "school", ids = (kind === "mmp" ? mmpOf(tn) : schOf(tn)).map(x => x.id), ents = X.cov.filter(c => ids.includes(kind === "mmp" ? c.mmp_assignment_id : c.school_assignment_id));
+        if (ents.length && !confirm(`Answering No removes the ${ents.length} coverage entr${ents.length > 1 ? "ies" : "y"} you entered for this team. The ${kind === "mmp" ? "MMP" : "school"} master list is not changed. Continue?`)) return;
+        if (ents.length) { const r = await supabaseClient.from("coverage_entries").delete().in("id", ents.map(x => x.id)); if (!need(r)) return; await reloadCov(); } }
+      FS.draft(B, "plan_setup", aic, d => { d.teams = d.teams || {}; const x = (d.teams[tn] = d.teams[tn] || {}); x[k] = val; x.confirmed = false; delete x.confirmed_at;
+        if (val === "no") ({ mmp: ["mmp_cov", "mmp_hh", "mmp_children"], schools: ["sch_cov", "school_n", "school_children"] })[k].forEach(f => delete x[f]); });
+      persist("plan_setup", aic); }); return; }
+  if (b.dataset.cv) { const [kind, id, tn, aic] = b.dataset.cv.split("|"), val = b.dataset.v;
+    await keep(async () => { const ents = covOf(kind, id);
+      if (val === "no" && ents.length) { if (!confirm("Marking it as not covered removes its coverage entries. Continue?")) return; const r = await supabaseClient.from("coverage_entries").delete().in("id", ents.map(x => x.id)); if (!need(r)) return; await reloadCov(); }
+      FS.draft(B, "plan_setup", aic, d => { d.teams = d.teams || {}; const x = (d.teams[tn] = d.teams[tn] || {}), f = kind === "mmp" ? "mmp_cov" : "sch_cov"; (x[f] = x[f] || {})[id] = val; x.confirmed = false; delete x.confirmed_at; }); persist("plan_setup", aic); }); return; }
+  if (b.dataset.add) { const [kind, id] = b.dataset.add.split("|"), row = b.closest("[data-row]"), day = Number(row.querySelector(".cv-day").value), nraw = row.querySelector(".cv-n").value.trim(), n = Number(nraw);
+    if (nraw === "" || !Number.isInteger(n) || n < 0) return alert("Enter the number of children covered (0 or more).");
+    const card = b.closest(".teamcard"); const conf = card.querySelector("[data-confirm]"); const [tn, aic] = conf.dataset.confirm.split("|");
+    await keep(async () => { const rec = { kind, campaign_day: day, children_covered: n, campaign_id: B.campaign.id, team_no: Number(tn) }; rec[kind === "mmp" ? "mmp_assignment_id" : "school_assignment_id"] = id;
+      const r = await supabaseClient.from("coverage_entries").insert(rec); if (r.error) { alert(/duplicate|unique/i.test(r.error.message) ? "This day already has an entry." : r.error.message); return; } await reloadCov(); unconfirm(aic, tn); persist("plan_setup", aic); }); return; }
+  if (b.dataset.del) { if (!confirm("Remove this coverage entry?")) return; const ent = X.cov.find(c => c.id === b.dataset.del), t = ent && B.teams.find(x => String(x.team_no) === String(ent.team_no));
+    await keep(async () => { const r = await supabaseClient.from("coverage_entries").delete().eq("id", b.dataset.del); if (!need(r)) return; await reloadCov(); if (t) { unconfirm(t.aic_staff_id, String(t.team_no)); persist("plan_setup", t.aic_staff_id); } }); return; }
+  if (b.dataset.confirm) { const [tn, aic] = b.dataset.confirm.split("|"), t = FS.teamsOf(B, aic).find(x => String(x.team_no) === tn), A = ansOf(aic, tn), pr = problems(t, A);
+    if (pr.length) return alert("Please complete:\n- " + pr.join("\n- "));
+    const mo = missedOf(tn), mm = mmpOf(tn), sc = schOf(tn), schCov = sc.filter(s => (A.sch_cov || {})[s.id] === "yes");
+    await keep(async () => { FS.draft(B, "plan_setup", aic, d => { const x = (d.teams[tn] = d.teams[tn] || {});
+        x.missed = mo.total > 0 ? "yes" : "no"; x.missed_n = String(mo.total); x.missed_prev_campaign = X.prev ? X.prev.id : null;     // derived from the missed-children list
+        if (x.mmp === "yes") { x.mmp_hh = String(sumN(mm, m => m.house_count)); x.mmp_children = String(sumN(mm, m => m.child_count)); }  // master figures, not coverage
+        if (x.schools === "yes") { x.school_n = String(schCov.length); x.school_children = String(sumN(schCov, s => covSum("school", s.id))); }
+        x.confirmed = true; x.confirmed_at = new Date().toISOString(); }); persist("plan_setup", aic); }); return; }
+}
+async function teamChange(e) {
+  const id = e.target.dataset.ce; if (!id) return; const n = Number(e.target.value), ent = X.cov.find(c => c.id === id);
+  if (e.target.value.trim() === "" || !Number.isInteger(n) || n < 0) { alert("Enter the number of children covered (0 or more)."); e.target.value = ent ? ent.children_covered : ""; return; }
+  const t = ent && B.teams.find(x => String(x.team_no) === String(ent.team_no));
+  await keep(async () => { const r = await supabaseClient.from("coverage_entries").update({ children_covered: n }).eq("id", id); if (!need(r)) return; await reloadCov(); if (t) { unconfirm(t.aic_staff_id, String(t.team_no)); persist("plan_setup", t.aic_staff_id); } });
+}
 function persist(type, aic) { const k = type + "|" + (aic || ""); clearTimeout(saveT[k]); $("ptxt").textContent = "Saving…";
   saveT[k] = setTimeout(async () => { try { await FS.saveForm(B, type, aic, FS.getForm(B, type, aic)); PS._g = null; $("ptxt").dataset.saved = "1"; stats(); } catch (e) { $("ptxt").innerHTML = `<span class="error-text">Could not save: ${E(e.message || e)}</span>`; } }, 700); }
-function stats(light) {
+function stats() {
   let total = 0, done = 0; B.aics.forEach(a => FS.teamsOf(B, a.id).forEach(t => { total++; if (PS.teamDone(ansOf(a.id, t.team_no))) done++; }));
   const capsOk = PS.capsDone(caps()), all = total + 1, d = done + (capsOk ? 1 : 0);
-  $("pbar").style.width = (all ? Math.round(d * 100 / all) : 0) + "%"; if (!$("ptxt").textContent.startsWith("Could not")) $("ptxt").textContent = `${d} of ${all} questions sections answered (${done} of ${total} teams${capsOk ? ", capsule question done" : ", capsule question pending"}) — answers save automatically`;
-  $("doneBox").innerHTML = (capsOk && done === total && total) ? `<div style="margin-top:10px"><b style="color:var(--ok)">✓ All questions answered — Plan Management is unlocked.</b> <a class="btn small" href="operational-plan.html">Go to the Operational Plan</a></div>` : "";
+  $("pbar").style.width = (all ? Math.round(d * 100 / all) : 0) + "%"; if (!$("ptxt").textContent.startsWith("Could not")) $("ptxt").textContent = `${d} of ${all} sections done (${done} of ${total} teams confirmed${capsOk ? ", capsule question done" : ", capsule question pending"}) — answers save automatically`;
+  $("doneBox").innerHTML = (capsOk && done === total && total) ? `<div style="margin-top:10px"><b style="color:var(--ok)">✓ All teams confirmed — Plan Management is unlocked.</b> <a class="btn small" href="operational-plan.html">Go to the Operational Plan</a></div>` : "";
 }
 </script>
 </body>

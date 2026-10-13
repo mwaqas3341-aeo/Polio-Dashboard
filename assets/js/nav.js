@@ -42,9 +42,7 @@ function navHref(h) {
 /* Plan questionnaire gate: Plan Management pages unlock once the capsule question and every team's questions are answered. */
 const PS = {
   yn: (v) => v === "yes" || v === "no", num: (v) => v !== undefined && v !== null && v !== "" && Number(v) >= 0,
-  teamDone(a) { a = a || {}; const n = this.num, y = this.yn;
-    return y(a.mmp) && (a.mmp !== "yes" || (n(a.mmp_hh) && n(a.mmp_children))) && y(a.schools) && (a.schools !== "yes" || (n(a.school_n) && n(a.madaris_n) && n(a.school_children)))
-      && y(a.missed) && (a.missed !== "yes" || n(a.missed_n)) && y(a.refusal) && (a.refusal !== "yes" || n(a.refusal_n)); },
+  teamDone(a) { a = a || {}; return this.yn(a.mmp) && this.yn(a.schools) && a.confirmed === true; },
   capsDone(c) { c = c || {}; return c.vit_a_needed === "no" || (c.vit_a_needed === "yes" && this.num(c.vit_blue) && this.num(c.vit_red)); },
   async gate() {
     if (this._g) return this._g;

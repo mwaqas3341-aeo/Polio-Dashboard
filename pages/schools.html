@@ -17,6 +17,7 @@
         <form id="schoolForm">
           <div class="form-grid">
             <div><label>School name</label><input id="sc_name" required></div>
+            <div><label>EMIS code (optional)</label><input id="sc_emis" inputmode="numeric"></div>
             <div><label>Head teacher name</label><input id="sc_head"></div>
             <div><label>Head teacher phone</label><input id="sc_phone"></div>
             <div><label>District</label><input id="sc_district" value="Layyah" required></div>
@@ -98,6 +99,7 @@
         );
         const { error } = await supabaseClient.from("schools").insert({
           name: document.getElementById("sc_name").value.trim(),
+          emis_code: document.getElementById("sc_emis").value.trim() || null,
           head_teacher_name: document.getElementById("sc_head").value.trim() || null,
           head_teacher_phone: document.getElementById("sc_phone").value.trim() || null,
           uc_id,
@@ -157,7 +159,7 @@
       }
       const { data, error } = await supabaseClient
         .from("school_assignments")
-        .select("id, school_id, team_no, campaign_day, target_children, schools(id, name, head_teacher_name, head_teacher_phone, uc_id)")
+        .select("id, school_id, team_no, campaign_day, target_children, schools(id, name, emis_code, head_teacher_name, head_teacher_phone, uc_id)")
         .eq("campaign_id", campaignId)
         .order("team_no").order("campaign_day");
       if (error) {
@@ -174,7 +176,7 @@
     }
 
     function viewRow(r) {
-      return `<tr id="r_${r.id}"><td>${r.team_no}</td><td>${r.campaign_day}</td><td>${escH(r.schools.name)}</td>
+      return `<tr id="r_${r.id}"><td>${r.team_no}</td><td>${r.campaign_day}</td><td>${escH(r.schools.name)}${r.schools.emis_code ? `<div class="muted">EMIS ${escH(r.schools.emis_code)}</div>` : ""}</td>
         <td>${escH(r.schools.head_teacher_name) || "—"}</td><td>${escH(r.schools.head_teacher_phone) || "—"}</td><td>${r.target_children}</td>
         <td style="white-space:nowrap;"><button class="btn secondary" style="padding:.2rem .6rem;" onclick="editRow('${r.id}')">Edit</button>
         <button class="btn secondary" style="padding:.2rem .6rem;" onclick="delRow('${r.id}')">Remove</button></td></tr>`;
@@ -185,7 +187,7 @@
       document.getElementById("r_" + id).innerHTML = `
         <td><input type="number" min="1" id="e_team" value="${r.team_no}" style="width:4.5rem;"></td>
         <td><input type="number" min="1" id="e_day" value="${r.campaign_day}" style="width:4rem;"></td>
-        <td><input id="e_name" value="${escH(r.schools.name)}"></td>
+        <td><input id="e_name" value="${escH(r.schools.name)}"><input id="e_emis" placeholder="EMIS code" value="${escH(r.schools.emis_code)}" style="margin-top:4px;"></td>
         <td><input id="e_head" value="${escH(r.schools.head_teacher_name)}"></td>
         <td><input id="e_phone" value="${escH(r.schools.head_teacher_phone)}" style="width:8rem;"></td>
         <td><input type="number" min="0" id="e_kids" value="${r.target_children}" style="width:5rem;"></td>
@@ -208,8 +210,8 @@
         const { data: dup } = await supabaseClient.from("schools").select("id").eq("uc_id", r.schools.uc_id).ilike("name", name.replace(/[%_]/g, m => "\\" + m)).neq("id", r.school_id).limit(1);
         if (dup && dup.length) return show("Another school with this name already exists in this union council.");
       }
-      const si = { name, head_teacher_name: document.getElementById("e_head").value.trim() || null, head_teacher_phone: document.getElementById("e_phone").value.trim() || null };
-      const changedInfo = si.name !== r.schools.name || si.head_teacher_name !== (r.schools.head_teacher_name || null) || si.head_teacher_phone !== (r.schools.head_teacher_phone || null);
+      const si = { name, emis_code: document.getElementById("e_emis").value.trim() || null, head_teacher_name: document.getElementById("e_head").value.trim() || null, head_teacher_phone: document.getElementById("e_phone").value.trim() || null };
+      const changedInfo = si.name !== r.schools.name || si.emis_code !== (r.schools.emis_code || null) || si.head_teacher_name !== (r.schools.head_teacher_name || null) || si.head_teacher_phone !== (r.schools.head_teacher_phone || null);
       if (changedInfo) { const { error } = await supabaseClient.from("schools").update(si).eq("id", r.school_id); if (error) return show(error.message); }
       const { error: e2 } = await supabaseClient.from("school_assignments").update({ team_no: team, campaign_day: day, target_children: kids }).eq("id", id);
       if (e2) return show(e2.message);
