@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Microplan — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261014e">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014f">
 <style>
   .tag { display:inline-block; padding:.1rem .55rem; border-radius:99px; font-size:.78rem; background:#e8efed; }
   .tag.ok { background:#dff3e8; color:#14633f; } .tag.warn { background:#fff0d6; color:#8a5a00; } .tag.bad { background:#fde2e1; color:#9b1c1c; }
@@ -13,28 +13,29 @@
   .figgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:.5rem .8rem; }
   .figgrid label { font-size:.8rem; } .figgrid input, .figgrid select { width:100%; box-sizing:border-box; }
   .figgrp { grid-column:1/-1; font-weight:600; border-bottom:1px solid var(--line); margin-top:.5rem; }
+:root { --t-title:18pt; --t-sub:14pt; --t-body:12pt; --t-head:11pt; --t-note:9pt; }
   .ur { direction:rtl; unicode-bidi:plaintext; font-family:"Jameel Noori Nastaleeq","Noto Nastaliq Urdu","Noto Naskh Arabic","Segoe UI",Tahoma,Arial,sans-serif; }
   .scroll { overflow-x:auto; background:#fff; border:1px solid var(--line); border-radius:8px; padding:.5rem; margin:.7rem 0; }
   .sheet { min-width:1050px; }
-  .sheet h1 { font-size:24px; margin:0; text-align:center; } .sheet h2 { font-size:19px; margin:0; text-align:center; }
-  table.of { border-collapse:collapse; width:100%; table-layout:fixed; font-size:16px; }
+  .sheet h1 { font-size:var(--t-title); margin:0; text-align:center; } .sheet h2 { font-size:var(--t-sub); margin:0; text-align:center; }
+  table.of { border-collapse:collapse; width:100%; table-layout:fixed; font-size:var(--t-body); }
   table.of th, table.of td { border:1.5px solid #111; padding:3px 4px; text-align:center; vertical-align:middle; word-wrap:break-word; overflow-wrap:anywhere; }
-  table.of th { background:#ececec; font-weight:800; font-size:11.5px; line-height:1.2; }
+  table.of th { background:#ececec; font-weight:800; font-size:var(--t-head); line-height:1.2; }
   table.of td.v { font-weight:800; } table.of td.lb { background:#f4f4f4; font-weight:700; }
   table.of td.l { text-align:right; } table.of tr.tall td { height:11mm; font-weight:700; }
-  table.of td.sm, .sm { font-size:12.5px; font-weight:600; }
-  table.of td.heads { height:auto; padding:2px 4px; font-size:15px; font-weight:800; background:#fafafa; }
-  .hdr { display:flex; justify-content:space-between; align-items:center; gap:.6rem; border:1.5px solid #111; padding:2px 8px; margin-bottom:3px; font-size:15px; font-weight:700; }
-  .ybox { background:#fff700; border:1.5px solid #111; padding:4px 8px; font-size:13px; font-weight:600; margin-top:4px; }
-  .legend { display:flex; gap:5px; font-size:10.5px; font-weight:600; margin-top:3px; line-height:1.25; } .legend > div { flex:1; border:1.5px solid #111; padding:2px 5px; }
-  .sig { display:flex; justify-content:space-between; gap:12px; margin-top:8px; font-size:15px; font-weight:700; } .sig div { flex:1; } .sig .ln { border-bottom:1.5px solid #111; height:20px; margin:5px 0; }
+  table.of td.sm, .sm { font-size:var(--t-note); font-weight:600; }
+  table.of td.heads { height:auto; padding:2px 4px; font-size:var(--t-body); font-weight:800; background:#fafafa; }
+  .hdr { display:flex; justify-content:space-between; align-items:center; gap:.6rem; border:1.5px solid #111; padding:2px 8px; margin-bottom:3px; font-size:var(--t-body); font-weight:700; }
+  .ybox { background:#fff700; border:1.5px solid #111; padding:4px 8px; font-size:var(--t-note); font-weight:600; margin-top:4px; }
+  .legend { display:flex; gap:5px; font-size:var(--t-note); font-weight:600; margin-top:3px; line-height:1.25; } .legend > div { flex:1; border:1.5px solid #111; padding:2px 5px; }
+  .sig { display:flex; justify-content:space-between; gap:12px; margin-top:8px; font-size:var(--t-body); font-weight:700; } .sig div { flex:1; } .sig .ln { border-bottom:1.5px solid #111; height:20px; margin:5px 0; }
   .wk { margin:0 0 4px; padding:0 0 3px; border-bottom:1px dashed #888; } .wk:last-child { border-bottom:0; margin:0; padding:0; }
-  .wk .nm { font-size:17px; font-weight:800; line-height:1.3; } .wk .cn { font-size:15px; font-weight:800; direction:ltr; white-space:nowrap; } .wk .cn small { font-size:11px; font-weight:700; margin-right:4px; } .wk .rl { font-size:13px; font-weight:600; }
-  .gb { display:flex; gap:3px; direction:ltr; } .gb span { flex:1; border:1.8px solid #111; padding:3px 0; font-size:15px; font-weight:800; background:#fff; color:#111; }
+  .wk .nm { font-size:var(--t-body); font-weight:800; line-height:1.3; } .wk .cn { font-size:var(--t-body); font-weight:800; direction:ltr; white-space:nowrap; } .wk .cn small { font-size:var(--t-note); font-weight:700; margin-right:4px; } .wk .rl { font-size:var(--t-note); font-weight:600; }
+  .gb { display:flex; gap:3px; direction:ltr; } .gb span { flex:1; border:1.8px solid #111; padding:3px 0; font-size:var(--t-body); font-weight:800; background:#fff; color:#111; }
   .gb span.on { background:#111; color:#fff; }
-  .glf { direction:ltr; font-size:13px; font-weight:800; margin:0 0 5px; white-space:nowrap; } .glf i { display:inline-block; width:12px; height:12px; border:1.5px solid #111; vertical-align:middle; margin:0 3px 0 1px; }
-  .hd { display:flex; justify-content:space-between; align-items:center; gap:10px; } .hd span { font-size:14px; font-weight:700; } .hd b { font-size:17.5px; font-weight:800; flex:1; text-align:center; }
-  .sheet.sum table.of { font-size:12.5px; } .sheet.sum table.of th { font-size:10.5px; } .sheet.sum .hdr { font-size:12px; } .sheet.sum .ybox { font-size:10px; } .sheet.sum .sig { font-size:11.5px; margin-top:2px; } .sheet.sum .sig .ln { height:11px; margin:2px 0; } .sheet.sum table.of { font-size:12px; } .sheet.sum table.of th, .sheet.sum table.of td { padding:2px 3px; } .sheet.sum .sm { font-size:10.5px; }
+  .glf { direction:ltr; font-size:var(--t-note); font-weight:800; margin:0 0 5px; white-space:nowrap; } .glf i { display:inline-block; width:12px; height:12px; border:1.5px solid #111; vertical-align:middle; margin:0 3px 0 1px; }
+  .hd { display:flex; justify-content:space-between; align-items:center; gap:10px; } .hd span { font-size:var(--t-body); font-weight:700; } .hd b { font-size:var(--t-sub); font-weight:800; flex:1; text-align:center; }
+  /* AIC Summary MP uses the same standard scale as every other document (no shrunk summary sheet) */
   .blk { display:inline-block; min-width:2.2em; border-bottom:1px solid #222; }
   @media print {
     @page { size: A4 landscape; margin: 6mm; }
@@ -78,10 +79,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="../assets/js/config.js?v=20261014e"></script>
-<script src="../assets/js/supabaseClient.js?v=20261014e"></script>
-<script src="../assets/js/nav.js?v=20261014e"></script>
-<script src="../assets/js/crud.js?v=20261014e"></script>
+<script src="../assets/js/config.js?v=20261014f"></script>
+<script src="../assets/js/supabaseClient.js?v=20261014f"></script>
+<script src="../assets/js/nav.js?v=20261014f"></script>
+<script src="../assets/js/crud.js?v=20261014f"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

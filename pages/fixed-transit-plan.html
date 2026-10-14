@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fixed &amp; Transit plan — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261014e">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014f">
 <style>
   .grp { margin-top:1.2rem; } .grp > h2 { border-bottom:2px solid #1a7f5a; padding-bottom:.25rem; }
   .tcard { border:1px solid var(--line); border-radius:8px; padding:.7rem .9rem; margin:.7rem 0; background:#fff; }
@@ -13,6 +13,7 @@
   .st { font-size:.8rem; } .st.sub { color:#1a7f5a; font-weight:bold; } .st.dr { color:#a66a00; }
   .btn.small { padding:.3rem .8rem; } .msg { font-size:.85rem; margin-left:.5rem; }
   @media (max-width:760px){ .dayrow { grid-template-columns:1fr 1fr; } .dayhead { display:none; } }
+  @page { size: A4 portrait; margin: 8mm; }
   @media print { .sidebar, .topbar .noprint, .noprint, .btn { display:none !important; } .tcard { break-inside:avoid; } }
 </style>
 </head>
@@ -33,10 +34,10 @@
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../assets/js/config.js?v=20261014e"></script>
-<script src="../assets/js/supabaseClient.js?v=20261014e"></script>
-<script src="../assets/js/nav.js?v=20261014e"></script>
-<script src="../assets/js/crud.js?v=20261014e"></script>
+<script src="../assets/js/config.js?v=20261014f"></script>
+<script src="../assets/js/supabaseClient.js?v=20261014f"></script>
+<script src="../assets/js/nav.js?v=20261014f"></script>
+<script src="../assets/js/crud.js?v=20261014f"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

@@ -23,10 +23,10 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn, t
   let y = HEAD_BOTTOM, curGroup = "", curTeam = "";
 
   const header = () => {
-    doc.setFont("helvetica", "bold").setFontSize(14).setTextColor(20); put(title, M, 11, { bold: true, pt: 14, maxWidth: PW - 2 * M });
+    doc.setFont("helvetica", "bold").setFontSize(18).setTextColor(20); put(title, M, 11.5, { bold: true, pt: 18, maxWidth: PW - 2 * M });
     doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(70); put(subtitle, M, 16, { pt: 9, maxWidth: PW - 2 * M, color: "#464646" });
-    doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(20);
-    const where = [curGroup, curTeam].filter(Boolean).join("   |   "); if (where) put(where, M, 21.3, { bold: true, pt: 10, maxWidth: PW - 2 * M });
+    doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(20);
+    const where = [curGroup, curTeam].filter(Boolean).join("   |   "); if (where) put(where, M, 21.6, { bold: true, pt: 12, maxWidth: PW - 2 * M });
     doc.setDrawColor(150).setLineWidth(0.3).line(M, 24, PW - M, 24);
   };
   const newPage = () => { doc.addPage(); stats.pages++; y = HEAD_BOTTOM; header(); };
@@ -34,7 +34,7 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn, t
   const ensure = (h) => { if (y + h > BOTTOM) newPage(); };
 
   const drawFrame = (x, yy, label, img, caption) => {
-    doc.setFont("helvetica", "bold").setFontSize(12.5).setTextColor(10); put(String(caption || ""), x, yy - 1.8, { bold: true, pt: 12.5, maxWidth: FW });   // bold line above the picture: name over the front, cell number over the back
+    doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(10); put(String(caption || ""), x, yy - 1.8, { bold: true, pt: 12, maxWidth: FW });   // bold line above the picture: name over the front, cell number over the back
     doc.setDrawColor(120).setLineWidth(0.25);
     if (!img) {
       doc.setLineDashPattern([1.2, 1.2], 0); doc.rect(x, yy, FW, FH); doc.setLineDashPattern([], 0);
@@ -54,8 +54,8 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn, t
       curTeam = t.heading || "";
       const barH = t.heading ? 8 : 0, gH = groupDrawn || !g.heading ? 0 : 10;
       ensure(gH + barH + (t.people.length ? BLOCK_H : 6));   // headings never sit alone at the bottom of a page
-      if (gH) { curGroup = g.heading; doc.setFillColor(40, 70, 60).rect(M, y, PW - 2 * M, 7.5, "F"); doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(255); put(g.heading, M + 2, y + 5.2, { bold: true, pt: 11, color: "#ffffff", maxWidth: PW - 2 * M - 4 }); doc.setTextColor(20); y += gH; groupDrawn = true; }
-      if (t.heading) { doc.setFillColor(232, 239, 237).rect(M, y, PW - 2 * M, 6.5, "F"); doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(20); put(t.heading, M + 2, y + 4.6, { bold: true, pt: 10, maxWidth: PW - 2 * M - 4 }); y += barH; }
+      if (gH) { curGroup = g.heading; doc.setFillColor(40, 70, 60).rect(M, y, PW - 2 * M, 7.5, "F"); doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(255); put(g.heading, M + 2, y + 5.4, { bold: true, pt: 12, color: "#ffffff", maxWidth: PW - 2 * M - 4 }); doc.setTextColor(20); y += gH; groupDrawn = true; }
+      if (t.heading) { doc.setFillColor(232, 239, 237).rect(M, y, PW - 2 * M, 6.5, "F"); doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(20); put(t.heading, M + 2, y + 4.8, { bold: true, pt: 12, maxWidth: PW - 2 * M - 4 }); y += barH; }
       if (t.note) { doc.setFont("helvetica", "italic").setFontSize(9).setTextColor(120); put(t.note, M + 2, y + 4, { pt: 9, color: "#787878", maxWidth: PW - 2 * M - 4 }); y += 6; }
       for (const p of t.people) {
         ensure(BLOCK_H);
@@ -71,7 +71,7 @@ function buildCnicPdf({ jsPDF, title, subtitle, groups, getImage, generatedOn, t
     }
   }
   const n = doc.getNumberOfPages(); stats.pages = n;
-  for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(110);
+  for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(110);
     doc.text(`${generatedOn || ""}`, M, FOOT_Y); doc.text(`Page ${i} of ${n}`, PW - M, FOOT_Y, { align: "right" }); }
   return { doc, stats, frame: { w: FW, h: FH } };
 }

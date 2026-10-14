@@ -18,19 +18,63 @@ table.fx textarea { text-align:inherit; min-height:34px; }
 .fx-miss { color:#9b1c1c; font-weight:700; }
 .fx-wrap { overflow-x:auto; }
 @media print {
-  @page { size: A4 landscape; margin: 7mm; }
   .sidebar, .topbar, .noprint, .muted, .dl-panel { display:none !important; }
   .app-shell { display:block !important; } .main { padding:0 !important; margin:0 !important; max-width:none !important; animation:none !important; }
   .card { border:none !important; box-shadow:none !important; padding:0 !important; margin:0 !important; }
   .fx-wrap { overflow:visible; }
   .fx-page { page-break-after:always; break-after:page; border-width:2px; margin:0; padding:3mm; }
   .fx-page:last-child { page-break-after:auto; break-after:auto; }
-  .fx-page h1 { font-size:18pt; } table.fx { font-size:10.5pt; } table.fx th, table.fx td { padding:2.5pt 3pt; }
-  .fx-hdr { font-size:11pt; } .fx-note, .fx-sig { font-size:11pt; }
   table.fx input, table.fx select, table.fx textarea, .fx-hdr input, .fx-hdr select { border:none !important; appearance:none; -webkit-appearance:none; background:transparent !important; font-size:inherit; font-weight:800; padding:0; resize:none; }
-  .fx-pic { height:165mm; border:none; } .noprint-ctl { display:none !important; }
+  .noprint-ctl { display:none !important; } .fx-pic { border:none; }
   .scroll.pb { break-before:page; } .scroll.first { break-before:auto; }
 }
 
-.fx-2a table.fx { font-size:11px; } .fx-2a table.fx th { font-size:10px; padding:2px 3px; } .fx-2a table.fx td { padding:2px 3px; } .fx-team { break-inside:avoid; page-break-inside:avoid; }
-@media print { .fx-2a table.fx { font-size:7pt; } .fx-2a table.fx th { font-size:5.8pt; padding:1pt 1.5pt; } .fx-2a table.fx td { padding:1pt 2pt; } .fx-2a .fx-hdr { font-size:9pt; } .fx-2a h1 { font-size:14pt; } .fx-2a .fx-wrap { overflow:visible; } .fx-2a table.fx-main tbody tr { height:24pt; } .fx-2a table.fx-main tbody tr:last-child { height:16pt; } }
+.fx-team { break-inside:avoid; page-break-inside:avoid; }
+
+/* ===== ONE TYPE SCALE FOR EVERY PRINTED DOCUMENT (taken from the team microplan / official workbook) =====
+   title 18pt · sub-title 14pt · body, header lines, signatures 12pt · table column headers 11pt · notes 9pt.
+   Forms are NOT shrunk to fit one page: they use these sizes and run over as many pages as they need (1 to 3).
+   Orientation: microplan, 2A and 2B are LANDSCAPE; every other document is PORTRAIT. */
+:root { --t-title:18pt; --t-sub:14pt; --t-body:12pt; --t-head:11pt; --t-note:9pt; }
+@page { size: A4 portrait; margin: 8mm; }
+@page land { size: A4 landscape; margin: 7mm; }
+.fx-2a, .land { page: land; }
+.pdf-std .fx-page h1 { font-size:var(--t-title); line-height:1.25; }
+.pdf-std .fx-page h2 { font-size:var(--t-sub); line-height:1.25; }
+.pdf-std .fx-page .fx-hdr, .pdf-std .fx-page .fx-sig { font-size:var(--t-body); }
+.pdf-std .fx-page table.fx, .pdf-std .fx-page .fx-2a table.fx { font-size:var(--t-body); }
+.pdf-std .fx-page table.fx th, .pdf-std .fx-page .fx-2a table.fx th { font-size:var(--t-head); padding:2.5pt 3pt; line-height:1.25; }
+.pdf-std .fx-page table.fx td, .pdf-std .fx-page .fx-2a table.fx td { padding:2.5pt 3pt; }
+.pdf-std .fx-page .fx-note { font-size:var(--t-note); }
+.pdf-std .fx-page .fx-2a .fx-hdr, .pdf-std .fx-page.fx-2a .fx-hdr { font-size:var(--t-body); } .pdf-std .fx-page.fx-2a h1 { font-size:var(--t-title); }
+.pdf-std .fx-page table.fx-main tbody tr { height:auto !important; }
+.pdf-std .fx-page .fx-wrap { overflow:visible; }
+.pdf-std .fx-page table.fx thead { display:table-header-group; } .pdf-std .fx-page table.fx tr { break-inside:avoid; page-break-inside:avoid; }
+.pdf-std .fx-pic { height:225mm; }                                   /* maps are portrait pages */
+@media print {
+  .fx-page h1 { font-size:var(--t-title); line-height:1.25; }
+  .fx-page h2 { font-size:var(--t-sub); line-height:1.25; }
+  .fx-page .fx-hdr,   .fx-page .fx-sig { font-size:var(--t-body); }
+  .fx-page table.fx,   .fx-page .fx-2a table.fx { font-size:var(--t-body); }
+  .fx-page table.fx th,   .fx-page .fx-2a table.fx th { font-size:var(--t-head); padding:2.5pt 3pt; line-height:1.25; }
+  .fx-page table.fx td,   .fx-page .fx-2a table.fx td { padding:2.5pt 3pt; }
+  .fx-page .fx-note { font-size:var(--t-note); }
+  .fx-page .fx-2a .fx-hdr,   .fx-page.fx-2a .fx-hdr { font-size:var(--t-body); }   .fx-page.fx-2a h1 { font-size:var(--t-title); }
+  .fx-page table.fx-main tbody tr { height:auto !important; }
+  .fx-page .fx-wrap { overflow:visible; }
+  .fx-page table.fx thead { display:table-header-group; }   .fx-page table.fx tr { break-inside:avoid; page-break-inside:avoid; }
+  .fx-pic { height:225mm; }                                   /* maps are portrait pages */
+}
+
+/* Wide official forms (2A has about 25 columns, 2B about 28): figures stay at 12pt (10pt on 2B) and the column headings are 8pt (7pt on 2B)
+   so the whole table fits the width of a landscape page. Everything else on these forms uses the standard scale above. */
+.pdf-std .noprint-ctl { display:none !important; }
+.pdf-std .fx-page.fx-2a { padding:2px; border-width:1px; box-sizing:border-box; margin:0; }
+.pdf-std .fx-page table.fx-main th { font-size:7.5pt; padding:1pt .5pt; }
+.pdf-std .fx-page table.fx-main td { padding:2pt .5pt; }
+.pdf-std .fx-page table.fx-2b-t th { font-size:7pt; } .pdf-std .fx-page table.fx-2b-t td { font-size:10pt; }
+@media print {
+  .fx-page table.fx-main th { font-size:7.5pt; padding:1pt .5pt; }
+  .fx-page table.fx-main td { padding:2pt .5pt; }
+  .fx-page table.fx-2b-t th { font-size:7pt; }   .fx-page table.fx-2b-t td { font-size:10pt; }
+}
