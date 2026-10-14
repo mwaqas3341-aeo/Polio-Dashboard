@@ -16,17 +16,25 @@
   .ur { direction:rtl; unicode-bidi:plaintext; font-family:"Jameel Noori Nastaleeq","Noto Nastaliq Urdu","Noto Naskh Arabic","Segoe UI",Tahoma,Arial,sans-serif; }
   .scroll { overflow-x:auto; background:#fff; border:1px solid var(--line); border-radius:8px; padding:.5rem; margin:.7rem 0; }
   .sheet { min-width:1050px; }
-  .sheet h1 { font-size:15px; margin:0; text-align:center; } .sheet h2 { font-size:12.5px; margin:0; text-align:center; }
-  table.of { border-collapse:collapse; width:100%; table-layout:fixed; font-size:10.5px; }
-  table.of th, table.of td { border:1px solid #222; padding:2px 3px; text-align:center; vertical-align:middle; word-wrap:break-word; overflow-wrap:anywhere; }
-  table.of th { background:#f1f1f1; font-weight:600; }
-  table.of td.v { font-weight:700; } table.of td.lb { background:#f7f7f7; }
-  table.of td.l { text-align:right; } table.of tr.tall td { height:15mm; }
-  table.of td.sm { font-size:9px; }
-  .hdr { display:flex; justify-content:space-between; align-items:center; gap:.6rem; border:1px solid #222; padding:3px 6px; margin-bottom:3px; font-size:11px; }
-  .ybox { background:#fff700; border:1px solid #222; padding:3px 6px; font-size:9.5px; margin-top:3px; }
-  .legend { display:flex; gap:6px; font-size:9px; margin-top:3px; } .legend > div { flex:1; border:1px solid #222; padding:2px 4px; }
-  .sig { display:flex; justify-content:space-between; gap:12px; margin-top:6px; font-size:10.5px; } .sig div { flex:1; } .sig .ln { border-bottom:1px solid #222; height:16px; margin:4px 0; }
+  .sheet h1 { font-size:24px; margin:0; text-align:center; } .sheet h2 { font-size:19px; margin:0; text-align:center; }
+  table.of { border-collapse:collapse; width:100%; table-layout:fixed; font-size:16px; }
+  table.of th, table.of td { border:1.5px solid #111; padding:3px 4px; text-align:center; vertical-align:middle; word-wrap:break-word; overflow-wrap:anywhere; }
+  table.of th { background:#ececec; font-weight:800; font-size:11.5px; line-height:1.2; }
+  table.of td.v { font-weight:800; } table.of td.lb { background:#f4f4f4; font-weight:700; }
+  table.of td.l { text-align:right; } table.of tr.tall td { height:11mm; font-weight:700; }
+  table.of td.sm, .sm { font-size:12.5px; font-weight:600; }
+  table.of td.heads { height:auto; padding:2px 4px; font-size:15px; font-weight:800; background:#fafafa; }
+  .hdr { display:flex; justify-content:space-between; align-items:center; gap:.6rem; border:1.5px solid #111; padding:2px 8px; margin-bottom:3px; font-size:15px; font-weight:700; }
+  .ybox { background:#fff700; border:1.5px solid #111; padding:4px 8px; font-size:13px; font-weight:600; margin-top:4px; }
+  .legend { display:flex; gap:5px; font-size:10.5px; font-weight:600; margin-top:3px; line-height:1.25; } .legend > div { flex:1; border:1.5px solid #111; padding:2px 5px; }
+  .sig { display:flex; justify-content:space-between; gap:12px; margin-top:8px; font-size:15px; font-weight:700; } .sig div { flex:1; } .sig .ln { border-bottom:1.5px solid #111; height:20px; margin:5px 0; }
+  .wk { margin:0 0 4px; padding:0 0 3px; border-bottom:1px dashed #888; } .wk:last-child { border-bottom:0; margin:0; padding:0; }
+  .wk .nm { font-size:17px; font-weight:800; line-height:1.3; } .wk .cn { font-size:15px; font-weight:800; direction:ltr; white-space:nowrap; } .wk .cn small { font-size:11px; font-weight:700; margin-right:4px; } .wk .rl { font-size:13px; font-weight:600; }
+  .gb { display:flex; gap:3px; direction:ltr; } .gb span { flex:1; border:1.8px solid #111; padding:3px 0; font-size:15px; font-weight:800; background:#fff; color:#111; }
+  .gb span.on { background:#111; color:#fff; }
+  .glf { direction:ltr; font-size:13px; font-weight:800; margin:0 0 5px; white-space:nowrap; } .glf i { display:inline-block; width:12px; height:12px; border:1.5px solid #111; vertical-align:middle; margin:0 3px 0 1px; }
+  .hd { display:flex; justify-content:space-between; align-items:center; gap:10px; } .hd span { font-size:14px; font-weight:700; } .hd b { font-size:17.5px; font-weight:800; flex:1; text-align:center; }
+  .sheet.sum table.of { font-size:12.5px; } .sheet.sum table.of th { font-size:10.5px; } .sheet.sum .hdr { font-size:12px; } .sheet.sum .ybox { font-size:10px; } .sheet.sum .sig { font-size:11.5px; margin-top:2px; } .sheet.sum .sig .ln { height:11px; margin:2px 0; } .sheet.sum table.of { font-size:12px; } .sheet.sum table.of th, .sheet.sum table.of td { padding:2px 3px; } .sheet.sum .sm { font-size:10.5px; }
   .blk { display:inline-block; min-width:2.2em; border-bottom:1px solid #222; }
   @media print {
     @page { size: A4 landscape; margin: 6mm; }
@@ -34,7 +42,7 @@
     .main { margin:0 !important; padding:0 !important; max-width:none !important; } .app-shell { display:block !important; }
     .scroll { overflow:visible; border:none; padding:0; margin:0; border-radius:0; }
     .sheet { min-width:0; width:100%; } .scroll.pb { break-before:page; } .scroll.first { break-before:auto; }
-    table.of { font-size:8px; } table.of tr.tall td { height:13mm; } tr { break-inside:avoid; }
+    table.of tr.tall td { height:10mm; } tr { break-inside:avoid; } .scroll { break-inside:avoid; }
   }
 </style>
 </head>
@@ -94,7 +102,7 @@ const FIG = [
   { g: "Supplies & staff / سامان" },
   { k: "ddm_red", l: "DDM cards red / سرخ", t: "num" }, { k: "ddm_blue", l: "DDM cards blue / نیلے", t: "num" }, { k: "new_members", l: "New team members / نئی ٹیم ممبر", t: "num" },
   { k: "vit_a", l: "Vitamin A capsules / وٹامن اے کیپسول", t: "num" }, { k: "pens", l: "Pens / پین", t: "num" }, { k: "ziplock", l: "Zip-lock bags / زپ لاک", t: "num" },
-  { k: "markers", l: "Markers / مارکرز", t: "num" }, { k: "chalk", l: "Chalk boxes / چاک بکس", t: "num" }, { k: "tally", l: "Tally sheets / ٹیلی شیٹ", t: "num" },
+  { k: "chalk", l: "Chalk boxes / چاک بکس", t: "num" }, { k: "tally", l: "Tally sheets / ٹیلی شیٹ", t: "num" },
   { g: "Mobile teams with … / موبائل ٹیموں کی تعداد جن میں" },
   { k: "tm_govt", l: "≥1 government person / حکومتی فرد", t: "num" }, { k: "tm_female", l: "≥1 female member / خاتون ممبر", t: "num" },
   { k: "tm_local", l: "≥1 local person / مقامی فرد", t: "num" }, { k: "tm_adult", l: "Both members adult / دونوں بالغ", t: "num" },
@@ -212,9 +220,12 @@ function aicTotals(a) {
   fx.forEach(t => FDAYS.forEach(d => { const p = D.ft.get(t.id + "|" + d); if (p) fp.push(p); }));
   tr.forEach(t => FDAYS.forEach(d => { const p = D.ft.get(t.id + "|" + d); if (p) tp.push(p); }));
   const hhc = sumN(mp.flatMap(p => [p.children_households_1_5, p.children_under_1]));
+  // Supplies by the official rules: markers 2 per TEAM (not per day); DDM cards 1 per team member + 1 for the Area Incharge. A person on several records counts once.
+  const seen = new Set(); ts.forEach(t => t.workers.forEach(m => seen.add(m.staff.cnic || m.staff.full_name)));
+  const members = seen.size;
   return { teams: ts.length, mob: mob.length, fx: fx.length, tr: tr.length, hh: sumN(mp.map(p => p.total_households)), hhc, sch: sumN(mp.map(p => p.school_children)), mmp: sumN(mp.map(p => p.mmp_children)),
     tot: sumN(mp.map(p => p.total_children)), dos: doses(sumN(mp.map(p => p.required_doses))), fxExp: sumN(fp.map(p => p.expected_children)), trExp: sumN(tp.map(p => p.expected_children)),
-    fxPrev: sumN(fp.map(p => p.prev_campaign_children)), trPrev: sumN(tp.map(p => p.prev_campaign_children)), missed: ts.reduce((n, t) => n + carried(t.team_no), 0), nos: ts.map(t => t.team_no) };
+    fxPrev: sumN(fp.map(p => p.prev_campaign_children)), trPrev: sumN(tp.map(p => p.prev_campaign_children)), missed: ts.reduce((n, t) => n + carried(t.team_no), 0), nos: ts.map(t => t.team_no), members, markers: ts.length * PER_TEAM.markers, ddm: members + 1 };
 }
 function headerBar(a, title) {
   const nid = campaign.campaign_type === "NID", dates = campaign.start_date ? `${esc(campaign.start_date)}${campaign.end_date ? " → " + esc(campaign.end_date) : ""}` : "";
@@ -225,7 +236,7 @@ function summaryHtml(a, first) {
   const T = aicTotals(a), f = D.figs.get(a.id) || {}, fv = (k) => disp(f[k]);
   const v = (x) => `<td class="v">${disp(x)}</td>`, L = (x, cs = 1) => `<td class="lb ur" colspan="${cs}">${x}</td>`, pair = (l, x) => L(l) + v(x);
   const fx = (k) => v(f[k]);
-  return `<div class="scroll ${first ? "first" : "pb"}"><div class="sheet ur" dir="rtl">
+  return `<div class="scroll ${first ? "first" : "pb"}"><div class="sheet sum ur" dir="rtl">
     ${headerBar(a, "ایریا مائیکروپلان کا خلاصہ")}
     <table class="of" dir="rtl">
       <tr><td colspan="12" class="l ur">یونین کونسل: <b>${esc(geo.uc)}</b> &nbsp;&nbsp; تحصیل/تعلقہ/ٹاؤن: <b>${esc(geo.tehsil)}</b> &nbsp;&nbsp; ضلع: <b>${esc(geo.district)}</b> &nbsp;&nbsp; نظرثانی کی تاریخ: <b dir="ltr">${fv("revision_date")}</b></td></tr>
@@ -234,8 +245,8 @@ function summaryHtml(a, first) {
       <tr>${pair("گزشتہ مہم کے گھروں کی کل تعداد", f.prev_households)}${pair("گھروں کے بچوں کی تعداد", f.prev_hh_children)}${pair("سکول / مدارس کے بچوں کی تعداد", f.prev_school)}${pair("ٹرانزٹ پوائنٹ پر کتنے بچوں کو ویکسین پلائی", T.trPrev)}${pair("فکسڈ سائٹ پر کتنے بچوں کو ویکسین پلائی", T.fxPrev)}${pair("کل بچے", f.prev_total)}</tr>
       <tr><th colspan="12" class="ur">موجودہ مہم کی منصوبہ سازی — نوٹ: اگر گزشتہ مہم کے بعد علاقہ میں کوئی سروے کیا گیا ہے تو مندرجہ ذیل پلان اس کے مطابق بنایا جا سکتا ہے۔</th></tr>
       <tr>${pair("موجودہ مہم کے گھروں کی کل تعداد", T.hh)}${pair("گھروں کے بچوں کی تعداد", T.hhc)}${pair("سکول / مدارس کے بچوں کی تعداد", T.sch)}${pair("ٹرانزٹ پوائنٹ پر متوقع بچوں کی تعداد", T.trExp)}${pair("فکسڈ سائٹ پر متوقع بچوں کی تعداد", T.fxExp)}${pair("کل بچے", T.tot)}</tr>
-      <tr>${pair("ٹیموں کی کل تعداد", T.teams)}${pair("موبائل", T.mob)}${pair("فکسڈ", T.fx)}${pair("ٹرانزٹ", T.tr)}${pair("نئی ٹیم ممبر کی تعداد", f.new_members)}${L("DDM کارڈز کی تعداد")}<td class="sm ur">سرخ ${fv("ddm_red") || "—"} &nbsp; نیلے ${fv("ddm_blue") || "—"}</td></tr>
-      <tr>${pair("تعداد کل ویکسین خوراکیں", T.dos)}${pair("ٹیلی شیٹ کی کل تعداد", f.tally)}${pair("چاک بکس", f.chalk)}${pair("مارکرز", f.markers)}${pair("زپ لاک/پلاسٹک کی تھیلیاں", f.ziplock)}${pair("پین", f.pens)}</tr>
+      <tr>${pair("ٹیموں کی کل تعداد", T.teams)}${pair("موبائل", T.mob)}${pair("فکسڈ", T.fx)}${pair("ٹرانزٹ", T.tr)}${pair("نئی ٹیم ممبر کی تعداد", f.new_members)}${L("DDM کارڈز کی تعداد")}<td class="sm ur">کل: <b>${T.ddm}</b> (ٹیم ممبر ${T.members} + ایریا انچارج 1)<br>سرخ ${fv("ddm_red") || "—"} &nbsp; نیلے ${fv("ddm_blue") || "—"}</td></tr>
+      <tr>${pair("تعداد کل ویکسین خوراکیں", T.dos)}${pair("ٹیلی شیٹ کی کل تعداد", f.tally)}${pair("چاک بکس", f.chalk)}${pair("مارکرز", T.markers)}${pair("زپ لاک/پلاسٹک کی تھیلیاں", f.ziplock)}${pair("پین", f.pens)}</tr>
       <tr><td colspan="12" class="l ur">وٹامن اے کے کیپسول: <b>${fv("vit_a")}</b></td></tr>
     </table>
     <table class="of" dir="rtl" style="margin-top:4px;"><tr>
@@ -259,33 +270,42 @@ function summaryHtml(a, first) {
 }
 
 /* ---------- Operational Plan 5MP (official layout) ---------- */
+/* Each team member's CNIC sits directly under that member's name, inside the same box. */
 function crewCell(t) {
-  return t.workers.length ? t.workers.map(m => `<div class="ur">${esc(m.staff.full_name)}<br><span class="sm">${workerLbl(m)}</span></div>`).join("<hr style='margin:2px 0;border:0;border-top:1px solid #999'>") : "";
+  return t.workers.length ? t.workers.map(m => `<div class="wk ur"><div class="nm">${esc(m.staff.full_name)}</div><div class="cn" dir="ltr"><small>CNIC</small>${esc(m.staff.cnic || "—")}</div><div class="rl">${workerLbl(m)}</div></div>`).join("") : "";
 }
+/* کیفیت: G / L / F tick boxes, one line per team member (same order as the names) */
 function statusCell(t) {
-  return `<div dir="ltr" class="sm">G&nbsp;&nbsp;L&nbsp;&nbsp;F</div>` + t.workers.map(m => `<div class="sm" dir="ltr">CNIC: ${esc(m.staff.cnic || "")}</div>`).join("");
+  return t.workers.map(() => `<div class="glf">G<i></i>L<i></i>F<i></i></div>`).join("") || `<div class="glf">G<i></i>L<i></i>F<i></i></div>`;
 }
+/* G1 / G2 / G3: three separate boxes, the chosen one is filled and ticked */
+const gBoxes = (g) => `<div class="gb">${["G1", "G2", "G3"].map(x => `<span class="${g === x ? "on" : ""}">${x}${g === x ? " ✔" : ""}</span>`).join("")}</div>`;
+/* Fixed per-team requirements (per team, NOT per day): markers 2, DDM cards 2, droppers 10 */
+const PER_TEAM = { markers: 2, ddm: 2, droppers: 10 };
 const LEGEND = `<div class="legend ur"><div>G1=ایسا علاقہ جہاں گھر قریب قریب ہوں، شہری علاقہ، دیہات کے مرکزی علاقے — زیادہ سے زیادہ 100 گھرانے</div><div>G2=ایسا علاقہ جہاں گھروں کے درمیان فاصلہ زیادہ ہو، ٹیم کو ان گھروں کا دورہ کرنے میں ٹائم زیادہ لگے، ایک دن میں ایک سے زیادہ آبادیوں کا دورہ کرنا پڑے — زیادہ سے زیادہ 80 گھرانے</div><div>G3=ایسا علاقہ جس کے رستے دشوار گزار ہوں اور گھر بھی دور دور ہوں — زیادہ سے زیادہ 60 گھرانے</div></div>
   <div class="legend ur"><div>* G - گورنمٹ &nbsp; L- مقامی &nbsp; F - خاتون ممبر</div><div>گھرانہ: ایسے افراد جن کا کھانا پینا ایک ہی باورچی خانے سے منسلک ہو ایک گھرانے میں شمار ہوں گے۔</div><div>مائگرینٹ اور موبائل (MMP) آبادی: افغانستان، پاک افغان سرحد سے منسلک اضلاع، افغان مہاجرین، آئی ڈی پیز، اور ایسے علاقے جہاں پولیو وائرس کی مسلسل تصدیق ہو رہی ہے؛ موبائل آبادی: وہ آبادی جو مستقل طور پر آباد نہیں ہوتی۔</div></div>`;
 
 function mobileSheet(t, first) {
-  const a = aicOf(t), ps = MDAYS.map(d => D.plans.get(t.id + "|" + d));
+  const a = aicOf(t), ps = MDAYS.map(d => D.plans.get(t.id + "|" + d)), nc = 15;
   const rows = MDAYS.map((d, i) => { const p = ps[i], sc = schoolsOf(t.team_no, d), hhc = p ? sumN([p.children_households_1_5, p.children_under_1]) : null;
-    const place = [p?.working_order ? `<div>${esc(p.working_order)}</div>` : "", sc.length ? `<div class="sm">سکول/مدرسہ: ${sc.map(s => esc(s.schools.name)).join("، ")}</div>` : "",
-      p && (p.head_first_family || p.head_last_family) ? `<div class="sm">پہلے گھر کے سربراہ: ${esc(p.head_first_family || "—")} &nbsp;|&nbsp; آخری گھر کے سربراہ: ${esc(p.head_last_family || "—")}</div>` : ""].join("");
-    return `<tr class="tall"><td>${disp(p?.mmp_children)}</td><td>${p ? carried(t.team_no, d) : ""}</td><td>${disp(doses(p?.required_doses))}</td><td>${disp(p?.total_children)}</td><td>${disp(hhc)}</td><td>${disp(p?.school_children)}</td><td>${disp(p?.total_households)}</td><td class="ur">${disp(p?.community_vaccination_place)}</td><td>${disp(p?.team_group)}</td><td class="ur l">${place}</td><td class="ur">${disp(p?.village_area)}</td><td class="ur">${DAYLBL[d]}</td><td>${statusCell(t)}</td>${i === 0 ? `<td rowspan="3">${crewCell(t)}</td><td rowspan="3"><b>${esc(t.team_no)}</b></td>` : ""}</tr>`; }).join("");
+    const place = [p?.working_order ? `<div>${esc(p.working_order)}</div>` : "", sc.length ? `<div class="sm">سکول/مدرسہ: ${sc.map(s => esc(s.schools.name)).join("، ")}</div>` : ""].join("");
+    // First / last household head: two separately labelled boxes under each day (first = right-hand box, last = left-hand box, as Urdu is read)
+    const headsRow = `<tr><td colspan="6" class="heads ur" dir="rtl"><div class="hd"><span>آخری گھر کے سربراہ کا نام</span><b>${disp(p?.head_last_family) || "—"}</b></div></td><td colspan="7" class="heads ur" dir="rtl"><div class="hd"><span>پہلے گھر کے سربراہ کا نام</span><b>${disp(p?.head_first_family) || "—"}</b></div></td></tr>`;
+    return `<tr class="tall"><td>${disp(p?.mmp_children)}</td><td>${p ? carried(t.team_no, d) : ""}</td><td>${disp(doses(p?.required_doses))}</td><td>${disp(p?.total_children)}</td><td>${disp(hhc)}</td><td>${disp(p?.school_children)}</td><td>${disp(p?.total_households)}</td><td class="ur">${disp(p?.community_vaccination_place)}</td><td>${gBoxes(p?.team_group)}</td><td class="ur l">${place}</td><td class="ur">${disp(p?.village_area)}</td><td class="ur" style="font-size:15px"><b>${DAYLBL[d]}</b></td><td>${statusCell(t)}</td>${i === 0 ? `<td rowspan="6" style="text-align:right">${crewCell(t)}</td><td rowspan="6"><b style="font-size:24px">${esc(t.team_no)}</b></td>` : ""}</tr>${headsRow}`; }).join("");
   const S = (k) => sumN(ps.filter(Boolean).map(p => p[k]));
-  const tot = `<tr><td>${disp(S("mmp_children"))}</td><td>${carried(t.team_no)}</td><td>${disp(doses(S("required_doses")))}</td><td>${disp(S("total_children"))}</td><td>${disp(sumN(ps.filter(Boolean).flatMap(p => [p.children_households_1_5, p.children_under_1])))}</td><td>${disp(S("school_children"))}</td><td>${disp(S("total_households"))}</td><td colspan="7" class="ur l"><b>ٹوٹل</b></td></tr>`;
+  const blue = sumN(ps.filter(Boolean).map(p => p.blue_capsules_required)), red = sumN(ps.filter(Boolean).map(p => p.red_capsules_required));
+  const tot = `<tr><td>${disp(S("mmp_children"))}</td><td>${carried(t.team_no)}</td><td>${disp(doses(S("required_doses")))}</td><td>${disp(S("total_children"))}</td><td>${disp(sumN(ps.filter(Boolean).flatMap(p => [p.children_households_1_5, p.children_under_1])))}</td><td>${disp(S("school_children"))}</td><td>${disp(S("total_households"))}</td><td class="ur l"><b>ٹوٹل</b></td></tr>`;
+  const colg = `<colgroup>${[5, 5, 5.5, 5, 5.5, 5, 5, 5.5, 8, 13, 5, 5, 7.5, 15.5, 4].map(w => `<col style="width:${w}%">`).join("")}</colgroup>`;
   return `<div class="scroll ${first ? "first" : "pb"}"><div class="sheet ur">
     ${headerBar(a, "ایریا مائیکرو پلان شیٹ / آپریشنل پلان")}
-    <div class="ur" style="font-size:10.5px;margin-bottom:3px;" dir="rtl">یونین کونسل: <b>${esc(geo.uc)}</b> &nbsp; ایریا انچارج: <b>${a ? esc(a.full_name) + " (AIC " + esc(a.aic_no) + ")" : ""}</b> &nbsp; ٹیم نمبر: <b>${esc(t.team_no)}</b> &nbsp; (موبائل ٹیم)</div>
-    <table class="of" dir="ltr"><colgroup><col style="width:5%"><col style="width:6%"><col style="width:5%"><col style="width:5%"><col style="width:6%"><col style="width:6%"><col style="width:5%"><col style="width:8%"><col style="width:4%"><col style="width:18%"><col style="width:8%"><col style="width:6%"><col style="width:8%"><col style="width:8%"><col style="width:3%"></colgroup>
-      <thead><tr class="ur"><th rowspan="2">MMP آبادی کے بچوں کی تعداد</th><th rowspan="2">گزشتہ مہم میں رہ جانے والے بچوں کی تعداد</th><th rowspan="2">پولیو ویکسین خوراکیں</th><th colspan="3">5 سال سے کم عمر بچوں کی تعداد</th><th rowspan="2">کل گھرانے</th><th rowspan="2">کمیونٹی ویکسینیشن کی جگہ</th><th rowspan="2">G1/G2/G3</th><th rowspan="2">جگہ/محلہ/کالونی/سکول یا مدرسہ کا نام<br><span class="sm">(ٹیم کے کام کرنے کی ترتیب: نقشہ کے حساب سے)</span></th><th rowspan="2">گاؤں یا علاقہ کا نام</th><th rowspan="2">مہم کا دن</th><th rowspan="2">کیفیت</th><th rowspan="2">نام ٹیم کارکن اور عہدہ</th><th rowspan="2">ٹیم نمبر</th></tr>
+    <div class="ur" style="font-size:16px;font-weight:700;margin-bottom:4px;" dir="rtl">یونین کونسل: <b>${esc(geo.uc)}</b> &nbsp; ایریا انچارج: <b>${a ? esc(a.full_name) + " (AIC " + esc(a.aic_no) + ")" : ""}</b> &nbsp; ٹیم نمبر: <b>${esc(t.team_no)}</b> &nbsp; (موبائل ٹیم)</div>
+    <table class="of" dir="ltr">${colg}
+      <thead><tr class="ur"><th rowspan="2">MMP آبادی کے بچوں کی تعداد</th><th rowspan="2">گزشتہ مہم میں رہ جانے والے بچے</th><th rowspan="2">پولیو ویکسین خوراکیں</th><th colspan="3">5 سال سے کم عمر بچوں کی تعداد</th><th rowspan="2">کل گھرانے</th><th rowspan="2">کمیونٹی ویکسینیشن کی جگہ</th><th rowspan="2">G1 / G2 / G3</th><th rowspan="2">جگہ/محلہ/کالونی/سکول یا مدرسہ کا نام<br><span class="sm">(ٹیم کے کام کرنے کی ترتیب: نقشہ کے حساب سے)</span></th><th rowspan="2">گاؤں یا علاقہ کا نام</th><th rowspan="2">مہم کا دن</th><th rowspan="2">کیفیت</th><th rowspan="2">نام ٹیم کارکن اور عہدہ</th><th rowspan="2">ٹیم نمبر</th></tr>
       <tr class="ur"><th>کل تعداد</th><th>پانچ سال سے کم عمر گھروں کے بچے</th><th>سکول/مدرسہ کے بچے</th></tr></thead>
       <tbody>${rows}</tbody></table>
-    <table class="of" dir="ltr" style="margin-top:-1px;"><colgroup><col style="width:5%"><col style="width:6%"><col style="width:5%"><col style="width:5%"><col style="width:6%"><col style="width:6%"><col style="width:5%"><col style="width:62%"></colgroup><tbody>${tot.replace('<td colspan="7" class="ur l"><b>ٹوٹل</b></td>', '<td class="ur l"><b>ٹوٹل</b></td>')}</tbody></table>
-    <table class="of ur" dir="rtl" style="margin-top:3px;"><thead><tr><th>درکار اشیاء</th><th>مارکر</th><th>چاک</th><th>ڈراپر</th><th>پلاسٹک کی تھیلیاں</th><th>وٹامن کیپسول</th><th>نیلے</th><th>سرخ</th></tr></thead><tbody><tr class="tall"><td>تعداد</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table>
-    <div class="ur sm" style="font-size:9.5px;margin-top:3px;border:1px solid #222;padding:2px 4px;" dir="rtl">کام شروع کرنے کا وقت ہر دن: 1۔ ــــــــــ 2۔ ــــــــــ 3۔ ــــــــــ &nbsp;&nbsp; کیچ اپ شروع کرنے کا وقت ہر دن: 1۔ ــــــــــ 2۔ ــــــــــ 3۔ ــــــــــ</div>
+    <table class="of" dir="ltr" style="margin-top:-1.5px;"><colgroup>${[5, 5, 5.5, 5, 5.5, 5, 5, 64].map(w => `<col style="width:${w}%">`).join("")}</colgroup><tbody>${tot}</tbody></table>
+    <table class="of ur" dir="rtl" style="margin-top:5px;"><thead><tr><th>درکار اشیاء (فی ٹیم)</th><th>مارکر</th><th>DDM کارڈ</th><th>ڈراپر</th><th>چاک</th><th>پلاسٹک کی تھیلیاں</th><th>نیلے کیپسول</th><th>سرخ کیپسول</th></tr></thead><tbody><tr class="tall" style="height:auto"><td>تعداد</td><td>${PER_TEAM.markers}</td><td>${PER_TEAM.ddm}</td><td>${PER_TEAM.droppers}</td><td></td><td></td><td>${disp(blue)}</td><td>${disp(red)}</td></tr></tbody></table>
+    <div class="ur" style="font-size:14px;font-weight:700;margin-top:4px;border:1.5px solid #111;padding:3px 8px;" dir="rtl">کام شروع کرنے کا وقت ہر دن: 1۔ ــــــــــ 2۔ ــــــــــ 3۔ ــــــــــ &nbsp;&nbsp; کیچ اپ شروع کرنے کا وقت ہر دن: 1۔ ــــــــــ 2۔ ــــــــــ 3۔ ــــــــــ</div>
     ${LEGEND}</div></div>`;
 }
 
@@ -299,7 +319,7 @@ function ftSheet(t, first) {
     <div class="ur" style="font-size:10.5px;margin-bottom:3px;" dir="rtl">یونین کونسل: <b>${esc(geo.uc)}</b> &nbsp; ایریا انچارج: <b>${a ? esc(a.full_name) + " (AIC " + esc(a.aic_no) + ")" : ""}</b> &nbsp; ٹیم نمبر: <b>${esc(t.team_no)}</b> &nbsp; (${fixed ? "فکسڈ سائٹ" : "ٹرانزٹ پوائنٹ"})</div>
     <table class="of" dir="ltr"><colgroup><col style="width:9%"><col style="width:14%"><col style="width:36%"><col style="width:9%"><col style="width:12%"><col style="width:12%"><col style="width:8%"></colgroup>
       <thead><tr class="ur"><th>پولیو ویکسین خوراکیں</th><th>5 سال سے کم عمر بچوں کی تعداد — گزشتہ مہم میں کتنے بچوں کو ویکسین پلائی گئی</th><th>${fixed ? "ہسپتال" : "اڈہ / محلہ / کالونی"}</th><th>مہم کا دن</th><th>کیفیت</th><th>نام ٹیم کارکن اور عہدہ</th><th>فکسڈ سائٹ یا ٹرانزٹ پوائنٹ</th></tr></thead><tbody>${rows}</tbody></table>
-    <table class="of ur" dir="rtl" style="margin-top:3px;"><thead><tr><th>درکار اشیاء</th><th>مارکر</th><th>ڈراپر</th><th>پلاسٹک کی تھیلیاں</th></tr></thead><tbody><tr class="tall"><td>تعداد</td><td></td><td></td><td></td></tr></tbody></table>
+    <table class="of ur" dir="rtl" style="margin-top:3px;"><thead><tr><th>درکار اشیاء (فی ٹیم)</th><th>مارکر</th><th>DDM کارڈ</th><th>ڈراپر</th><th>پلاسٹک کی تھیلیاں</th></tr></thead><tbody><tr class="tall" style="height:auto"><td>تعداد</td><td>${PER_TEAM.markers}</td><td>${PER_TEAM.ddm}</td><td>${PER_TEAM.droppers}</td><td></td></tr></tbody></table>
     <div class="legend ur"><div>* G - گورنمٹ &nbsp; L- مقامی &nbsp; F - خاتون ممبر</div><div>٭ ٹرانزٹ پوائنٹ پر وٹامن اے نہیں دیے جائیں گے۔</div></div></div></div>`;
 }
 function teamHtml(t, first) { return t.team_type === "mobile" ? mobileSheet(t, first) : (t.team_type === "fixed" || t.team_type === "transit") ? ftSheet(t, first) : ""; }

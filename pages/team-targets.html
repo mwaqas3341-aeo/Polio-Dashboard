@@ -124,9 +124,9 @@
       document.getElementById("t_school").value = data.school_children;
       document.getElementById("t_household").value = data.household_children;
       document.getElementById("t_mmp").value = data.mmp_children;
-      document.getElementById("t_households").value = data.household_houses + data.mmp_houses;
+      document.getElementById("t_households").value = data.household_houses;   // MMP houses are NOT part of the household target
       updatePreview();
-      note.textContent = `Pulled from registers: ${data.school_children} school + ${data.household_children} household + ${data.mmp_children} MMP/HRMP children, ${data.household_houses + data.mmp_houses} houses. Adjust anything before saving.`;
+      note.textContent = `Pulled from registers: ${data.school_children} school + ${data.household_children} household + ${data.mmp_children} MMP/HRMP children (MMP is kept separate), ${data.household_houses} household houses. Adjust anything before saving.`;
     });
 
     document.getElementById("targetForm").addEventListener("submit", async (e) => {
