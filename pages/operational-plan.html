@@ -60,7 +60,7 @@
 <script src="../assets/js/nav.js?v=20261014f"></script>
 <script src="../assets/js/crud.js?v=20261014f"></script>
 <script src="../assets/js/validators.js?v=20261014f"></script>
-<script src="../assets/js/images.js?v=20261014f"></script>
+<script src="../assets/js/images.js?v=20261014g"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 let me = null, camps = [], campaign = null, ucName = "", aics = [], aic = null, teams = [], plans = {}, teamMaps = {}, ed = null, formula = { ...FORMULA_DEFAULTS }, vitYes = false;
@@ -111,9 +111,9 @@ async function loadAic() {
    A chosen picture is previewed at once; it can be rotated before it is saved, and a saved map can be rotated afterwards. */
 let pendingMap = null;
 const mapMsg = (t, bad) => { const e = $("mapErr"); if (e) { e.textContent = t || ""; e.style.display = t ? "block" : "none"; e.style.color = bad ? "#9b1c1c" : "#14633f"; } };
-async function showPendingMap() { const pv = $("mapPv"); if (!pv || !pendingMap) return; pv.innerHTML = `<img src="${URL.createObjectURL(pendingMap)}" alt="chosen map">`; }
+async function showPendingMap() { const pv = $("mapPv"); if (!pv || !pendingMap) return; pv.innerHTML = `<img src="${URL.createObjectURL(pendingMap)}" alt="chosen map">`; ImgTools.previewBox(pv.firstChild, "map"); }
 async function showStoredMap() { const { t, day } = ed, path = teamMaps[t.id + "|" + day], pv = $("mapPv"); if (!pv) return; if (!path) { pv.innerHTML = ""; return; }
-  const u = await ImgTools.signed(supabaseClient, "operational-plans", path); pv.innerHTML = u ? `<img src="${u}${u.includes("?") ? "&" : "?"}r=${Date.now()}" alt="Team ${esc(t.team_no)} day ${day} map">` : `<span class="error-text">The saved map could not be loaded.</span>`; }
+  const u = await ImgTools.signed(supabaseClient, "operational-plans", path); pv.innerHTML = u ? `<img src="${u}${u.includes("?") ? "&" : "?"}r=${Date.now()}" alt="Team ${esc(t.team_no)} day ${day} map">` : `<span class="error-text">The saved map could not be loaded.</span>`; if (u) ImgTools.previewBox(pv.firstChild, "map"); }
 async function chooseTeamMap(file) {
   if (!file) return; try { if (!/^image\//.test(file.type)) throw new Error("Please choose a picture (JPG or PNG)"); pendingMap = await compressImage(file, 2400, 0.85); tabMap(); mapMsg("Picture chosen — rotate it if needed, then press “Save map”."); }
   catch (e) { pendingMap = null; mapMsg("Map not chosen: " + msg(e), true); }

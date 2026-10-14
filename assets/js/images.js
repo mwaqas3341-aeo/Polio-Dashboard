@@ -44,5 +44,19 @@ const ImgTools = (() => {
     return out;
   }
   const signed = async (client, bucket, path) => { const { data } = await client.storage.from(bucket).createSignedUrl(path, 600); return data?.signedUrl || null; };
-  return { rotateBlob, rotateInput, rotateStored, signed };
+  /* Puts an <img> inside a frame of the same proportions and fit it has in the PDF, so the user sees exactly how the picture will print:
+     "cnic" = one CNIC card (85.6 x 54 mm, picture kept whole, white margins), "map" = the map area of the portrait PDF page (190 x 225 mm). Safe to call twice. */
+  const FRAMES = { cnic: { ar: "85.6 / 54", maxw: "360px", note: "As it will appear in the PDF (CNIC card 85.6 × 54 mm)" }, map: { ar: "190 / 225", maxw: "420px", note: "As it will appear in the PDF (map area of the page)" } };
+  function previewBox(img, kind) {
+    const F = FRAMES[kind]; if (!img || !F) return img; if (img.dataset.pbox) return img; img.dataset.pbox = "1";
+    const box = document.createElement("div"); box.style.cssText = "margin:.3rem 0;max-width:" + F.maxw + ";width:100%";
+    const fr = document.createElement("div"); fr.style.cssText = "aspect-ratio:" + F.ar + ";width:100%;background:#fff;border:2px solid #555;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;box-sizing:border-box";
+    const cap = document.createElement("div"); cap.style.cssText = "font-size:.72rem;color:#666;margin-top:2px"; cap.textContent = F.note;
+    img.parentNode.insertBefore(box, img); fr.appendChild(img); box.appendChild(fr); box.appendChild(cap);
+    const hidden0 = img.style.display === "none";
+    img.style.cssText = "max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;border:0;border-radius:0;margin:0;display:" + (hidden0 ? "none" : "block"); box.className = "pbox";
+    const sync = () => { const off = img.style.display === "none" || !img.getAttribute("src"); box.style.display = off ? "none" : ""; };
+    new MutationObserver(sync).observe(img, { attributes: true, attributeFilter: ["style", "src"] }); sync(); return img;
+  }
+  return { rotateBlob, rotateInput, rotateStored, signed, previewBox };
 })();
