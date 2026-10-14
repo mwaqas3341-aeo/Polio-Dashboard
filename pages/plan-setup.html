@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Plan questionnaire — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261014c">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014d">
 <style>
   .yn { display:inline-flex; gap:6px; } .yn button { border:1.5px solid var(--b0); background:#fff; border-radius:999px; padding:5px 18px; font-weight:800; cursor:pointer; font-size:.85rem; color:var(--t2); }
   .yn button.on-yes { background:var(--ok); border-color:var(--ok); color:#fff; } .yn button.on-no { background:var(--t2); border-color:var(--t2); color:#fff; }
@@ -38,7 +38,7 @@
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../assets/js/config.js?v=20261014c"></script><script src="../assets/js/supabaseClient.js?v=20261014c"></script><script src="../assets/js/nav.js?v=20261014c"></script><script src="../assets/js/forms.js?v=20261014c"></script>
+<script src="../assets/js/config.js?v=20261014d"></script><script src="../assets/js/supabaseClient.js?v=20261014d"></script><script src="../assets/js/nav.js?v=20261014d"></script><script src="../assets/js/forms.js?v=20261014d"></script>
 <script>
 const $ = (id) => document.getElementById(id), E = FS.esc;
 let B = null, me = null, canCaps = false, saveT = {}, X = { prev: null, missed: [], mmp: [], sch: [], cov: [] };
@@ -77,13 +77,20 @@ async function reloadCov() { const { data, error } = await supabaseClient.from("
 const caps = () => FS.getForm(B, "campaign_setup", null);
 const ansOf = (aic, tn) => (((FS.getForm(B, "plan_setup", aic) || {}).teams || {})[tn]) || {};
 function yn(attr, cur, dis) { return `<span class="yn"><button type="button" ${dis ? "disabled" : ""} ${attr} data-v="yes" class="${cur === "yes" ? "on-yes" : ""}">Yes</button><button type="button" ${dis ? "disabled" : ""} ${attr} data-v="no" class="${cur === "no" ? "on-no" : ""}">No</button></span>`; }
+function capsTable() {
+  const mob = B.teams.filter(t => t.team_type === "mobile"), rows = mob.map(t => ({ t, blue: FS.capTeam(B, t, "blue"), red: FS.capTeam(B, t, "red") }));
+  const tb = rows.reduce((n, r) => n + r.blue, 0), tr = rows.reduce((n, r) => n + r.red, 0);
+  return `<div class="sub"><p class="muted">Blue and Red capsules for each team are worked out automatically from the <a href="formulas.html">Calculation formulas</a> and the team's Operational Plan (all days). Nothing needs to be typed here.</p>
+    <div class="table-wrap"><table><thead><tr><th>Team</th><th>Blue capsules</th><th>Red capsules</th></tr></thead><tbody>${rows.map(r => `<tr><td>Team ${E(r.t.team_no)}</td><td>${r.blue}</td><td>${r.red}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">No mobile team yet.</td></tr>'}<tr><td><b>Total</b></td><td><b>${tb}</b></td><td><b>${tr}</b></td></tr></tbody></table></div>
+    <p class="muted">A team shows 0 until its Operational Plan has children figures. The formulas are set by the administrator or UCMO.</p></div>`;
+}
 function drawCaps() {
   const c = caps(), dis = !canCaps;
   $("capsCard").innerHTML = `<div class="q"><div class="qt">Will Vitamin A capsules (Blue and Red) be needed in this campaign?</div>${yn('data-cq="1"', c.vit_a_needed, dis)}
-    ${c.vit_a_needed === "yes" ? `<div class="sub"><div><label>Blue capsules needed (quantity)</label><input type="number" min="0" data-cf="vit_blue" value="${E(c.vit_blue ?? "")}" ${dis ? "disabled" : ""}></div><div><label>Red capsules needed (quantity)</label><input type="number" min="0" data-cf="vit_red" value="${E(c.vit_red ?? "")}" ${dis ? "disabled" : ""}></div></div>` : ""}
+    ${c.vit_a_needed === "yes" ? capsTable() : ""}
     ${dis ? `<p class="muted">Only the UCMO or an admin can answer this campaign-level question.</p>` : ""}<div class="st ${PS.capsDone(c) ? "ok" : "todo"}" style="margin-top:6px">${PS.capsDone(c) ? "✓ Answered" : "Not answered yet"}</div></div>`;
 }
-function capsClick(e) { const b = e.target.closest("[data-cq]"); if (!b || !canCaps) return; FS.draft(B, "campaign_setup", null, d => { d.vit_a_needed = b.dataset.v; if (d.vit_a_needed === "no") { delete d.vit_blue; delete d.vit_red; } }); drawCaps(); persist("campaign_setup", null); stats(); }
+function capsClick(e) { const b = e.target.closest("[data-cq]"); if (!b || !canCaps) return; FS.draft(B, "campaign_setup", null, d => { d.vit_a_needed = b.dataset.v; delete d.vit_blue; delete d.vit_red; /* quantities now come from the formulas */ }); drawCaps(); persist("campaign_setup", null); stats(); }
 function capsInput(e) { const k = e.target.dataset.cf; if (!k || !canCaps) return; FS.draft(B, "campaign_setup", null, d => { d[k] = e.target.value; }); persist("campaign_setup", null); stats(); }
 function micro(t) {
   if (t.team_type === "mobile") { const done = [1, 2, 3].filter(d => { const p = B.plans.find(x => x.team_id === t.id && x.campaign_day === d); return p && p.village_area && p.total_households != null && p.total_children != null; }).length; return { done, of: 3, link: "operational-plan.html" }; }

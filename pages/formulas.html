@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculation formulas — Polio Campaign Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014d">
+<style>
+  .frow { display:grid; grid-template-columns:repeat(auto-fit,minmax(14rem,1fr)); gap:.8rem; margin:.6rem 0; }
+  .fcard { border:1px solid #cfd6dd; border-radius:10px; padding:.8rem; margin:.8rem 0; }
+  .fcard h3 { margin:.1rem 0 .3rem; } .blue h3 { color:#1d5fbf; } .red h3 { color:#b3261e; }
+  .res { display:grid; grid-template-columns:repeat(auto-fit,minmax(9rem,1fr)); gap:.6rem; margin-top:.6rem; } .res div { background:#f3f6f9; border-radius:8px; padding:.6rem; text-align:center; } .res b { display:block; font-size:1.4rem; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="topbar"><h1>Calculation formulas</h1></div>
+      <p class="muted">These formulas decide how many vaccine doses and how many Blue and Red Vitamin A capsules each team needs. Every team's Operational Plan uses them automatically. Only an administrator or the UCMO can change them.</p>
+
+      <div class="card">
+        <div class="form-grid"><div><label>Union council</label><select id="ucSel"></select></div></div>
+        <div id="roleNote" class="muted" style="margin-top:.4rem"></div>
+
+        <div class="fcard"><h3>Polio vaccine</h3>
+          <div class="frow"><div><label>Doses needed per child</label><input type="number" step="0.001" min="0.001" max="10" id="f_dose"></div></div>
+          <p class="muted">Vaccine doses required = total children × this number (1.11 includes the usual wastage).</p></div>
+
+        <div class="fcard blue"><h3>Blue capsules</h3>
+          <div class="frow"><div><label>Capsules per child</label><input type="number" step="0.001" min="0" max="10" id="f_bluen"></div>
+          <div><label>Counted for</label><select id="f_blueb"></select></div></div></div>
+
+        <div class="fcard red"><h3>Red capsules</h3>
+          <div class="frow"><div><label>Capsules per child</label><input type="number" step="0.001" min="0" max="10" id="f_redn"></div>
+          <div><label>Counted for</label><select id="f_redb"></select></div></div></div>
+
+        <p class="muted">Capsules are worked out only for campaigns where Vitamin A capsules are marked <b>Yes</b>. A fraction is always rounded up. “Children 1–5 years” means household children aged 1 to 5 plus school and MMP children; “under 1 year” is the household under-1 figure of the plan.</p>
+        <div class="error-text" id="fErr" style="display:none"></div>
+        <button class="btn" id="saveF">Save formulas</button> <span id="fOk" class="muted"></span>
+      </div>
+
+      <div class="card"><h2>Try it</h2>
+        <p class="muted">Type example numbers to see what the formulas above give (nothing is saved).</p>
+        <div class="frow"><div><label>Children under 1 year</label><input type="number" min="0" id="t_u1" value="20"></div><div><label>Household children 1–5 years</label><input type="number" min="0" id="t_hh" value="150"></div>
+          <div><label>School children</label><input type="number" min="0" id="t_sc" value="30"></div><div><label>MMP children</label><input type="number" min="0" id="t_mmp" value="10"></div></div>
+        <div class="res"><div><b id="r_total">0</b>Total children</div><div><b id="r_dose">0</b>Vaccine doses</div><div><b id="r_blue" style="color:#1d5fbf">0</b>Blue capsules</div><div><b id="r_red" style="color:#b3261e">0</b>Red capsules</div></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/config.js?v=20261014d"></script>
+  <script src="../assets/js/supabaseClient.js?v=20261014d"></script>
+  <script src="../assets/js/nav.js?v=20261014d"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const BASES = { under_1: "Children under 1 year", age_1_5: "Children 1–5 years (household + school + MMP)", all_children: "All children" };
+    let canEdit = false;
+    (async () => {
+      const session = await requireAuth(); if (!session) return;
+      renderSidebar("formulas.html");
+      const me = await loadCurrentProfile(); canEdit = !!me && ["admin", "ucmo"].includes(me.role);
+      $("roleNote").textContent = canEdit ? "You can change these formulas." : "You can view the formulas. Only an administrator or the UCMO can change them.";
+      $("f_blueb").innerHTML = $("f_redb").innerHTML = Object.entries(BASES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+      const { data: ucs } = await supabaseClient.from("union_councils").select("id, name").order("name");
+      $("ucSel").innerHTML = (ucs || []).map(u => `<option value="${u.id}">${u.name}</option>`).join("") || `<option value="">No union council</option>`;
+      $("ucSel").onchange = load; ["f_dose", "f_bluen", "f_blueb", "f_redn", "f_redb", "t_u1", "t_hh", "t_sc", "t_mmp"].forEach(i => $(i).addEventListener("input", tryIt)); $("f_blueb").onchange = $("f_redb").onchange = tryIt;
+      $("saveF").onclick = save; await load();
+    })();
+    async function load() {
+      const uc = $("ucSel").value; $("fOk").textContent = ""; $("fErr").style.display = "none"; if (!uc) return;
+      const f = await loadFormula(uc);
+      $("f_dose").value = f.doses_per_child; $("f_bluen").value = f.blue_per_child; $("f_blueb").value = f.blue_base; $("f_redn").value = f.red_per_child; $("f_redb").value = f.red_base;
+      ["f_dose", "f_bluen", "f_blueb", "f_redn", "f_redb"].forEach(i => $(i).disabled = !canEdit); $("saveF").style.display = canEdit ? "" : "none"; tryIt();
+    }
+    function tryIt() {
+      const n = (i) => Math.max(0, Number($(i).value) || 0), u1 = n("t_u1"), hh = n("t_hh"), sc = n("t_sc"), mm = n("t_mmp"), total = u1 + hh + sc + mm;
+      const base = (b) => b === "under_1" ? u1 : b === "age_1_5" ? hh + sc + mm : total;
+      $("r_total").textContent = total; $("r_dose").textContent = (Math.round(total * (Number($("f_dose").value) || 0) * 100) / 100).toFixed(2);
+      $("r_blue").textContent = Math.ceil(base($("f_blueb").value) * (Number($("f_bluen").value) || 0) - 1e-9); $("r_red").textContent = Math.ceil(base($("f_redb").value) * (Number($("f_redn").value) || 0) - 1e-9);
+    }
+    async function save() {
+      const err = $("fErr"); err.style.display = "none"; $("fOk").textContent = "";
+      const v = { uc_id: $("ucSel").value, doses_per_child: Number($("f_dose").value), blue_per_child: Number($("f_bluen").value), blue_base: $("f_blueb").value, red_per_child: Number($("f_redn").value), red_base: $("f_redb").value };
+      if (!v.uc_id) return fail("Choose a union council.");
+      if (!(v.doses_per_child > 0 && v.doses_per_child <= 10)) return fail("Doses per child must be more than 0 and at most 10.");
+      if (!(v.blue_per_child >= 0 && v.blue_per_child <= 10) || !(v.red_per_child >= 0 && v.red_per_child <= 10)) return fail("Capsules per child must be between 0 and 10.");
+      if (!confirm("Save these formulas? Open campaigns of this union council will be recalculated (closed campaigns are not changed).")) return;
+      $("saveF").disabled = true;
+      const { error } = await supabaseClient.from("calc_formulas").upsert({ ...v, updated_at: new Date().toISOString() }, { onConflict: "uc_id" });
+      $("saveF").disabled = false; if (error) return fail(error.message); $("fOk").textContent = "Saved ✓ — plans recalculated.";
+    }
+    function fail(t) { const e = $("fErr"); e.textContent = t; e.style.display = "block"; }
+  </script>
+</body>
+</html>

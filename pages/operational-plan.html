@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Operational Plan — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261014c">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014d">
 <style>
   .crumb { font-size:.9rem; color:#555; margin:.4rem 0; } .crumb b { color:#1a7f5a; }
   .tcard { border:1px solid var(--line); border-radius:var(--radius); background:#fff; padding:.7rem .9rem; margin:.7rem 0; }
@@ -55,15 +55,15 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="../assets/js/config.js?v=20261014c"></script>
-<script src="../assets/js/supabaseClient.js?v=20261014c"></script>
-<script src="../assets/js/nav.js?v=20261014c"></script>
-<script src="../assets/js/crud.js?v=20261014c"></script>
-<script src="../assets/js/validators.js?v=20261014c"></script>
-<script src="../assets/js/images.js?v=20261014c"></script>
+<script src="../assets/js/config.js?v=20261014d"></script>
+<script src="../assets/js/supabaseClient.js?v=20261014d"></script>
+<script src="../assets/js/nav.js?v=20261014d"></script>
+<script src="../assets/js/crud.js?v=20261014d"></script>
+<script src="../assets/js/validators.js?v=20261014d"></script>
+<script src="../assets/js/images.js?v=20261014d"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-let me = null, camps = [], campaign = null, ucName = "", aics = [], aic = null, teams = [], plans = {}, picCounts = {}, teamMaps = {}, ed = null;
+let me = null, camps = [], campaign = null, ucName = "", aics = [], aic = null, teams = [], plans = {}, picCounts = {}, teamMaps = {}, ed = null, formula = { ...FORMULA_DEFAULTS }, vitYes = false;
 const GROUPS = ["G1", "G2", "G3"];
 const MANAGER = () => ["admin", "district_coordinator", "ucmo"].includes(me.role);
 const num = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : 0; };
@@ -86,6 +86,8 @@ async function loadCampaign() {
   const { data } = await supabaseClient.from("staff").select("id, full_name, aic_no, area_map_path, uc_id").eq("designation", "aic").eq("status", "active").order("aic_no");
   aics = data || []; $("aicSel").innerHTML = aics.map(a => `<option value="${a.id}">AIC ${a.aic_no} — ${esc(a.full_name)}</option>`).join("") || `<option value="">No Area Incharge</option>`;
   if (me.role === "aic" && me.staff_id) { $("aicSel").value = me.staff_id; $("aicSel").disabled = true; }
+  formula = await loadFormula(campaign.uc_id);
+  { const { data: cf } = await supabaseClient.from("campaign_forms").select("data").eq("campaign_id", campaign.id).eq("form_type", "campaign_setup").maybeSingle(); vitYes = !!(cf && cf.data && cf.data.vit_a_needed === "yes"); }
   const s = campaign.missed_children_status;
   $("mcStatus").innerHTML = `Missed Children Report: <span class="tag ${s === "pending" ? "warn" : "ok"}">${s === "pending" ? "Pending" : s === "submitted" ? "Submitted" : "None missed (confirmed)"}</span> <span class="muted">— completed under Campaign Details.</span>`;
   await loadAic();
@@ -170,9 +172,10 @@ const locked = () => ed.plan?.status === "submitted" && !MANAGER();
 
 function totalsHtml() {
   const p = ed.plan, sch = ed.schools.reduce((n, s) => n + s.target_children, 0), mmp = ed.mmp.reduce((n, m) => n + m.child_count, 0);
-  const hh = (p && p.children_households_1_5) || 0, u1 = (p && p.children_under_1) || 0, total = hh + u1 + sch, doses = Math.round(total * 111) / 100;
+  const hh = (p && p.children_households_1_5) || 0, u1 = (p && p.children_under_1) || 0, k = calcFromFormula(formula, { u1, hh, school: sch, mmp }), total = k.total, doses = k.doses;
   return `<div class="calc" id="calc"><div><b id="cTotal">${total}</b><span>Total children under 5<span class="urdu">5 سال سے کم عمر بچوں کی کل تعداد</span></span></div>
-    <div><b id="cDoses">${Math.round(doses)}</b><span>Polio doses required (children × 1.11 = ${doses.toFixed(2)})<span class="urdu">پولیو ویکسین خوراکیں</span></span></div>
+    <div><b id="cDoses">${Math.round(doses)}</b><span id="cDosesTxt">Polio doses required (children × ${formula.doses_per_child} = ${doses.toFixed(2)})<span class="urdu">پولیو ویکسین خوراکیں</span></span></div>
+    ${vitYes ? `<div><b id="cBlue" style="color:#1d5fbf">${k.blue}</b><span>Blue capsules required</span></div><div><b id="cRed" style="color:#b3261e">${k.red}</b><span>Red capsules required</span></div>` : ""}
     <div><b>${sch}</b><span>School / madrasa children (from School list)<span class="urdu">سکول / مدرسہ کے بچے</span></span></div>
     <div><b>${mmp}</b><span>MMP children (from MMP list)</span></div>
     <div><b>${ed.carried}</b><span>Missed from last campaign<span class="urdu">گزشتہ مہم میں رہ جانے والے بچے</span></span></div></div>`;
@@ -197,7 +200,8 @@ function tabPlan() {
       ${ed.plan?.status === "submitted" && MANAGER() ? `<button class="btn ghost" onclick="reopenPlan()">Reopen for corrections</button>` : ""}</div>`;
   ["f_c15", "f_u1"].forEach(i => { const el = $(i); if (el) el.oninput = refreshCalc; });
 }
-function refreshCalc() { const sch = ed.schools.reduce((n, s) => n + s.target_children, 0), total = num($("f_c15").value) + num($("f_u1").value) + sch; $("cTotal").textContent = total; $("cDoses").textContent = Math.round(total * 111 / 100); }
+function refreshCalc() { const sch = ed.schools.reduce((n, s) => n + s.target_children, 0), mmp = ed.mmp.reduce((n, m) => n + m.child_count, 0), k = calcFromFormula(formula, { u1: num($("f_u1").value), hh: num($("f_c15").value), school: sch, mmp });
+  $("cTotal").textContent = k.total; $("cDoses").textContent = Math.round(k.doses); if ($("cBlue")) { $("cBlue").textContent = k.blue; $("cRed").textContent = k.red; } }
 function readPlan() { return { village_area: $("f_village").value.trim() || null, community_vaccination_place: $("f_place").value.trim() || null, team_group: $("f_group").value || null, working_order: $("f_order").value.trim() || null,
   head_first_family: $("f_first").value.trim() || null, head_last_family: $("f_last").value.trim() || null, total_households: numOrNull($("f_hh").value), children_households_1_5: numOrNull($("f_c15").value), children_under_1: numOrNull($("f_u1").value) }; }
 async function savePlan(silent) {

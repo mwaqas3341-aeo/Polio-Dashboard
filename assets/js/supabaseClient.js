@@ -58,3 +58,17 @@ async function loadCurrentProfile() {
   }
   return data;
 }
+
+/** Calculation formulas of a union council (set on the Calculation formulas page); defaults apply until they are saved. */
+const FORMULA_DEFAULTS = { doses_per_child: 1.11, blue_per_child: 1, blue_base: "under_1", red_per_child: 1, red_base: "age_1_5" };
+async function loadFormula(ucId) {
+  if (!ucId) return { ...FORMULA_DEFAULTS };
+  const { data } = await supabaseClient.from("calc_formulas").select("doses_per_child, blue_per_child, blue_base, red_per_child, red_base").eq("uc_id", ucId).maybeSingle();
+  return data ? { doses_per_child: Number(data.doses_per_child), blue_per_child: Number(data.blue_per_child), blue_base: data.blue_base, red_per_child: Number(data.red_per_child), red_base: data.red_base } : { ...FORMULA_DEFAULTS };
+}
+/** Same arithmetic the database uses for an Operational Plan: doses and Blue / Red capsules from the formulas. */
+function calcFromFormula(f, c) {
+  const u1 = Math.max(0, +c.u1 || 0), hh = Math.max(0, +c.hh || 0), school = Math.max(0, +c.school || 0), mmp = Math.max(0, +c.mmp || 0), total = u1 + hh + school + mmp;
+  const base = (b) => b === "under_1" ? u1 : b === "age_1_5" ? hh + school + mmp : total, up = (v) => Math.ceil(Math.round(v * 1e6) / 1e6);
+  return { total, doses: Math.round(total * f.doses_per_child * 100) / 100, blue: up(base(f.blue_base) * f.blue_per_child), red: up(base(f.red_base) * f.red_per_child) };
+}

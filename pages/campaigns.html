@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Campaign Details — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261014c">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014d">
 <style>
   .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:.6rem; margin:.5rem 0; }
   .kpi { border:1px solid var(--line); border-radius:var(--radius); padding:.6rem .8rem; background:#fff; }
@@ -42,7 +42,9 @@
           <div><label>How many regular days?</label><input type="number" id="n_reg" min="1" max="7" value="3" required></div>
           <div><label>How many catch-up days?</label><input type="number" id="n_catch" min="0" max="5" value="2" required></div>
           <div><label>Catch-up starts on which day?</label><select id="n_cstart"></select></div>
+          <div><label>Will Blue and Red Vitamin A capsules be used in this campaign?</label><select id="n_vit" required><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></div>
         </div>
+        <p class="muted">If Yes, the Blue and Red capsules each team needs are calculated automatically from the Calculation formulas page.</p>
         <p class="muted">Regular days run from the start date; the End date is the last regular day and follows the number of regular days. Catch-up days come straight after, starting on the day you choose here. All staff, Area Incharges and teams carry over into the new campaign automatically.</p>
         <div class="error-text" id="newErr" style="display:none;"></div>
         <button class="btn" type="submit">Create campaign</button>
@@ -63,6 +65,7 @@
           <div><label>Regular days</label><input type="number" id="e_days" min="1" max="7"></div>
           <div><label>Catch-up days</label><input type="number" id="e_catch" min="0" max="5"></div>
           <div><label>Catch-up starts on day</label><select id="e_cstart"></select></div>
+          <div><label>Blue and Red Vitamin A capsules used?</label><select id="e_vit"><option value="">Not answered</option><option value="yes">Yes</option><option value="no">No</option></select></div>
         </div>
         <label style="margin-top:.8rem;">Campaign days (regular days from the dates, then catch-up days)</label>
         <div class="daychips" id="dayChips"></div>
@@ -101,11 +104,11 @@
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../assets/js/config.js?v=20261014c"></script>
-<script src="../assets/js/supabaseClient.js?v=20261014c"></script>
-<script src="../assets/js/nav.js?v=20261014c"></script>
-<script src="../assets/js/crud.js?v=20261014c"></script>
-<script src="../assets/js/validators.js?v=20261014c"></script>
+<script src="../assets/js/config.js?v=20261014d"></script>
+<script src="../assets/js/supabaseClient.js?v=20261014d"></script>
+<script src="../assets/js/nav.js?v=20261014d"></script>
+<script src="../assets/js/crud.js?v=20261014d"></script>
+<script src="../assets/js/validators.js?v=20261014d"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 let current = null;
@@ -127,6 +130,15 @@ async function loadList() {
 }
 
 $("newBtn").onclick = () => { $("newCard").style.display = "block"; syncNew("reg"); };
+
+/* campaign-level Vitamin A answer, stored with the plan questionnaire (campaign_forms / campaign_setup) so everything else keeps reading it from there */
+async function saveVitAnswer(campaignId, answer) {
+  if (!answer) return;
+  const { data: ex } = await supabaseClient.from("campaign_forms").select("id, data").eq("campaign_id", campaignId).eq("form_type", "campaign_setup").maybeSingle();
+  const data = { ...((ex && ex.data) || {}), vit_a_needed: answer }; delete data.vit_blue; delete data.vit_red;
+  const r = ex ? await supabaseClient.from("campaign_forms").update({ data }).eq("id", ex.id) : await supabaseClient.from("campaign_forms").insert({ campaign_id: campaignId, form_type: "campaign_setup", data });
+  if (r.error) throw r.error;
+}
 function syncNew(from) {   // regular days <-> end date <-> catch-up start day
   const s = $("n_start").value; let reg = parseInt($("n_reg").value) || 3;
   if (from === "cstart") reg = parseInt($("n_cstart").value) - 1; else if (from === "end" && s && $("n_end").value >= s) reg = diffDays(s, $("n_end").value);
@@ -139,10 +151,12 @@ $("campaignForm").addEventListener("submit", async (e) => {
     const s = $("n_start").value, en = $("n_end").value;
     if (en < s) throw new Error("End date cannot be before the start date.");
     const total = diffDays(s, en); if (total > 7) throw new Error("A campaign can have at most 7 regular days."); const catchN = parseInt($("n_catch").value); if (!(catchN >= 0 && catchN <= 5)) throw new Error("Catch-up days must be between 0 and 5.");
+    if (!$("n_vit").value) throw new Error("Please answer whether Blue and Red Vitamin A capsules will be used.");
     const uc_id = await ensureUnionCouncil($("n_district").value, $("n_tehsil").value, $("n_uc").value);
     const { data: { user } } = await supabaseClient.auth.getUser();
     const { data, error } = await supabaseClient.from("campaigns").insert({ name: $("n_name").value.trim(), campaign_type: $("n_type").value, start_date: s, end_date: en, total_days: total, catchup_days: catchN, uc_id, created_by: user.id }).select().single();
     if (error) throw error;
+    try { await saveVitAnswer(data.id, $("n_vit").value); } catch (e2) { alert("The campaign was created, but the Vitamin A answer could not be saved: " + (e2.message || e2) + "\nOpen Campaign Details or the Plan questionnaire and answer it there."); }
     $("campaignForm").reset(); $("newCard").style.display = "none"; await loadList(); openCampaign(data.id);
   } catch (err) { showFormError($("newErr"), err); }
 });
@@ -153,6 +167,7 @@ async function openCampaign(id) {
   current = data; $("detail").style.display = "block";
   $("dTitle").textContent = data.name; $("e_name").value = data.name; $("e_type").value = data.campaign_type; $("e_status").value = data.status;
   $("e_start").value = data.start_date; $("e_end").value = data.end_date; $("e_catch").value = data.catchup_days ?? 3; refreshDays();
+  { const { data: cf } = await supabaseClient.from("campaign_forms").select("data").eq("campaign_id", id).eq("form_type", "campaign_setup").maybeSingle(); $("e_vit").value = (cf && cf.data && cf.data.vit_a_needed) || ""; current.vit = $("e_vit").value; }
   $("detail").scrollIntoView({ behavior: "smooth" });
   loadStructure(); loadSnapshots(); loadCompletion();
 }
@@ -188,7 +203,8 @@ $("saveCamp").onclick = async () => {
     if (lines.length && !confirm("Apply these changes to this campaign?\n\n" + lines.join("\n\n"))) return;
     const { data, error } = await supabaseClient.from("campaigns").update({ name, campaign_type: $("e_type").value, status: $("e_status").value, start_date: s, end_date: en, total_days: total, catchup_days: catchN }).eq("id", current.id).select().single();
     if (error) throw error;
-    current = data; $("dTitle").textContent = data.name; await loadList(); alert("Campaign updated.");
+    if ($("e_vit").value && $("e_vit").value !== (current.vit || "")) await saveVitAnswer(current.id, $("e_vit").value);
+    current = { ...data, vit: $("e_vit").value }; $("dTitle").textContent = data.name; await loadList(); alert("Campaign updated.");
   } catch (e) { showFormError(err, e); err.style.whiteSpace = "pre-line"; } finally { btn.disabled = false; }
 };
 

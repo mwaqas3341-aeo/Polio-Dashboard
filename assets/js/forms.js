@@ -42,7 +42,7 @@ FS.score = (vals) => { const a = vals.filter(v => v === "1" || v === "0"), ones 
 FS.db = () => supabaseClient;
 FS.loadBase = async (campaignId) => {
   const db = FS.db(), B = { forms: {} };
-  const { data: c } = await db.from("campaigns").select("id, name, status, uc_id, start_date, end_date, total_days, catchup_days, campaign_type").eq("id", campaignId).single(); B.campaign = c;
+  const { data: c } = await db.from("campaigns").select("id, name, status, uc_id, start_date, end_date, total_days, catchup_days, campaign_type").eq("id", campaignId).single(); B.campaign = c; B.formula = await loadFormula(c && c.uc_id);
   B.geo = { uc: "", tehsil: "", district: "" };
   if (c.uc_id) { const { data: uc } = await db.from("union_councils").select("name, tehsils(name, districts(name))").eq("id", c.uc_id).single(); B.geo = { uc: uc?.name || "", tehsil: uc?.tehsils?.name || "", district: uc?.tehsils?.districts?.name || "" }; }
   let q = db.from("staff").select("id, full_name, aic_no, area_map_path, uc_id, phone, designation").eq("designation", "aic").eq("status", "active").order("aic_no"); if (c.uc_id) q = q.eq("uc_id", c.uc_id);
@@ -280,15 +280,20 @@ FS.F_COLS = [{ k: "children_vaccinated_first_visit", s: 1, l: "Number of childre
 FS.colsFor = (B, catchup, fixed, day) => (fixed ? FS.F_COLS : catchup ? FS.C_COLS : FS.A_COLS).filter(c => !(c.av && !catchup && day === 1));   // Already vaccinated is hidden on campaign day 1   // all official columns are always shown
 FS.vitOn = (B) => FS.caps(B).vit_a_needed === "yes";
 /* a capsule colour is asked about only when the campaign question is Yes AND a quantity (> 0) was configured for that colour */
-FS.capQty = (B, color) => FS.vitOn(B) ? Math.max(0, +FS.caps(B)["vit_" + color] || 0) : 0;
+/* Capsules required: worked out per team and day by the Operational Plan from the Calculation formulas (only when Vitamin A is Yes) */
+FS.capTeam = (B, t, color) => (B.plans || []).filter(p => p.team_id === t.id).reduce((n, p) => n + (+p[color + "_capsules_required"] || 0), 0);
+FS.capQty = (B, color) => FS.vitOn(B) ? (B.teams || []).reduce((n, t) => n + FS.capTeam(B, t, color), 0) : 0;
 FS.capOn = (B, color) => FS.capQty(B, color) > 0;
 FS.capCol = (c) => c.k === "vitamin_a_blue" ? "blue" : "red";
-/* capsules used so far in the campaign, with the unsaved entries of the screen (draft[team_no][key], for one day) replacing the saved ones */
-FS.capUsed = (B, color, draft, day, catchup) => { const k = "vitamin_a_" + color; let n = 0;
-  (B.reports || []).forEach(r => { if (draft && r.campaign_day === day && !!r.is_catchup === !!catchup && draft[r.team_no] && draft[r.team_no][k] !== undefined) return; n += +r[k] || 0; });
-  if (draft) Object.keys(draft).forEach(tn => { if (draft[tn][k] !== undefined) n += Math.max(0, +draft[tn][k] || 0); }); return n; };
+/* capsules a team has used so far in the campaign, with the unsaved entries of the screen (draft[team_no][key], for one day) replacing the saved ones */
+FS.capUsedTeam = (B, t, color, draft, day, catchup) => { const k = "vitamin_a_" + color, d = draft && draft[t.team_no]; let n = 0;
+  (B.reports || []).forEach(r => { if (String(r.team_no) !== String(t.team_no)) return; if (d && d[k] !== undefined && r.campaign_day === day && !!r.is_catchup === !!catchup) return; n += +r[k] || 0; });
+  if (d && d[k] !== undefined) n += Math.max(0, +d[k] || 0); return n; };
 /* warnings only — a legitimate report is never blocked, because the quantity is the planned requirement and real use can differ */
-FS.capWarn = (B, draft, day, catchup) => ["blue", "red"].filter(c => FS.capOn(B, c)).map(c => { const used = FS.capUsed(B, c, draft, day, catchup), qty = FS.capQty(B, c); return used > qty ? `${c === "blue" ? "Blue" : "Red"} capsules used so far (${used}) are more than the quantity configured for the campaign (${qty}) — please check.` : ""; }).filter(Boolean);
+FS.capWarn = (B, draft, day, catchup) => { const out = [];
+  (B.teams || []).forEach(t => ["blue", "red"].forEach(c => { const req = FS.capTeam(B, t, c); if (!FS.vitOn(B) || req <= 0) return; const used = FS.capUsedTeam(B, t, c, draft, day, catchup);
+    if (used > req) out.push(`Team ${t.team_no}: ${c === "blue" ? "Blue" : "Red"} capsules used so far (${used}) are more than the ${req} required by the formula — please check.`); }));
+  return out; };
 FS.LEGACY = { missed_na: (r) => (+r.missed_children_under_12m || 0) + (+r.missed_children_12_59m || 0), missed_refusal: (r) => (+r.refusal_under_12m || 0) + (+r.refusal_12_59m || 0), covered_na: (r) => +r.catchup_covered || 0, mmp_vaccinated: (r) => +r.hrmp_vaccinated || 0, cu_cov: (r) => ["na_u12", "na_1259", "r_u12", "r_1259"].reduce((n, k) => n + (+r["cu_cov_" + k] || 0), 0) };
 FS.rv = (r, k) => { if (!r) return 0; const v = +r[k] || 0; return v || (FS.LEGACY[k] ? FS.LEGACY[k](r) : 0); };
 FS.dayDate = (B, day) => B.campaign.start_date ? FS.fmtDate(new Date(new Date(B.campaign.start_date + "T00:00:00").getTime() + (day - 1) * 864e5).toISOString().slice(0, 10)) : "";
@@ -316,7 +321,7 @@ FS.cell = (B, t, day, catchup, c, vals) => { const r = FS.rep(B, t.team_no, day,
     default: return g(c.k); } };
 const head2 = (cols, extra) => { const g = []; cols.forEach(c => { if (c.s) g.push({ s: 1, c }); else { const last = g[g.length - 1]; if (last && !last.s && last.g === c.g) last.n.push(c); else g.push({ g: c.g, n: [c] }); } });
   const r1 = g.map(x => x.s ? `<th rowspan="2">${E_(x.c.l)}</th>` : `<th colspan="${x.n.length}">${E_(x.g)}</th>`).join(""), r2 = g.filter(x => !x.s).map(x => x.n.map(c => `<th>${E_(c.l)}</th>`).join("")).join(""); return [r1 + extra[0], r2 + extra[1]]; };
-FS.DOSE = 1.11;   // doses per child (wastage factor already used by the Operational Plan: required_doses = total children x 1.11)
+FS.dose = (B) => (B && B.formula && B.formula.doses_per_child) || 1.11;   // doses per child, from the Calculation formulas page (1.11 until it is changed)
 /* Catch-up target of one team. First catch-up day = team target (campaign days) - children covered on those days; every later catch-up day = previous
    catch-up target - children covered on the previous catch-up day. Never below 0. Always recalculated from the saved reports, so corrections flow through. */
 FS.dayTarget = (B, t, day) => { const p = FS.planOf(B, t, day), tg = FS.tgt(B, t.team_no, day) || {}, parts = FS.cell(B, t, day, false, { calc: "ch" }) + (+p.school_children || 0) + (+p.mmp_children || 0);
@@ -333,10 +338,10 @@ FS.cuMissing = (B, t, day) => { const out = []; if (day > 1) { for (let k = 1; k
 FS.expectedDoses = (B, t, day, catchup, vals) => { const round2 = (v) => Math.round(v * 100) / 100, r = FS.rep(B, t.team_no, day, catchup);
   const g = (k) => (vals && vals[k] !== undefined) ? Math.max(0, +vals[k] || 0) : Math.max(0, FS.rv(r, k)), av = (!catchup && day === 1) ? 0 : g("already_vaccinated");
   let before;
-  if (catchup) before = FS.DOSE * Math.max(FS.cuTarget(B, t, day), g("cu_cov"));
-  else { const p = FS.planOf(B, t, day), planned = p.required_doses != null ? +p.required_doses : (p.total_children ? +p.total_children * FS.DOSE : 0);
-    before = planned + FS.DOSE * Math.max(0, g("children_vaccinated_first_visit") + g("mmp_vaccinated") + FS.cell(B, t, day, false, { calc: "school" }) - FS.dayTarget(B, t, day)); }
-  return round2(Math.max(0, before - FS.DOSE * av)); };
+  if (catchup) before = FS.dose(B) * Math.max(FS.cuTarget(B, t, day), g("cu_cov"));
+  else { const p = FS.planOf(B, t, day), planned = p.required_doses != null ? +p.required_doses : (p.total_children ? +p.total_children * FS.dose(B) : 0);
+    before = planned + FS.dose(B) * Math.max(0, g("children_vaccinated_first_visit") + g("mmp_vaccinated") + FS.cell(B, t, day, false, { calc: "school" }) - FS.dayTarget(B, t, day)); }
+  return round2(Math.max(0, before - FS.dose(B) * av)); };
 /* warning text when Already vaccinated looks larger than the children this team is expected to see */
 FS.avWarn = (B, t, day, catchup, vals) => { const v = +((vals || {}).already_vaccinated) || 0; if (v < 0) return "Already vaccinated cannot be negative."; const lim = catchup ? FS.cuTarget(B, t, day) : FS.dayTarget(B, t, day); return (lim > 0 && v > lim) ? `Team ${t.team_no}: already vaccinated (${v}) is more than the children expected (${lim}) — please check.` : ""; };
 /* teams of an Area Incharge that have no saved report for the day (a 2A is only "prepared" when none are missing) */

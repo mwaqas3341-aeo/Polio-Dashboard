@@ -2,6 +2,7 @@
 const NAV_GROUPS = [
   { key: "campaign", icon: "bi-flag-fill", label: "Campaign Management", links: [
     { href: "pages/campaigns.html", icon: "bi-calendar-event", label: "Campaign Details" },
+    { href: "pages/formulas.html", icon: "bi-calculator", label: "Calculation formulas" },
     { href: "pages/daily-reports.html", icon: "bi-clipboard-data", label: "Daily reports (quick entry)" },
     { href: "pages/reporting.html", icon: "bi-clipboard2-pulse", label: "Reporting — active campaign (2A)" },
     { href: "pages/reporting-history.html", icon: "bi-clock-history", label: "Previous reporting (2A history)" },
@@ -43,7 +44,7 @@ function navHref(h) {
 const PS = {
   yn: (v) => v === "yes" || v === "no", num: (v) => v !== undefined && v !== null && v !== "" && Number(v) >= 0,
   teamDone(a) { a = a || {}; return this.yn(a.mmp) && this.yn(a.schools) && a.confirmed === true; },
-  capsDone(c) { c = c || {}; return c.vit_a_needed === "no" || (c.vit_a_needed === "yes" && this.num(c.vit_blue) && this.num(c.vit_red)); },
+  capsDone(c) { c = c || {}; return c.vit_a_needed === "no" || c.vit_a_needed === "yes"; },   // quantities are no longer typed: they come from the Calculation formulas
   async gate() {
     if (this._g) return this._g;
     return this._g = (async () => { try {
