@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDF Downloads — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261014d"><link rel="stylesheet" href="../assets/css/forms.css?v=20261014d">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014e"><link rel="stylesheet" href="../assets/css/forms.css?v=20261014e">
 <style> .big { padding:.8rem 1.4rem; font-size:1rem; } .prog { height:10px; background:var(--s2); border-radius:99px; overflow:hidden; margin-top:10px; display:none; } .prog i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--brand),var(--ok)); transition:width .2s; }
   details.miss summary { cursor:pointer; font-weight:700; } details.miss ul { margin:.4rem 0 0 1rem; font-size:.85rem; } </style>
 </head>
@@ -22,14 +22,14 @@
       <div class="prog" id="prog"><i id="progBar"></i></div><div id="msg" class="muted" style="margin-top:8px"></div>
     </div>
     <div class="card" id="info"></div>
-    <p class="muted" id="plansLink" style="display:none">Planning documents (microplan, maps, supervisory forms): <a href="uc-package.html">open the plan package</a>.</p>
+    <p class="muted" id="plansLink" style="display:none">Planning documents — <b>AIC Summary</b>, microplan, maps, supervisory forms and 2A: <a href="uc-package.html">open the plan package</a>.</p>
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-<script src="../assets/js/config.js?v=20261014d"></script><script src="../assets/js/supabaseClient.js?v=20261014d"></script><script src="../assets/js/nav.js?v=20261014d"></script><script src="../assets/js/forms.js?v=20261014d"></script><script src="../assets/js/pdfx.js?v=20261014d"></script><script src="../assets/js/cnicpdf.js?v=20261014d"></script>
+<script src="../assets/js/config.js?v=20261014e"></script><script src="../assets/js/supabaseClient.js?v=20261014e"></script><script src="../assets/js/nav.js?v=20261014e"></script><script src="../assets/js/forms.js?v=20261014e"></script><script src="../assets/js/pdfx.js?v=20261014e"></script><script src="../assets/js/cnicpdf.js?v=20261014e"></script>
 <script>
 const $ = (id) => document.getElementById(id), E = FS.esc, natural = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true });
 const COLS = "id, full_name, cnic, phone, designation, status, aic_no, cnic_pic_front_path, cnic_pic_back_path";
@@ -41,7 +41,7 @@ const OPTS = [["all_aic", "1. All Area Incharges' CNICs — one PDF"], ["aic_tea
   isAic = me.role === "aic"; $("who").textContent = me.full_name || "";
   const { data: cs } = await supabaseClient.from("campaigns").select("id, name, status, uc_id").order("start_date", { ascending: false }); camps = cs || [];
   $("campSel").innerHTML = camps.map(c => `<option value="${c.id}">${E(c.name)}${c.status === "closed" ? " (closed)" : ""}</option>`).join("") || `<option value="">No campaign yet</option>`; const act = camps.find(c => c.status !== "closed"); if (act) $("campSel").value = act.id;
-  if (isAic) { $("optWrap").style.display = "none"; $("dlTxt").textContent = "Download my PDF (2A forms + team lists)"; } else { $("opt").innerHTML = OPTS.map(o => `<option value="${o[0]}">${o[1]}</option>`).join(""); $("plansLink").style.display = "block"; }
+  if (isAic) { $("optWrap").style.display = "none"; $("dlTxt").textContent = "Download my PDF (2A forms + team lists)"; } else { $("opt").innerHTML = OPTS.map(o => `<option value="${o[0]}">${o[1]}</option>`).join(""); $("plansLink").style.display = "block"; } if (isAic) $("plansLink").style.display = "block";
   $("campSel").onchange = async () => { await loadInfo(); syncPick(); }; $("opt").onchange = syncPick; $("dlBtn").onclick = go; $("prevBtn").onclick = preview; await loadInfo(); syncPick();
 })();
 const say = (t, err) => { $("msg").innerHTML = err ? `<span class="error-text">${E(t)}</span>` : E(t); }, tick = (d, n) => { $("prog").style.display = "block"; $("progBar").style.width = Math.round(100 * d / Math.max(1, n)) + "%"; };

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Complete plan package — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261014d"><link rel="stylesheet" href="../assets/css/forms.css?v=20261014d">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014e"><link rel="stylesheet" href="../assets/css/forms.css?v=20261014e">
 <style>
   .opts { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:6px 14px; margin-top:10px; } .opts label { text-transform:none; letter-spacing:0; font-size:.86rem; font-weight:600; color:var(--t1); display:flex; gap:7px; align-items:center; margin:0; }
   .pg { margin:0 0 16px; } .pg .scroll { overflow:visible; border:0; padding:0; margin:0; background:transparent; } .pg .sheet { min-width:1050px; }
@@ -23,6 +23,8 @@
       <div class="dl-row">
         <div><label>Campaign</label><select id="campSel"></select></div>
         <div><label>What to download</label><select id="scope">
+          <option value="summary_all">AIC Summary MP — all Area Incharges in one file</option>
+          <option value="summary_each">AIC Summary MP — one file per Area Incharge</option>
           <option value="all_one">All AICs — everything in one file (UC pages first)</option>
           <option value="each_aic">Each AIC separately — one file per AIC with all his teams</option>
           <option value="one_aic">One AIC — all his teams in one file</option>
@@ -58,7 +60,7 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="../assets/js/config.js?v=20261014d"></script><script src="../assets/js/supabaseClient.js?v=20261014d"></script><script src="../assets/js/nav.js?v=20261014d"></script><script src="../assets/js/forms.js?v=20261014d"></script><script src="../assets/js/pdfx.js?v=20261014d"></script>
+<script src="../assets/js/config.js?v=20261014e"></script><script src="../assets/js/supabaseClient.js?v=20261014e"></script><script src="../assets/js/nav.js?v=20261014e"></script><script src="../assets/js/forms.js?v=20261014e"></script><script src="../assets/js/pdfx.js?v=20261014e"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 let B = null, me = null, built = null, frameReady = null;
@@ -85,6 +87,7 @@ async function loadCampaign() {
 const aicOnlyFlag = (s) => s.startsWith("aic_only");
 function syncScope() {
   const s = $("scope").value; $("aicWrap").style.display = (s === "one_aic" || s === "one_aic_teams") ? "" : "none";
+  if (s.startsWith("summary_")) { ["o_summary", "o_aicmap", "o_teams", "o_2a", "o_tour", "o_desk", "o_fv", "o_uc"].forEach(id => $(id).disabled = true); return; }
   const aicOnly = s.startsWith("aic_only"), ucOnly = s === "uc_only";
   $("o_teams").disabled = aicOnly || ucOnly; if (aicOnly) $("o_teams").checked = false;
   ["o_summary", "o_aicmap", "o_tour", "o_desk", "o_fv"].forEach(id => $(id).disabled = ucOnly || s === "one_aic_teams");
@@ -115,7 +118,8 @@ async function microplanPages(cw, aicId, teamId) {
 async function build() {
   const s = $("scope").value, o = { summary: $("o_summary").checked, aicmap: $("o_aicmap").checked, teams: $("o_teams").checked, tour: $("o_tour").checked, twoA: $("o_2a").checked, desk: $("o_desk").checked, fv: $("o_fv").checked, uc: $("o_uc").checked };
   const wrap = (arr) => arr.map(h => `<div class="pg">${h}</div>`);
-  const needMp = (o.summary || o.teams) && s !== "uc_only"; const cw = needMp ? await frame() : null;
+  const sumOnly = s.startsWith("summary_"), mineOnly = me?.role === "aic" && me.staff_id, who = mineOnly ? B.aics.filter(a => a.id === me.staff_id) : B.aics;
+  const needMp = (o.summary || o.teams || sumOnly) && s !== "uc_only"; const cw = needMp ? await frame() : null;
   const ucPages = async () => { const out = []; out.push(await FS.ucMap(B), FS.renderUcSummary(B, false), FS.renderSm(B, false)); return wrap(out); };
   const aicPages = async (a, withTeams) => {
     say(`Preparing AIC ${a.aic_no}…`); const out = [];
@@ -131,7 +135,9 @@ async function build() {
   const days2A = () => Array.from({ length: Math.min(Math.max(parseInt(B.campaign.total_days) || 3, 1), 7) }, (_, i) => i + 1);
   const teamFile = async (a, t) => { say(`Preparing team ${t.team_no}…`); const pg = await microplanPages(cw, a.id, t.id); if (o.twoA) days2A().forEach(d => pg.push(FS.render2A(B, t, d, a))); return wrap(pg); };
   const sel = B.aics.find(a => a.id === $("aicSel").value), files = [], nm = (a) => `AIC${a.aic_no}_${a.full_name}`.replace(/[^\w\-]+/g, "_"), base = `${B.campaign.name}_${B.geo.uc}`.replace(/[^\w\-]+/g, "_");
-  if (s === "uc_only") files.push({ name: `${base}_UC_pages`, pages: await ucPages() });
+  const summaryPage = async (a) => { say(`Preparing the AIC Summary of AIC ${a.aic_no}…`); return (await microplanPages(cw, a.id, "")).slice(0, 1); };   // first sheet of the microplan = AIC Summary MP
+  if (sumOnly) { if (!who.length) throw new Error("No Area Incharge found"); if (s === "summary_all") { let pg = []; for (const a of who) pg = pg.concat(await summaryPage(a)); files.push({ name: `${base}_AIC_Summary_All`, pages: wrap(pg) }); } else for (const a of who) files.push({ name: `${base}_${nm(a)}_AIC_Summary`, pages: wrap(await summaryPage(a)) }); }
+  else if (s === "uc_only") files.push({ name: `${base}_UC_pages`, pages: await ucPages() });
   else if (s === "all_one" || s === "aic_only_all") { let pages = (s === "all_one" && o.uc) ? await ucPages() : []; for (const a of B.aics) pages = pages.concat(await aicPages(a, s === "all_one")); files.push({ name: `${base}_${s === "all_one" ? "All_AICs" : "AIC_pages"}`, pages }); }
   else if (s === "each_aic" || s === "aic_only_each") for (const a of B.aics) files.push({ name: `${base}_${nm(a)}${s === "aic_only_each" ? "_AIC_pages" : ""}`, pages: await aicPages(a, s === "each_aic") });
   else if (s === "one_aic") { if (!sel) throw new Error("Choose an Area Incharge"); files.push({ name: `${base}_${nm(sel)}`, pages: await aicPages(sel, true) }); }

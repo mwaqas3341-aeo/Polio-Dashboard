@@ -18,6 +18,7 @@ const NAV_GROUPS = [
     { href: "pages/operational-plan.html", icon: "bi-signpost-split", label: "Operational Plan", gate: true },
     { href: "pages/fixed-transit-plan.html", icon: "bi-geo-alt", label: "Fixed & Transit plan", gate: true },
     { href: "pages/microplan.html", icon: "bi-journal-richtext", label: "Microplan (auto)", gate: true },
+    { href: "pages/uc-package.html", icon: "bi-file-earmark-pdf", label: "Plan package PDF (AIC summary, maps, teams, forms)", gate: true },
     { href: "pages/maps.html", icon: "bi-map", label: "Maps (UC / AIC / day) — print", gate: true },
     { href: "pages/supervision-forms.html", icon: "bi-ui-checks", label: "Supervisory plan, desk review, validation", gate: true },
     { href: "pages/uc-forms.html", icon: "bi-building", label: "UC summary & social mobilization", gate: true },

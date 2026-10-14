@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Campaign Details — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="../assets/css/style.css?v=20261014d">
+<link rel="stylesheet" href="../assets/css/style.css?v=20261014e">
 <style>
   .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:.6rem; margin:.5rem 0; }
   .kpi { border:1px solid var(--line); border-radius:var(--radius); padding:.6rem .8rem; background:#fff; }
@@ -45,6 +45,7 @@
           <div><label>Will Blue and Red Vitamin A capsules be used in this campaign?</label><select id="n_vit" required><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></div>
         </div>
         <p class="muted">If Yes, the Blue and Red capsules each team needs are calculated automatically from the Calculation formulas page.</p>
+        <label style="display:flex;gap:.5rem;align-items:flex-start;margin:.4rem 0"><input type="checkbox" id="n_copy" checked style="width:auto;margin-top:.25rem"> <span>Copy the plan data of the previous campaign of this union council (questionnaire answers, school and MMP lists, operational plans as drafts, maps, AIC figures). Nothing has to be typed again; the Area Incharges only review and re-submit.</span></label>
         <p class="muted">Regular days run from the start date; the End date is the last regular day and follows the number of regular days. Catch-up days come straight after, starting on the day you choose here. All staff, Area Incharges and teams carry over into the new campaign automatically.</p>
         <div class="error-text" id="newErr" style="display:none;"></div>
         <button class="btn" type="submit">Create campaign</button>
@@ -71,6 +72,9 @@
         <div class="daychips" id="dayChips"></div>
         <div class="error-text" id="editErr" style="display:none;"></div>
         <button class="btn" id="saveCamp" style="margin-top:.6rem;">Save changes</button>
+        <div style="margin-top:1rem;border-top:1px solid #dfe5ea;padding-top:.8rem"><h3 style="margin:.1rem 0">Copy plan data from another campaign</h3>
+          <p class="muted">Brings the plans, questionnaire answers, school/MMP lists and maps of an earlier campaign into this one, so nothing is typed again. Existing items are never overwritten.</p>
+          <div class="form-grid"><div><label>Copy from</label><select id="c_from"></select></div><div style="align-self:end"><button class="btn secondary" id="copyBtn" type="button">Copy plan data</button></div></div><div id="copyMsg" class="muted" style="white-space:pre-line;margin-top:.4rem"></div></div>
         <p class="muted">Editing never creates a second campaign; reports, targets and DDM cards stay linked by day number, so they follow the new dates.</p>
       </div>
 
@@ -104,11 +108,11 @@
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../assets/js/config.js?v=20261014d"></script>
-<script src="../assets/js/supabaseClient.js?v=20261014d"></script>
-<script src="../assets/js/nav.js?v=20261014d"></script>
-<script src="../assets/js/crud.js?v=20261014d"></script>
-<script src="../assets/js/validators.js?v=20261014d"></script>
+<script src="../assets/js/config.js?v=20261014e"></script>
+<script src="../assets/js/supabaseClient.js?v=20261014e"></script>
+<script src="../assets/js/nav.js?v=20261014e"></script>
+<script src="../assets/js/crud.js?v=20261014e"></script>
+<script src="../assets/js/validators.js?v=20261014e"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 let current = null;
@@ -139,6 +143,8 @@ async function saveVitAnswer(campaignId, answer) {
   const r = ex ? await supabaseClient.from("campaign_forms").update({ data }).eq("id", ex.id) : await supabaseClient.from("campaign_forms").insert({ campaign_id: campaignId, form_type: "campaign_setup", data });
   if (r.error) throw r.error;
 }
+const CARRY_LABELS = { questionnaires: "plan questionnaires (to be confirmed again)", aic_figures: "AIC figures", school_assignments: "school assignments", mmp_assignments: "MMP assignments", operational_plans: "operational plans (drafts)", fixed_transit_plans: "fixed/transit plans (drafts)", team_day_maps: "team day maps" };
+const describeCarry = (r) => Object.entries(r || {}).map(([k, v]) => `• ${v} ${CARRY_LABELS[k] || k}`).join("\n") + "\n\nItems that already existed were left as they are. Each plan must be reviewed, its pictures added and then submitted again.";
 function syncNew(from) {   // regular days <-> end date <-> catch-up start day
   const s = $("n_start").value; let reg = parseInt($("n_reg").value) || 3;
   if (from === "cstart") reg = parseInt($("n_cstart").value) - 1; else if (from === "end" && s && $("n_end").value >= s) reg = diffDays(s, $("n_end").value);
@@ -157,6 +163,11 @@ $("campaignForm").addEventListener("submit", async (e) => {
     const { data, error } = await supabaseClient.from("campaigns").insert({ name: $("n_name").value.trim(), campaign_type: $("n_type").value, start_date: s, end_date: en, total_days: total, catchup_days: catchN, uc_id, created_by: user.id }).select().single();
     if (error) throw error;
     try { await saveVitAnswer(data.id, $("n_vit").value); } catch (e2) { alert("The campaign was created, but the Vitamin A answer could not be saved: " + (e2.message || e2) + "\nOpen Campaign Details or the Plan questionnaire and answer it there."); }
+    if ($("n_copy").checked) {
+      try { const { data: prev } = await supabaseClient.from("campaigns").select("id, name").eq("uc_id", uc_id).lt("start_date", s).neq("id", data.id).order("start_date", { ascending: false }).limit(1);
+        if (prev && prev.length) { const { data: r, error: ce } = await supabaseClient.rpc("carry_over_campaign_data", { p_from: prev[0].id, p_to: data.id }); if (ce) throw ce; alert("Plan data copied from " + prev[0].name + ":\n" + describeCarry(r)); } }
+      catch (e3) { alert("The campaign was created, but the plan data could not be copied: " + (e3.message || e3) + "\nYou can copy it later from Campaign Details."); }
+    }
     $("campaignForm").reset(); $("newCard").style.display = "none"; await loadList(); openCampaign(data.id);
   } catch (err) { showFormError($("newErr"), err); }
 });
@@ -167,6 +178,7 @@ async function openCampaign(id) {
   current = data; $("detail").style.display = "block";
   $("dTitle").textContent = data.name; $("e_name").value = data.name; $("e_type").value = data.campaign_type; $("e_status").value = data.status;
   $("e_start").value = data.start_date; $("e_end").value = data.end_date; $("e_catch").value = data.catchup_days ?? 3; refreshDays();
+  { const { data: others } = await supabaseClient.from("campaigns").select("id, name, start_date").neq("id", id).order("start_date", { ascending: false }); $("c_from").innerHTML = (others || []).map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join("") || `<option value="">No other campaign</option>`; $("copyMsg").textContent = ""; }
   { const { data: cf } = await supabaseClient.from("campaign_forms").select("data").eq("campaign_id", id).eq("form_type", "campaign_setup").maybeSingle(); $("e_vit").value = (cf && cf.data && cf.data.vit_a_needed) || ""; current.vit = $("e_vit").value; }
   $("detail").scrollIntoView({ behavior: "smooth" });
   loadStructure(); loadSnapshots(); loadCompletion();
@@ -183,6 +195,12 @@ $("e_cstart").onchange = () => { const n = parseInt($("e_cstart").value) - 1, s 
 $("e_catch").oninput = () => refreshDays();
 $("e_start").oninput = $("e_end").oninput = () => refreshDays();
 
+$("copyBtn").onclick = async () => {
+  const from = $("c_from").value, out = $("copyMsg"); if (!from) { out.textContent = "Choose the campaign to copy from."; return; }
+  if (!confirm("Copy the plan data of the chosen campaign into this campaign? Existing items here are not overwritten.")) return;
+  $("copyBtn").disabled = true; const { data, error } = await supabaseClient.rpc("carry_over_campaign_data", { p_from: from, p_to: current.id }); $("copyBtn").disabled = false;
+  out.textContent = error ? error.message : describeCarry(data);
+};
 $("saveCamp").onclick = async () => {
   const err = $("editErr"); clearFormError(err); const btn = $("saveCamp"); btn.disabled = true;
   try {
