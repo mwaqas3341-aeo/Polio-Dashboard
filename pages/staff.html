@@ -375,6 +375,19 @@ function personFields(p) {
       <div><label>CNIC expiry date</label><input type="date" id="${p}_exp"></div></div>
     <label class="muted" style="display:block;margin-top:.4rem;"><input type="checkbox" id="${p}_life"> Lifetime CNIC (no expiry date printed on it)</label></div>`;
 }
+/* Rotate button next to a picture input: rotates the newly chosen file (uploaded on Save), or — when nothing new is chosen — the picture already stored for this person */
+function rotBtn(input, img, st) {
+  if (!input || input.dataset.rot) return; input.dataset.rot = "1";
+  const b = document.createElement("button"); b.type = "button"; b.className = "btn small ghost"; b.style.marginLeft = ".4rem"; b.innerHTML = "&#10227; Rotate"; input.insertAdjacentElement("afterend", b);
+  b.onclick = async () => { b.disabled = true;
+    try {
+      if (input.files && input.files[0]) { const f = await ImgTools.rotateInput(input, 90); img.src = URL.createObjectURL(f); img.style.display = "block"; if (st) st.textContent = "New picture chosen — rotated ✓ (saved when you press Save)"; }
+      else if (input.dataset.existing) { if (!confirm("Rotate the stored picture 90° clockwise? It is saved immediately.")) { b.disabled = false; return; }
+        await ImgTools.rotateStored(supabaseClient, "staff-documents", input.dataset.existing, 90); const u = await ImgTools.signed(supabaseClient, "staff-documents", input.dataset.existing); if (u) { img.src = u + (u.includes("?") ? "&" : "?") + "r=" + Date.now(); img.style.display = "block"; } if (st) st.textContent = "Stored picture rotated and saved ✓"; }
+      else alert("Choose a picture first.");
+    } catch (e) { alert("Could not rotate: " + (e.message || e)); }
+    b.disabled = false; };
+}
 function wirePerson(p) {
   $(`${p}_cnic`).oninput = (e) => e.target.value = Validate.formatCnic(e.target.value);
   for (const f of ["phone", "pay"]) $(`${p}_${f}`).oninput = (e) => e.target.value = Validate.formatMobile(e.target.value);
@@ -395,6 +408,7 @@ function wirePerson(p) {
     if (!/^image\/(jpeg|png)$/.test(file.type)) { alert("Only JPG or PNG pictures are allowed."); e.target.value = ""; return; }
     if (file.size > 6 * 1024 * 1024) { alert("The picture is bigger than 6 MB — please use a smaller photo."); e.target.value = ""; return; }
     prev.src = URL.createObjectURL(file); prev.style.display = "block"; $(`${p}_${f}st`).textContent = "New picture chosen ✓"; };
+  for (const f of ["f", "b"]) rotBtn($(`${p}_${f}file`), $(`${p}_${f}prev`), $(`${p}_${f}st`));
   $(`${p}_life`).onchange = (e) => { $(`${p}_exp`).disabled = e.target.checked; if (e.target.checked) $(`${p}_exp`).value = ""; };
   $(`${p}_ffile`).dataset.existing = ""; $(`${p}_bfile`).dataset.existing = ""; $(`${p}_fst`).textContent = "Not uploaded yet"; $(`${p}_bst`).textContent = "Not uploaded yet";
   $(`${p}_iban`).oninput = (e) => { e.target.value = Validate.normalizeIban(e.target.value); upd(); };
@@ -498,6 +512,8 @@ async function openPerson(c) {
   if (editing && c.kind !== "member") extra += `<div class="sect"><label>Status</label><select id="f_status"><option value="active">Active</option><option value="inactive">Inactive</option><option value="left_campaign">Left campaign</option></select></div>`;
   openPanel(title, `<div class="sect"><h3>Personal details</h3>${personFields("f")}</div>${extra}${errBox()}
     <div style="margin-top:1rem;"><button class="btn" id="saveBtn">Save</button> <button class="btn ghost" onclick="closePanel()">Cancel</button></div>`);
+  if (c.kind === "ucmo") { $("um_file").dataset.existing = editing?.area_map_path || ""; rotBtn($("um_file"), $("um_prev"), $("um_st")); }
+  if (c.kind === "aic") rotBtn($("am_file"), $("am_prev"), $("am_st"));
   wirePerson("f"); if (editing) { fillPerson("f", editing); if ($("f_status")) $("f_status").value = editing.status === "active" ? "active" : editing.status === "left_campaign" ? "left_campaign" : "inactive"; }
   if (c.kind === "ucmo") {
     if (editing?.area_map_path) { $("um_st").textContent = "Uploaded ✓ — choose a file only to replace it."; signedUrl(editing.area_map_path).then(u => { if (u) { $("um_prev").src = u; $("um_prev").style.display = "block"; } }); }

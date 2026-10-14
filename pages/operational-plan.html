@@ -63,7 +63,7 @@
 <script src="../assets/js/images.js?v=20261014f"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-let me = null, camps = [], campaign = null, ucName = "", aics = [], aic = null, teams = [], plans = {}, picCounts = {}, teamMaps = {}, ed = null, formula = { ...FORMULA_DEFAULTS }, vitYes = false;
+let me = null, camps = [], campaign = null, ucName = "", aics = [], aic = null, teams = [], plans = {}, teamMaps = {}, ed = null, formula = { ...FORMULA_DEFAULTS }, vitYes = false;
 const GROUPS = ["G1", "G2", "G3"];
 const MANAGER = () => ["admin", "district_coordinator", "ucmo"].includes(me.role);
 const num = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : 0; };
@@ -104,33 +104,52 @@ async function loadAic() {
     ids.length ? supabaseClient.from("team_day_maps").select("team_id, campaign_day, storage_path").eq("campaign_id", campaign.id).in("team_id", ids) : { data: [] }]);
   plans = {}; (pl || []).forEach(p => plans[p.team_id + "|" + p.campaign_day] = p);
   teamMaps = {}; (tm || []).forEach(m => teamMaps[m.team_id + "|" + m.campaign_day] = m.storage_path);
-  picCounts = {}; const pids = (pl || []).map(p => p.id);
-  if (pids.length) { const { data: pc } = await supabaseClient.from("operational_plan_pictures").select("plan_id").in("plan_id", pids); (pc || []).forEach(x => picCounts[x.plan_id] = (picCounts[x.plan_id] || 0) + 1); }
   renderTeams();
 }
 
-/* One route map per team per campaign day (team_day_maps: unique on campaign + team + day, so re-uploading replaces it and never adds a second one). */
-async function uploadTeamMap(file) {
-  if (!file || !ed) return; const { t, day } = ed, err = $("pErr"); err.style.display = "none";
-  try { const f = await compressImage(file); const path = `${aic.uc_id}/${campaign.id}/maps/team-${t.id}/day${day}.${fileExt(f)}`;
+/* One route map per team per campaign day (team_day_maps: unique on campaign + team + day, so re-uploading replaces it and never adds a second one).
+   A chosen picture is previewed at once; it can be rotated before it is saved, and a saved map can be rotated afterwards. */
+let pendingMap = null;
+const mapMsg = (t, bad) => { const e = $("mapErr"); if (e) { e.textContent = t || ""; e.style.display = t ? "block" : "none"; e.style.color = bad ? "#9b1c1c" : "#14633f"; } };
+async function showPendingMap() { const pv = $("mapPv"); if (!pv || !pendingMap) return; pv.innerHTML = `<img src="${URL.createObjectURL(pendingMap)}" alt="chosen map">`; }
+async function showStoredMap() { const { t, day } = ed, path = teamMaps[t.id + "|" + day], pv = $("mapPv"); if (!pv) return; if (!path) { pv.innerHTML = ""; return; }
+  const u = await ImgTools.signed(supabaseClient, "operational-plans", path); pv.innerHTML = u ? `<img src="${u}${u.includes("?") ? "&" : "?"}r=${Date.now()}" alt="Team ${esc(t.team_no)} day ${day} map">` : `<span class="error-text">The saved map could not be loaded.</span>`; }
+async function chooseTeamMap(file) {
+  if (!file) return; try { if (!/^image\//.test(file.type)) throw new Error("Please choose a picture (JPG or PNG)"); pendingMap = await compressImage(file, 2400, 0.85); tabMap(); mapMsg("Picture chosen — rotate it if needed, then press “Save map”."); }
+  catch (e) { pendingMap = null; mapMsg("Map not chosen: " + msg(e), true); }
+}
+async function rotateTeamMap() {
+  const { t, day } = ed; mapMsg("");
+  try { if (pendingMap) { const b = await ImgTools.rotateBlob(pendingMap, 90); pendingMap = new File([b], pendingMap.name, { type: b.type }); showPendingMap(); }
+    else { const path = teamMaps[t.id + "|" + day]; if (!path) return mapMsg("Choose a map first.", true); if (!confirm("Rotate the saved map 90° clockwise? It is saved immediately.")) return; await ImgTools.rotateStored(supabaseClient, "operational-plans", path, 90); await showStoredMap(); mapMsg("Map rotated and saved ✓"); } }
+  catch (e) { mapMsg("Could not rotate: " + msg(e), true); }
+}
+async function saveTeamMap() {
+  if (!pendingMap || !ed) return; const { t, day } = ed; mapMsg("Saving…");
+  try { const f = pendingMap, path = `${aic.uc_id}/${campaign.id}/maps/team-${t.id}/day${day}.${fileExt(f)}`, old = teamMaps[t.id + "|" + day];
     const up = await supabaseClient.storage.from("operational-plans").upload(path, f, { upsert: true, contentType: f.type }); if (up.error) throw up.error;
     const { error } = await supabaseClient.from("team_day_maps").upsert({ campaign_id: campaign.id, team_id: t.id, campaign_day: day, storage_path: path, updated_at: new Date().toISOString() }, { onConflict: "campaign_id,team_id,campaign_day" }); if (error) throw error;
-    teamMaps[t.id + "|" + day] = path; tabMap(); } catch (e) { err.textContent = "Map not saved: " + msg(e); err.style.display = "block"; }
+    if (old && old !== path) await supabaseClient.storage.from("operational-plans").remove([old]);
+    teamMaps[t.id + "|" + day] = path; pendingMap = null; tabMap(); mapMsg("Map saved ✓"); }
+  catch (e) { mapMsg("Map not saved: " + msg(e), true); }
 }
 function tabMap() {
   const { t, day } = ed, has = teamMaps[t.id + "|" + day], ro = locked();
-  $("pBody").innerHTML = `<p class="muted">One route map for Team ${t.team_no}, Campaign Day ${day}. Uploading again replaces it. The AIC area map and the UC map are separate (added once, in Staff).</p>
-    <div class="slot"><b>Team ${t.team_no} — Day ${day} map</b> ${has ? '<span class="tag ok">Uploaded ✓</span>' : '<span class="tag bad">Not uploaded</span>'}<div id="mapPv"></div>
-      <input type="file" id="mapFile" accept="image/jpeg,image/png" style="display:none" onchange="uploadTeamMap(this.files[0])">
-      ${ro ? "" : `<button class="btn small" onclick="$('mapFile').click()">${has ? "Replace" : "Upload"}</button>`} ${has ? `<button class="btn small ghost" onclick="viewTeamMap()">Preview</button>` : ""}</div>`;
+  $("pBody").innerHTML = `<p class="muted">One route map for Team ${esc(t.team_no)}, Campaign Day ${day}. Uploading again replaces it. The AIC area map and the UC map are separate (added once, in Staff).</p>
+    <div class="slot"><b>Team ${esc(t.team_no)} — Day ${day} map</b> ${pendingMap ? '<span class="tag warn">Not saved yet</span>' : has ? '<span class="tag ok">Uploaded ✓</span>' : '<span class="tag bad">Not uploaded</span>'}<div id="mapPv" style="margin:.5rem 0"></div>
+      <input type="file" id="mapFile" accept="image/*" style="display:none" onchange="chooseTeamMap(this.files[0]); this.value=''">
+      ${ro ? "" : `<button class="btn small" onclick="$('mapFile').click()">${has || pendingMap ? "Choose another picture" : "Choose picture"}</button>
+        ${pendingMap ? `<button class="btn small" style="background:#14633f" onclick="saveTeamMap()">Save map</button>` : ""}
+        ${has || pendingMap ? `<button class="btn small ghost" onclick="rotateTeamMap()">&#10227; Rotate</button>` : ""}`}
+      <div id="mapErr" style="display:none;margin-top:.4rem;font-weight:600"></div></div>`;
+  if (pendingMap) showPendingMap(); else showStoredMap();
 }
-async function viewTeamMap() { const { t, day } = ed, path = teamMaps[t.id + "|" + day]; if (!path) return; const { data } = await supabaseClient.storage.from("operational-plans").createSignedUrl(path, 300); $("mapPv").innerHTML = data?.signedUrl ? `<img src="${data.signedUrl}" alt="Team ${t.team_no} day ${day} map">` : "Could not load"; }
 async function openFile(path, bucket = "operational-plans") { const { data } = await supabaseClient.storage.from(bucket).createSignedUrl(path, 300); if (data?.signedUrl) window.open(data.signedUrl, "_blank"); else alert("Could not open the picture"); }
 
 function dayCell(t, d) {
-  const p = plans[t.id + "|" + d], pics = p ? (picCounts[p.id] || 0) : 0;
+  const p = plans[t.id + "|" + d];
   const st = !p ? '<span class="tag">Not started</span>' : p.status === "submitted" ? '<span class="tag ok">Submitted ✓</span>' : '<span class="tag warn">Draft</span>';
-  return `<div class="day"><b>Day ${d}</b><small>${st}</small><small>${p ? `Doses ${Math.round(p.required_doses)} · Pictures ${pics}/3` : ""}</small><small>${teamMaps[t.id + "|" + d] ? '<span class="tag ok">Map ✓</span>' : '<span class="tag bad">Map missing</span>'}</small><button class="btn small" onclick="openEditor('${t.id}', ${d})">${p ? "Open" : "Start"}</button></div>`;
+  return `<div class="day"><b>Day ${d}</b><small>${st}</small><small>${p ? `Doses ${Math.round(p.required_doses)}` : ""}</small><small>${teamMaps[t.id + "|" + d] ? '<span class="tag ok">Map ✓</span>' : '<span class="tag bad">Map missing</span>'}</small><button class="btn small" onclick="openEditor('${t.id}', ${d})">${p ? "Open" : "Start"}</button></div>`;
 }
 function renderTeams() {
   if (!teams.length) { $("teams").innerHTML = `<div class="card"><p>This Area Incharge has no <b>Mobile</b> team yet. Fixed and Transit teams do not need an Operational Plan. Add Mobile teams in Staff.</p></div>`; return; }
@@ -140,7 +159,7 @@ function renderTeams() {
 
 /* ---------------- editor ---------------- */
 async function openEditor(teamId, day) {
-  const t = teams.find(x => x.id === teamId); ed = { t, day, tab: "plan", plan: plans[teamId + "|" + day] || null, pics: [], schools: [], mmp: [], carried: 0 };
+  const t = teams.find(x => x.id === teamId); pendingMap = null; ed = { t, day, tab: "plan", plan: plans[teamId + "|" + day] || null, schools: [], mmp: [], carried: 0 };
   $("overlay").style.display = "block"; document.body.style.overflow = "hidden";
   $("pTitle").textContent = `Team ${t.team_no} — Campaign Day ${day}`;
   $("pCrumb").innerHTML = `<b>${esc(campaign.name)}</b> → ${esc(ucName)} → AIC ${aic.aic_no} → Team ${t.team_no} (Mobile) → <b>Day ${day}</b>`;
@@ -158,15 +177,15 @@ async function reloadEd() {
     supabaseClient.from("mmp_assignments").select("id, house_count, child_count, mmp_contacts(id, full_name, cnic, phone, location, area_of_origin)").eq("campaign_id", campaign.id).eq("team_no", t.team_no).eq("campaign_day", day),
     supabaseClient.from("missed_children").select("id", { count: "exact", head: true }).eq("campaign_id", campaign.id).eq("team_no", t.team_no).eq("campaign_day", day).not("carried_from_campaign_id", "is", null)]);
   ed.plan = plan || null; ed.schools = sc || []; ed.mmp = mm || [];
-  if (plan) { plans[t.id + "|" + day] = plan; const { data: pics } = await supabaseClient.from("operational_plan_pictures").select("id, slot, storage_path").eq("plan_id", plan.id).order("slot"); ed.pics = pics || []; picCounts[plan.id] = ed.pics.length; } else ed.pics = [];
+  if (plan) plans[t.id + "|" + day] = plan;
   const { count } = await supabaseClient.from("missed_children").select("id", { count: "exact", head: true }).eq("campaign_id", campaign.id).eq("team_no", t.team_no).eq("campaign_day", day).not("carried_from_campaign_id", "is", null); ed.carried = count || 0;
 }
 function showTab(tab) {
   if (ed.dirty && ed.tab === "plan" && tab !== "plan" && !confirm("You have unsaved changes on the plan. Leave this tab without saving?")) return;
   if (tab !== "plan") ed.dirty = false;
-  ed.tab = tab; const names = { plan: "1. Plan", map: "2. Day map", pics: "3. Plan pictures", mmp: "4. MMP list", school: "5. School list (automatic)" };
+  ed.tab = tab; const names = { plan: "1. Plan", map: "2. Day map", mmp: "3. MMP list", school: "4. School list (automatic)" };
   $("tabs").innerHTML = Object.entries(names).map(([k, v]) => `<button class="${k === tab ? "on" : ""}" onclick="showTab('${k}')">${v}</button>`).join("");
-  ({ plan: tabPlan, map: tabMap, pics: tabPics, mmp: tabMmp, school: tabSchool })[tab]();
+  ({ plan: tabPlan, map: tabMap, mmp: tabMmp, school: tabSchool })[tab]();
 }
 const locked = () => ed.plan?.status === "submitted" && !MANAGER();
 
@@ -221,28 +240,6 @@ async function submitPlan() {
 }
 function flash(text) { const d = document.createElement("div"); d.textContent = text; d.style.cssText = "position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:#14633f;color:#fff;padding:.7rem 1.1rem;border-radius:8px;z-index:9999;max-width:90vw;text-align:center;box-shadow:0 2px 10px #0004"; document.body.appendChild(d); setTimeout(() => d.remove(), 3500); }
 async function reopenPlan() { if (!confirm("Reopen this plan so the AIC can correct it?")) return; const { error } = await supabaseClient.from("operational_plans").update({ status: "draft" }).eq("id", ed.plan.id); if (error) return alert(msg(error)); await reloadEd(); showTab("plan"); }
-
-/* ---- pictures: at least 3 required (5 places) ---- */
-function tabPics() {
-  if (!ed.plan) { $("pBody").innerHTML = `<p>Save the plan first (tab 1), then add its pictures here.</p>`; return; }
-  const ro = locked();
-  $("pBody").innerHTML = `<p class="muted">At least 3 pictures of the Operational Plan are needed before it can be submitted. Large photos are shrunk automatically.</p>
-    ${[1, 2, 3, 4, 5].map(n => { const p = ed.pics.find(x => x.slot === n);
-      return `<div class="slot"><b>Picture ${n}${n > 3 ? " (optional)" : ""}</b> ${p ? '<span class="tag ok">Uploaded ✓</span>' : n <= 3 ? '<span class="tag bad">Missing</span>' : ""}<div id="pv${n}"></div>
-        <input type="file" id="pf${n}" accept="image/jpeg,image/png" style="display:none" onchange="uploadPic(${n}, this.files[0])">
-        ${ro ? "" : `<button class="btn small" onclick="$('pf${n}').click()">${p ? "Replace" : "Upload"}</button>`} ${p ? `<button class="btn small ghost" onclick="previewPic(${n})">Preview</button>` : ""} ${p && !ro ? `<button class="btn small ghost" onclick="removePic(${n})">Remove</button>` : ""}</div>`; }).join("")}`;
-}
-async function previewPic(n) { const p = ed.pics.find(x => x.slot === n); const { data } = await supabaseClient.storage.from("operational-plans").createSignedUrl(p.storage_path, 300); $(`pv${n}`).innerHTML = data?.signedUrl ? `<img src="${data.signedUrl}" alt="plan picture ${n}">` : "Could not load"; }
-async function uploadPic(n, file) {
-  if (!file) return;
-  try { const f = await compressImage(file); const path = `${aic.uc_id}/${campaign.id}/plans/${ed.plan.id}/pic${n}.${fileExt(f)}`;
-    const old = ed.pics.find(x => x.slot === n); if (old && old.storage_path !== path) await supabaseClient.storage.from("operational-plans").remove([old.storage_path]);
-    const up = await supabaseClient.storage.from("operational-plans").upload(path, f, { upsert: true, contentType: f.type }); if (up.error) throw up.error;
-    const { error } = await supabaseClient.from("operational_plan_pictures").upsert({ plan_id: ed.plan.id, slot: n, storage_path: path }, { onConflict: "plan_id,slot" }); if (error) throw error;
-    await reloadEd(); showTab("pics"); } catch (e) { alert("Picture not saved: " + msg(e)); }
-}
-async function removePic(n) { if (!confirm(`Remove picture ${n}?`)) return; const p = ed.pics.find(x => x.slot === n);
-  await supabaseClient.storage.from("operational-plans").remove([p.storage_path]); const { error } = await supabaseClient.from("operational_plan_pictures").delete().eq("id", p.id); if (error) return alert(msg(error)); await reloadEd(); showTab("pics"); }
 
 /* ---- MMP list (workbook: MMP Coverage Plan) ---- */
 function tabMmp() {
