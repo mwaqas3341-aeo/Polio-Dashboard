@@ -50,6 +50,8 @@ const PS = {
     if (this._g) return this._g;
     return this._g = (async () => { try {
       const db = (typeof supabaseClient !== "undefined") ? supabaseClient : null; if (!db) return { open: true };
+      // Admin, UCMO and district coordinators are never locked out: they review plans AIC by AIC, so one unfinished AIC must not block the rest.
+      try { const p = typeof loadCurrentProfile === "function" ? await loadCurrentProfile() : null; if (p && ["admin", "ucmo", "district_coordinator"].includes(p.role)) return { open: true, privileged: true }; } catch (e) {}
       const { data: cs } = await db.from("campaigns").select("id, uc_id").order("start_date", { ascending: false }).limit(1); const c = (cs || [])[0]; if (!c) return { open: true, none: true };
       const [f, t] = await Promise.all([db.from("campaign_forms").select("aic_staff_id, form_type, data").eq("campaign_id", c.id).in("form_type", ["campaign_setup", "plan_setup"]),
         db.from("teams").select("team_no, aic_staff_id").eq("uc_id", c.uc_id).not("aic_staff_id", "is", null)]);
