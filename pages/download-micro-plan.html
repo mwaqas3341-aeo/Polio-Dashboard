@@ -85,6 +85,7 @@ async function frame() {
   frameReady = new Promise((resolve, reject) => {
     const f = $("hiddenFrame"); f.onload = async () => {
       try { const cw = f.contentWindow; for (let i = 0; i < 80; i++) { if (cw.eval && typeof cw.loadCampaign === "function" && cw.eval('document.getElementById("campSel").options.length') > 0) break; await sleep(250); }
+        for (let i = 0; i < 120; i++) { if (cw.eval('typeof D !== "undefined" && !!D && aics.length > 0')) break; await sleep(250); }   // wait until the page has finished its own first load, or it overwrites ours
         if (!document.getElementById("mpcss")) { const css = [...f.contentDocument.querySelectorAll("style")].map(s => s.textContent).join("\n"); const st = document.createElement("style"); st.id = "mpcss"; st.textContent = css.replace(/@media print\s*\{[\s\S]*?\n\s*\}\s*\n/g, ""); document.head.appendChild(st); }
         resolve(cw); } catch (e) { reject(e); } };
     f.src = "microplan.html";
@@ -94,7 +95,9 @@ async function frame() {
 async function microplanPages(cw, aicId, teamId) {
   await cw.eval(`(async()=>{ if ($("campSel").value !== "${B.campaign.id}") { $("campSel").value = "${B.campaign.id}"; await loadCampaign(); } $("aicSel").value = "${aicId}"; await load(); $("teamSel").value = "${teamId || ""}"; render(); })()`);
   const html = cw.eval('document.getElementById("board").innerHTML'), d = document.createElement("div"); d.innerHTML = html;
-  d.querySelectorAll(".noprint").forEach(x => x.remove()); return [...d.querySelectorAll(".scroll")].map(x => x.outerHTML);
+  d.querySelectorAll(".noprint").forEach(x => x.remove());
+  if (!d.querySelector(".scroll")) { const er = cw.eval('document.getElementById("err").textContent'); console.warn("microplan frame", er, d.textContent.slice(0, 200)); if (er) throw new Error(er); }
+  return [...d.querySelectorAll(".scroll")].map(x => x.outerHTML);
 }
 
 /* ---- ONE list of parts for any set of AICs: each AIC once, then his or her teams once ---- */
