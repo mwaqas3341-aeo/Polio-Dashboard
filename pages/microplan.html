@@ -279,6 +279,15 @@ function crewCell(t) {
 function statusCell(t) {
   return t.workers.map(() => `<div class="glf">G<i></i>L<i></i>F<i></i></div>`).join("") || `<div class="glf">G<i></i>L<i></i>F<i></i></div>`;
 }
+/* Official layout: the کیفیت + نام ٹیم کارکن columns are filled member by member (member 1 beside day 1, member 2 beside day 2); the day-3 block holds the start-time box */
+function blockCells(t, i) {
+  const w = t.workers[i], last = i === MDAYS.length - 1;
+  if (last) {
+    const extra = t.workers.slice(MDAYS.length).map(m => `<div class="wk ur"><div class="glf">G<i></i>L<i></i>F<i></i></div><div class="nm">${esc(m.staff.full_name)}</div><div class="cn" dir="ltr"><small>CNIC</small>${esc(m.staff.cnic || "—")}</div></div>`).join("");
+    return `<td colspan="2" rowspan="2" class="ur st" dir="rtl" style="text-align:right;vertical-align:top">${extra}<b>کام شروع کرنے کا وقت ہر دن:</b><div>1۔ ـــــــــــــ &nbsp; 2۔ ـــــــــــــ &nbsp; 3۔ ـــــــــــــ</div><b>کیچ اپ شروع کرنے کا وقت ہر دن:</b><div>1۔ ـــــــــــــ &nbsp; 2۔ ـــــــــــــ &nbsp; 3۔ ـــــــــــــ</div></td>`;
+  }
+  return `<td rowspan="2"><div class="glf" style="margin:0">G<i></i>L<i></i>F<i></i></div></td><td rowspan="2" class="ur" style="text-align:right">${w ? `<div class="wk"><div class="nm">${esc(w.staff.full_name)}</div><div class="cn" dir="ltr"><small>CNIC</small>${esc(w.staff.cnic || "—")}</div><div class="rl">${workerLbl(w)}</div></div>` : `<div class="cn" dir="ltr"><small>CNIC</small>&nbsp;</div>`}</td>`;
+}
 /* G1 / G2 / G3: three separate boxes, the chosen one is filled and ticked */
 const gBoxes = (g) => `<div class="gb">${["G1", "G2", "G3"].map(x => `<span class="${g === x ? "on" : ""}">${x}${g === x ? " ✔" : ""}</span>`).join("")}</div>`;
 /* Fixed per-team requirements (per team, NOT per day): markers 2, DDM cards 2, droppers 10 */
@@ -291,12 +300,12 @@ function mobileSheet(t, first) {
   const rows = MDAYS.map((d, i) => { const p = ps[i], sc = schoolsOf(t.team_no, d), hhc = p ? sumN([p.children_households_1_5, p.children_under_1]) : null;
     const place = [p?.working_order ? `<div>${esc(p.working_order)}</div>` : "", sc.length ? `<div class="sm">سکول/مدرسہ: ${sc.map(s => esc(s.schools.name)).join("، ")}</div>` : ""].join("");
     // First / last household head: two separately labelled boxes under each day (first = right-hand box, last = left-hand box, as Urdu is read)
-    const headsRow = `<tr><td colspan="6" class="heads ur" dir="rtl"><div class="hd"><span>آخری گھر کے سربراہ کا نام</span><b>${disp(p?.head_last_family) || "—"}</b></div></td><td colspan="7" class="heads ur" dir="rtl"><div class="hd"><span>پہلے گھر کے سربراہ کا نام</span><b>${disp(p?.head_first_family) || "—"}</b></div></td></tr>`;
-    return `<tr class="tall"><td>${disp(p?.mmp_children)}</td><td>${p ? carried(t.team_no, d) : ""}</td><td>${disp(doses(p?.required_doses))}</td><td>${disp(p?.total_children)}</td><td>${disp(hhc)}</td><td>${disp(p?.school_children)}</td><td>${disp(p?.total_households)}</td><td class="ur">${disp(p?.community_vaccination_place)}</td><td>${gBoxes(p?.team_group)}</td><td class="ur l">${place}</td><td class="ur">${disp(p?.village_area)}</td><td class="ur" style="font-size:15px"><b>${DAYLBL[d]}</b></td><td>${statusCell(t)}</td>${i === 0 ? `<td rowspan="6" style="text-align:right">${crewCell(t)}</td><td rowspan="6"><b style="font-size:24px">${esc(t.team_no)}</b></td>` : ""}</tr>${headsRow}`; }).join("");
+    const headsRow = `<tr><td colspan="6" class="heads ur" dir="rtl"><div class="hd"><span>آخری گھر کے سربراہ کا نام</span><b>${disp(p?.head_last_family) || "—"}</b></div></td><td colspan="6" class="heads ur" dir="rtl"><div class="hd"><span>پہلے گھر کے سربراہ کا نام</span><b>${disp(p?.head_first_family) || "—"}</b></div></td></tr>`;
+    return `<tr class="tall"><td>${disp(p?.mmp_children)}</td><td>${p ? carried(t.team_no, d) : ""}</td><td>${disp(doses(p?.required_doses))}</td><td>${disp(p?.total_children)}</td><td>${disp(hhc)}</td><td>${disp(p?.school_children)}</td><td>${disp(p?.total_households)}</td><td class="ur">${disp(p?.community_vaccination_place)}</td><td>${gBoxes(p?.team_group)}</td><td class="ur l">${place}</td><td class="ur">${disp(p?.village_area)}</td><td class="ur" style="font-size:15px"><b>${DAYLBL[d]}</b></td>${blockCells(t, i)}${i === 0 ? `<td rowspan="6"><b style="font-size:24px">${esc(t.team_no)}</b></td>` : ""}</tr>${headsRow}`; }).join("");
   const S = (k) => sumN(ps.filter(Boolean).map(p => p[k]));
   const blue = sumN(ps.filter(Boolean).map(p => p.blue_capsules_required)), red = sumN(ps.filter(Boolean).map(p => p.red_capsules_required));
   const tot = `<tr><td>${disp(S("mmp_children"))}</td><td>${carried(t.team_no)}</td><td>${disp(doses(S("required_doses")))}</td><td>${disp(S("total_children"))}</td><td>${disp(sumN(ps.filter(Boolean).flatMap(p => [p.children_households_1_5, p.children_under_1])))}</td><td>${disp(S("school_children"))}</td><td>${disp(S("total_households"))}</td><td class="ur l"><b>ٹوٹل</b></td></tr>`;
-  const colg = `<colgroup>${[5, 5, 5.5, 5, 5.5, 5, 5, 5.5, 8, 13, 5, 5, 7.5, 15.5, 4].map(w => `<col style="width:${w}%">`).join("")}</colgroup>`;
+  const colg = `<colgroup>${[5, 5, 5.5, 5, 5.5, 5, 5, 5.5, 8, 12.5, 5, 5, 7, 16, 4.5].map(w => `<col style="width:${w}%">`).join("")}</colgroup>`;
   return `<div class="scroll ${first ? "first" : "pb"}"><div class="sheet ur">
     ${headerBar(a, "ایریا مائیکرو پلان شیٹ / آپریشنل پلان")}
     <div class="ur" style="font-size:16px;font-weight:700;margin-bottom:4px;" dir="rtl">یونین کونسل: <b>${esc(geo.uc)}</b> &nbsp; ایریا انچارج: <b>${a ? esc(a.full_name) + " (AIC " + esc(a.aic_no) + ")" : ""}</b> &nbsp; ٹیم نمبر: <b>${esc(t.team_no)}</b> &nbsp; (موبائل ٹیم)</div>
@@ -306,7 +315,6 @@ function mobileSheet(t, first) {
       <tbody>${rows}</tbody></table>
     <table class="of" dir="ltr" style="margin-top:-1.5px;"><colgroup>${[5, 5, 5.5, 5, 5.5, 5, 5, 64].map(w => `<col style="width:${w}%">`).join("")}</colgroup><tbody>${tot}</tbody></table>
     <table class="of ur" dir="rtl" style="margin-top:5px;"><thead><tr><th>درکار اشیاء (فی ٹیم)</th><th>مارکر</th><th>DDM کارڈ</th><th>ڈراپر</th><th>چاک</th><th>پلاسٹک کی تھیلیاں</th><th>نیلے کیپسول</th><th>سرخ کیپسول</th></tr></thead><tbody><tr class="tall" style="height:auto"><td>تعداد</td><td>${PER_TEAM.markers}</td><td>${PER_TEAM.ddm}</td><td>${PER_TEAM.droppers}</td><td></td><td></td><td>${disp(blue)}</td><td>${disp(red)}</td></tr></tbody></table>
-    <div class="ur" style="font-size:14px;font-weight:700;margin-top:4px;border:1.5px solid #111;padding:3px 8px;" dir="rtl">کام شروع کرنے کا وقت ہر دن: 1۔ ــــــــــ 2۔ ــــــــــ 3۔ ــــــــــ &nbsp;&nbsp; کیچ اپ شروع کرنے کا وقت ہر دن: 1۔ ــــــــــ 2۔ ــــــــــ 3۔ ــــــــــ</div>
     ${LEGEND}</div></div>`;
 }
 
