@@ -115,7 +115,7 @@ async function buildParts(aics, stats) {
     for (const t of teams) {
       say(`Preparing ${E(who(a))} — Team ${E(t.team_no)}…`);
       const pg = await microplanPages(cw, a.id, t.id); if (pg.length) parts.push({ html: pg }); else stats.missing.push(`Team ${t.team_no} micro plan sheet`); stats.teams++;
-      if (t.team_type === "mobile") for (let d = 1; d <= nd; d++) {                                                 // one route map per mobile team per day
+      if (t.team_type === "mobile") for (let d = 1; d <= Math.min(nd, 3); d++) {                                                 // one route map per mobile team per day
         const img = await FS.imgData("operational-plans", by[t.id + "|" + d]); if (!img) stats.missing.push(`Team ${t.team_no} Day ${d} map`);
         parts.push({ image: img, caption: `${who(a)} - Team ${t.team_no} - Day ${d} Route Map (7MP)` }); stats.maps++;
       }

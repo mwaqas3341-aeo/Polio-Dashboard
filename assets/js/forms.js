@@ -409,7 +409,7 @@ FS.aicMaps = async (B, aic) => {
   const { data: tm } = await supabaseClient.from("team_day_maps").select("team_id, campaign_day, storage_path").eq("campaign_id", B.campaign.id);
   const by = Object.fromEntries((tm || []).map(m => [m.team_id + "|" + m.campaign_day, m.storage_path])), who = `<div>Area Incharge: <b>AIC ${E_(aic.aic_no)} — ${E_(aic.full_name)}</b></div>`;
   const out = [FS.mapPage(B, "8MP", "AIC Area Map (all teams, coloured)", "ایریا انچارج کا نقشہ", await FS.imgData("staff-documents", aic.area_map_path), who)];   // one per AIC
-  for (const t of FS.teamsOf(B, aic.id).filter(x => x.team_type === "mobile")) for (let d = 1; d <= FS.nDays(B); d++)                                              // one per team per day
+  for (const t of FS.teamsOf(B, aic.id).filter(x => x.team_type === "mobile")) for (let d = 1; d <= Math.min(FS.nDays(B), 3); d++)                                              // one per team per regular day (no map for catch-up days)
     out.push(FS.mapPage(B, "7MP", `Team ${t.team_no} Route Map — Day ${d}`, `ٹیم ${t.team_no} روٹ نقشہ — دن ${d}`, await FS.imgData("operational-plans", by[t.id + "|" + d]), who + `<div>Team: <b>${t.team_no}</b> · Day: <b>${d}</b></div>`));
   return out;
 };
