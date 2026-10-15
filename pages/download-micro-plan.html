@@ -5,13 +5,17 @@
 <title>Download Micro Plan — Polio Campaign Dashboard</title>
 <link rel="stylesheet" href="../assets/css/style.css?v=20261014h"><link rel="stylesheet" href="../assets/css/forms.css?v=20261014h">
 <style>
-  .dl-panel { background:#fff; border:1px solid #cfd6dd; border-radius:10px; padding:16px; max-width:760px; }
+  .dl-panel { background:#fff; border:1px solid #cfd6dd; border-radius:10px; padding:16px; max-width:860px; }
   .dl-panel label { display:block; font-weight:700; margin:12px 0 4px; font-size:.85rem; }
   .dl-panel select { width:100%; }
   .opt { display:flex; gap:10px; align-items:flex-start; border:2px solid #cfd6dd; border-radius:10px; padding:12px; margin:8px 0; cursor:pointer; }
   .opt.on { border-color:var(--brand); background:var(--brand-light); } .opt input { margin-top:4px; width:auto; } .opt b { display:block; } .opt span { font-size:.82rem; color:var(--t3); }
   .prog { height:10px; background:#e5eaee; border-radius:6px; overflow:hidden; margin-top:12px; display:none; } .prog > div { height:100%; width:0; background:var(--brand); transition:width .2s; }
   #msg { margin-top:10px; font-size:.9rem; } #msg.err { color:var(--bad); } #msg.ok { color:var(--ok); }
+  .aic-list { margin-top:12px; } .aic-row { display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; border:1px solid #cfd6dd; border-radius:10px; padding:10px 12px; margin:8px 0; }
+  .aic-row b { display:block; } .aic-row small { color:var(--t3); }
+  .st { font-size:.78rem; font-weight:700; padding:3px 9px; border-radius:12px; white-space:nowrap; } .st.ok { background:#dff3e4; color:#17692e; } .st.no { background:#fde7e7; color:#a12a2a; }
+  .aic-row .btn[disabled] { opacity:.45; cursor:not-allowed; }
   .dlbtn { margin-top:14px; width:100%; font-size:1.02rem; padding:.8rem 1rem; }
 </style>
 </head>
@@ -23,10 +27,8 @@
     <p class="muted">The pre-campaign planning documents: each Area Incharge's <b>AIC Summary</b> and <b>area map</b>, every team's <b>micro plan</b> and its <b>route maps</b> (one full landscape page per map). Reporting forms such as 2A are not part of this download.</p>
     <div class="dl-panel">
       <label for="campSel">Campaign</label><select id="campSel"></select>
-      <div id="optA" class="opt on"><input type="radio" name="mode" id="modeAll" value="all" checked><div><b>Download All AICs and Teams</b><span>One combined PDF, organised AIC by AIC: each AIC's documents followed by his or her teams.</span></div></div>
-      <div id="optB" class="opt"><input type="radio" name="mode" id="modeOne" value="one"><div><b>Download Individual AIC File</b><span>One PDF with only the selected Area Incharge and the teams assigned to that AIC.</span></div></div>
-      <div id="aicWrap" style="display:none"><label for="aicSel">Area Incharge</label><select id="aicSel"></select></div>
-      <button class="btn dlbtn" id="dlBtn" disabled><i class="bi bi-download"></i> <span id="dlTxt">Download PDF</span></button>
+      <div id="aicList" class="aic-list"></div>
+      <button class="btn dlbtn" id="dlAll" style="display:none"><i class="bi bi-download"></i> Download all completed AICs (one PDF)</button>
       <div class="prog" id="prog"><div id="progBar"></div></div>
       <div id="msg" class="muted" role="status" aria-live="polite">Loading…</div>
     </div>
@@ -49,20 +51,25 @@ const isManager = () => me && ["admin", "ucmo"].includes(me.role), isAic = () =>
   const { data: cs } = await supabaseClient.from("campaigns").select("id, name, status").order("start_date", { ascending: false });
   $("campSel").innerHTML = (cs || []).map(c => `<option value="${c.id}">${E(c.name)}</option>`).join("") || `<option value="">No campaign yet</option>`;
   const act = (cs || []).find(c => c.status !== "closed"); if (act) $("campSel").value = act.id;
-  $("campSel").onchange = loadCampaign; document.querySelectorAll('input[name="mode"]').forEach(r => r.onchange = syncMode); $("dlBtn").onclick = download;
-  if (isAic()) { $("optA").style.display = "none"; $("modeOne").checked = true; }          // an Area Incharge can download only his or her own file
+  $("campSel").onchange = loadCampaign; $("dlAll").onclick = () => download(B.aics.filter(a => a.done), true);
   if ($("campSel").value) await loadCampaign(); else say("No campaign yet.", "err");
 })();
 async function loadCampaign() {
-  say("Loading campaign…"); $("dlBtn").disabled = true;
+  say("Loading campaign…"); $("aicList").innerHTML = ""; $("dlAll").style.display = "none";
   try { B = await FS.loadBase($("campSel").value); } catch (e) { say("Could not load the campaign: " + E(e.message || e), "err"); return; }
   let aics = (B.aics || []).slice().sort((a, b) => a.aic_no - b.aic_no); if (isAic()) aics = aics.filter(a => a.id === me.staff_id);   // permissions: only what the account may see
-  B.aics = aics; $("aicSel").innerHTML = aics.map(a => `<option value="${a.id}">AIC ${E(a.aic_no)} — ${E(a.full_name)} (${FS.teamsOf(B, a.id).length} teams)</option>`).join("");
-  if (isAic()) $("aicSel").value = me.staff_id; syncMode();
-  const nt = aics.reduce((n, a) => n + FS.teamsOf(B, a.id).length, 0);
-  say(aics.length ? `${aics.length} Area Incharge(s) and ${nt} team(s) in ${E(B.geo.uc || "this union council")}.` : "No Area Incharge is available for this campaign.", aics.length ? "muted" : "err"); $("dlBtn").disabled = !aics.length;
+  const { data: fm } = await supabaseClient.from("campaign_forms").select("aic_staff_id, data").eq("campaign_id", B.campaign.id).eq("form_type", "plan_setup");
+  const plan = Object.fromEntries((fm || []).map(f => [f.aic_staff_id, (f.data || {}).teams || {}]));
+  aics.forEach(a => { const ts = FS.teamsOf(B, a.id); a.nTeams = ts.length; a.nDone = ts.filter(t => PS.teamDone((plan[a.id] || {})[t.team_no])).length; a.done = ts.length > 0 && a.nDone === ts.length; });
+  B.aics = aics;
+  $("aicList").innerHTML = aics.map(a => `<div class="aic-row"><div><b>AIC ${E(a.aic_no)} — ${E(a.full_name)}</b><small>${a.nTeams} team(s) · questionnaire answered for ${a.nDone} of ${a.nTeams}</small></div>
+    <div style="display:flex;gap:10px;align-items:center"><span class="st ${a.done ? "ok" : "no"}">${a.done ? "Plan completed" : "Plan not completed"}</span>
+    <button class="btn" data-aic="${a.id}" ${a.done ? "" : "disabled"} title="${a.done ? "Download this AIC's micro plan" : "Available once the plan is completed"}"><i class="bi bi-download"></i> Download</button></div></div>`).join("");
+  $("aicList").querySelectorAll("button[data-aic]").forEach(b => b.onclick = () => download(aics.filter(a => a.id === b.dataset.aic), false));
+  const nd = aics.filter(a => a.done).length; $("dlAll").style.display = (!isAic() && nd > 1) ? "" : "none";
+  const nt = aics.reduce((n, a) => n + a.nTeams, 0);
+  say(aics.length ? `${aics.length} Area Incharge(s) and ${nt} team(s) in ${E(B.geo.uc || "this union council")} — ${nd} plan(s) completed.` : "No Area Incharge is available for this campaign.", aics.length ? "muted" : "err");
 }
-function syncMode() { const one = $("modeOne").checked; $("optA").classList.toggle("on", !one); $("optB").classList.toggle("on", one); $("aicWrap").style.display = one ? "" : "none"; $("dlTxt").textContent = one ? "Download Individual AIC File (PDF)" : "Download All AICs and Teams (PDF)"; }
 
 /* ---- the micro plan sheets come from the existing microplan page, loaded in a hidden frame ---- */
 async function frame() {
@@ -106,18 +113,16 @@ async function buildParts(aics, stats) {
   return parts;
 }
 const safe = (s) => String(s || "").replace(/[^\w\-]+/g, "_").replace(/^_+|_+$/g, "");
-async function download() {
-  if (busy || !B) return; const one = $("modeOne").checked;
-  let aics = B.aics; if (one) { const a = B.aics.find(x => x.id === $("aicSel").value); if (!a) return say("Choose an Area Incharge.", "err"); aics = [a]; }
-  if (!aics.length) return say("No Area Incharge available.", "err");
-  busy = true; $("dlBtn").disabled = true; tick(0, 1); const stats = { aics: 0, teams: 0, maps: 0, missing: [] };
-  const base = `${safe(B.campaign.name)}_${safe(B.geo.uc)}`, filename = one ? `${base}_AIC${aics[0].aic_no}_${safe(aics[0].full_name)}_MicroPlan.pdf` : `${base}_All_AICs_and_Teams_MicroPlan.pdf`;
+async function download(aics, all) {
+  if (busy || !B || !aics.length) return; const one = !all;
+  busy = true; document.querySelectorAll("#aicList button, #dlAll").forEach(x => x.disabled = true); tick(0, 1); const stats = { aics: 0, teams: 0, maps: 0, missing: [] };
+  const base = `${safe(B.campaign.name)}_${safe(B.geo.uc)}`, filename = one ? `${base}_AIC${aics[0].aic_no}_${safe(aics[0].full_name)}_MicroPlan.pdf` : `${base}_Completed_AICs_and_Teams_MicroPlan.pdf`;
   try {
     const parts = await buildParts(aics, stats); let pages = 0;
     await PDFX.download({ filename, say: (t, err) => { if (err) throw new Error(t); }, makeBytes: async () => { const b = await PDFX.assemble(parts, { onProgress: (d, n) => { tick(d, n); say(`Assembling the PDF… ${d} of ${n} parts`); } }); pages = parts.length; return b; } });
     say(`Downloaded <b>${E(filename)}</b> — ${stats.aics} Area Incharge(s), ${stats.teams} team(s), ${stats.maps} map page(s).` + (stats.missing.length ? `<br><span class="err">Not uploaded yet (shown as marked placeholder pages): ${E(stats.missing.join("; "))}</span>` : ""), stats.missing.length ? "muted" : "ok");
   } catch (e) { say("The download did not complete: " + E(e.message || e) + " Please try again.", "err"); }
-  finally { busy = false; $("dlBtn").disabled = false; tick(1, 1); setTimeout(() => $("prog").style.display = "none", 800); }
+  finally { busy = false; document.querySelectorAll("#aicList button[data-aic]").forEach(x => x.disabled = !B.aics.find(a => a.id === x.dataset.aic).done); $("dlAll").disabled = false; tick(1, 1); setTimeout(() => $("prog").style.display = "none", 800); }
 }
 </script>
 </body>
