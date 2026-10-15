@@ -26,17 +26,38 @@ const PDFX = (() => {
   const isLandscape = (h) => /fx-2a|class=["']sheet[ "']|data-landscape/.test(String(h));
   let libL = null;
   const pdfLib = () => libL || (libL = (window.PDFLib ? Promise.resolve() : loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js")).then(() => window.PDFLib).catch(e => { libL = null; throw e; }));
+  /* ONE-PAGE MODE (landscape sheets: operational plan, AIC summary, 2A, 2B): the sheet is measured and laid out just wide enough that all of it fits ONE A4 landscape page,
+     nothing clipped and nothing spilling onto a second page. The wider the layout has to be, the smaller the type prints, so 2A gets a compact layout first. */
+  const FIT_CSS = `.pdf-fit .scroll,.pdf-fit .fx-wrap{overflow:visible!important} .pdf-fit .fx-page{margin:0;box-sizing:border-box}
+    .pdf-fit .fx-2a h1,.pdf-fit h1.fx-title{font-size:23px;font-weight:900;margin:2px 0} .pdf-fit .fx-2a h2{font-size:16px;font-weight:900;margin:2px 0} .pdf-fit .fx-2a .fx-hdr{font-size:14px;font-weight:700;padding:3px 8px}
+    .pdf-fit .fx-2a table.fx{font-size:13.5px} .pdf-fit .fx-2a table.fx td{padding:2px 4px;font-weight:600;line-height:1.15}
+    .pdf-fit .fx-2a table.fx th{font-size:10.5px;font-weight:800;padding:2px 2px;line-height:1.1} .pdf-fit .fx-2a .fx-note,.pdf-fit .fx-2a .fx-sig{font-size:13px;font-weight:800;margin-top:3px}`;
   async function buildRun(pages, landscape) {
-    const W = landscape ? 1100 : 771;                              // printable width of A4 (297 / 210 mm minus 3 mm margins) at 96 dpi, so 12pt prints as 12pt
+    const fit = !!landscape, W0 = landscape ? 1100 : 771;           // 1100 / 771 px = printable width of A4 landscape / portrait (297 / 210 mm minus 3 mm margins) at 96 dpi
     const box = document.createElement("div");
-    box.className = "pdf-std"; box.style.cssText = "width:" + W + "px;background:#fff;";   // NO position / left / top here — see the note at the top of this file
-    pages.forEach((h, i) => { const d = document.createElement("div"); d.className = "pdf-pg"; d.style.cssText = i ? "break-before:page;" : ""; d.innerHTML = h; box.appendChild(d); });
+    box.className = "pdf-std" + (fit ? " pdf-fit" : ""); box.style.cssText = "width:" + W0 + "px;background:#fff;";   // NO position / left / top here — see the note at the top of this file
+    if (fit) { const st = document.createElement("style"); st.textContent = FIT_CSS; box.appendChild(st); }
+    const wrap = pages.map((h, i) => { const d = document.createElement("div"); d.className = "pdf-pg"; d.style.cssText = i ? "break-before:page;" : ""; d.innerHTML = h; box.appendChild(d); return d; });
     document.body.appendChild(box);
+    let W = W0;
     try {
+      if (fit) {
+        const need = () => { let w = 0, h = 0; wrap.forEach(d => { const pg = d.firstElementChild; w = Math.max(w, pg ? pg.scrollWidth : 0, d.scrollWidth); h = Math.max(h, d.scrollHeight); }); return { w, h }; };
+        for (let i = 0; i < 80; i++) {                              // grow the layout until the widest part fits the width and the tallest part fits ONE page
+          box.style.width = W + "px"; const n = need(), availH = Math.floor(W * 204 / 291) - 2;
+          if (n.w > W + 1) { W = Math.ceil(n.w) + 2; continue; }
+          if (n.h > availH) { W = Math.ceil(W * 1.02) + 1; continue; }
+          break;
+        }
+        const availH = Math.floor(W * 204 / 291) - 2; wrap.forEach(d => { d.style.height = availH + "px"; d.style.overflow = "hidden"; });
+        PDFX.lastFit = { layoutWidth: W, scale: +(W0 / W).toFixed(3) };
+      }
       const imgs = [...box.querySelectorAll("img")];                 // images must be decoded before the page is photographed
       await Promise.all(imgs.map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
-      return await html2pdf().set({ margin: [3, 3, 3, 3], image: { type: "jpeg", quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, width: W, windowWidth: W, x: 0, scrollX: 0, scrollY: 0 },
-        jsPDF: { unit: "mm", format: "a4", orientation: landscape ? "landscape" : "portrait" }, pagebreak: { mode: ["css", "avoid-all"], avoid: ["tr", ".fx-team"] } }).from(box).outputPdf("arraybuffer");
+      const job = html2pdf().set({ margin: [3, 3, 3, 3], image: { type: "jpeg", quality: 0.95 }, html2canvas: { scale: fit ? Math.min(3, Math.max(1.6, 2 * 1400 / W)) : 2, useCORS: true, width: W, windowWidth: W, x: 0, scrollX: 0, scrollY: 0 },
+        jsPDF: { unit: "mm", format: "a4", orientation: landscape ? "landscape" : "portrait" }, pagebreak: { mode: fit ? ["css"] : ["css", "avoid-all"], avoid: fit ? [] : ["tr", ".fx-team"] } }).from(box);
+      if (!fit) return await job.outputPdf("arraybuffer");
+      return await job.toContainer().then(function () { const c = this.prop.container; c.style.width = W + "px"; c.style.left = "0"; c.style.right = "auto"; c.style.margin = "0"; }).toCanvas().toPdf().output("arraybuffer");   // html2pdf's own container is page-wide and centred, which clipped wide sheets
     } finally { box.remove(); }
   }
   /* pages: html strings. opts.landscape: true / false forces one orientation; default "auto" picks it per page and joins the runs into one PDF. */
@@ -46,7 +67,7 @@ const PDFX = (() => {
     if (!window.html2pdf) throw new Error("The PDF library did not load. Check your internet connection and reload the page.");
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
     const runs = [];                                                  // consecutive pages with the same orientation
-    pages.forEach(h => { const l = landscape === "auto" ? isLandscape(h) : !!landscape, last = runs[runs.length - 1]; if (last && last.l === l) last.pages.push(h); else runs.push({ l, pages: [h] }); });
+    pages.forEach(h => { const l = landscape === "auto" ? isLandscape(h) : !!landscape, last = runs[runs.length - 1]; if (last && last.l === l && !l) last.pages.push(h); else runs.push({ l, pages: [h] }); });   // landscape sheets: one run (= one page) each
     if (runs.length === 1) return await buildRun(runs[0].pages, runs[0].l);
     const lib = await pdfLib(), out = await lib.PDFDocument.create();
     for (const r of runs) { const src = await lib.PDFDocument.load(await buildRun(r.pages, r.l)), pgs = await out.copyPages(src, src.getPageIndices()); pgs.forEach(p => out.addPage(p)); }
