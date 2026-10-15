@@ -116,6 +116,49 @@ const PDFX = (() => {
     } catch (e) { if (!(e instanceof NoData)) console.error(e); msg(e instanceof NoData ? e.message : "Could not create the document: " + (e.message || e), !(e instanceof NoData)); }
   }
 
+
+  /* ---------- micro plan documents: html sheets + full-page landscape maps in ONE pdf ----------
+     parts: [{ html: [page html…] }  |  { image: dataUrl | null, caption: "Team 15 — Day 1 map" }]
+     Every map is placed on its own A4 LANDSCAPE sheet with no margins: the picture is scaled (never cropped, never stretched) as large as the sheet
+     allows, under a thin caption line that says what the map is. A missing picture gets a clearly marked placeholder sheet, never a gap. */
+  const A4L = [841.89, 595.28], CAP = 16;
+  const ascii = (t) => String(t == null ? "" : t).replace(/[\u2013\u2014]/g, "-").replace(/[^\x20-\x7E]/g, "?");
+  const loadImg = (src) => new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => no(new Error("The picture could not be read")); im.src = src; });
+  async function prepImage(dataUrl) {        // -> { bytes, kind: "jpg"|"png", w, h }  (large pictures are shrunk to 2800 px so a combined pdf of many maps stays a sensible size)
+    const im = await loadImg(dataUrl), w = im.naturalWidth, h = im.naturalHeight, long = Math.max(w, h), mime = (dataUrl.match(/^data:([^;]+);/) || [])[1] || "";
+    const raw = () => Uint8Array.from(atob(dataUrl.split(",")[1]), c => c.charCodeAt(0));
+    if (long <= 2800 && (mime === "image/jpeg" || mime === "image/png")) return { bytes: raw(), kind: mime === "image/png" ? "png" : "jpg", w, h };
+    const k = Math.min(1, 2800 / long), c = document.createElement("canvas"); c.width = Math.round(w * k); c.height = Math.round(h * k);
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
+    const b = await new Promise(r => c.toBlob(r, "image/jpeg", 0.88)); return { bytes: new Uint8Array(await b.arrayBuffer()), kind: "jpg", w: c.width, h: c.height };
+  }
+  /* where a w x h picture goes on the sheet: as large as possible below the caption line, centred, aspect ratio kept */
+  const place = (w, h) => { const W = A4L[0], H = A4L[1], availH = H - CAP, s = Math.min(W / w, availH / h), dw = w * s, dh = h * s; return { x: (W - dw) / 2, y: (availH - dh) / 2, w: dw, h: dh }; };
+  async function assemble(parts, { onProgress } = {}) {
+    const L = await pdfLib(), out = await L.PDFDocument.create(), bold = await out.embedFont(L.StandardFonts.HelveticaBold), reg = await out.embedFont(L.StandardFonts.Helvetica);
+    let n = 0; const total = parts.length;
+    for (const part of parts) {
+      if (onProgress) onProgress(n, total);
+      if (part.html) {
+        const bytes = await fromPages(part.html, { landscape: true }), src = await L.PDFDocument.load(bytes);
+        (await out.copyPages(src, src.getPageIndices())).forEach(pg => out.addPage(pg));
+      } else {
+        const page = out.addPage(A4L);
+        page.drawText(ascii(part.caption), { x: 8, y: A4L[1] - 11, size: 9.5, font: bold, color: L.rgb(0, 0, 0), maxWidth: A4L[0] - 16 });
+        if (part.image) {
+          const im = await prepImage(part.image), emb = im.kind === "png" ? await out.embedPng(im.bytes) : await out.embedJpg(im.bytes), p = place(im.w, im.h);
+          page.drawImage(emb, { x: p.x, y: p.y, width: p.w, height: p.h });
+        } else {
+          page.drawText("Map picture not uploaded yet", { x: A4L[0] / 2 - 120, y: A4L[1] / 2, size: 20, font: reg, color: L.rgb(0.7, 0.1, 0.1) });
+        }
+      }
+      n++;
+    }
+    if (onProgress) onProgress(total, total);
+    if (!out.getPageCount()) throw new NoData("There is nothing to put in this PDF yet.");
+    return (await out.save()).buffer;
+  }
+
   /* ---------- Urdu / non-Latin text for jsPDF (its built-in fonts cannot draw it) ---------- */
   function textImage(str, { bold = false, pt = 10, maxMm = 180, color = "#141414" } = {}) {
     try {
@@ -128,6 +171,6 @@ const PDFX = (() => {
       return { dataUrl: c.toDataURL("image/png"), wMm: w / S, hMm: h / S };
     } catch (e) { return null; }
   }
-  return { CFG, NoData, fromPages, verify, save, download, preview, textImage, _renderPage: renderPage, _open: open };
+  return { CFG, NoData, fromPages, assemble, _place: place, _A4L: A4L, verify, save, download, preview, textImage, _renderPage: renderPage, _open: open };
 })();
 if (typeof module !== "undefined") module.exports = PDFX;

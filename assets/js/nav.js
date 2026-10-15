@@ -12,13 +12,13 @@ const NAV_GROUPS = [
   { key: "staff", icon: "bi-people-fill", label: "Staff Management", links: [
     { href: "pages/staff.html", icon: "bi-person-badge", label: "Staff Management" },
     { href: "pages/accounts.html", icon: "bi-key", label: "Login accounts" },
+    { href: "pages/pdf-downloads.html", icon: "bi-file-earmark-pdf", label: "Staff PDF downloads (CNIC lists)" },
   ]},
   { key: "plan", icon: "bi-diagram-3-fill", label: "Plan Management", links: [
     { href: "pages/plan-setup.html", icon: "bi-question-circle", label: "1. Plan questionnaire (answer first)", nogate: true },
     { href: "pages/operational-plan.html", icon: "bi-signpost-split", label: "Operational Plan", gate: true },
     { href: "pages/fixed-transit-plan.html", icon: "bi-geo-alt", label: "Fixed & Transit plan", gate: true },
     { href: "pages/microplan.html", icon: "bi-journal-richtext", label: "Microplan (auto)", gate: true },
-    { href: "pages/uc-package.html", icon: "bi-file-earmark-pdf", label: "Plan package PDF (AIC summary, maps, teams, forms)", gate: true },
     { href: "pages/maps.html", icon: "bi-map", label: "Maps (UC / AIC / day) — print", gate: true },
     { href: "pages/supervision-forms.html", icon: "bi-ui-checks", label: "Supervisory plan, desk review, validation", gate: true },
     { href: "pages/uc-forms.html", icon: "bi-building", label: "UC summary & social mobilization", gate: true },
@@ -33,7 +33,7 @@ const NAV_GROUPS = [
     { href: "pages/supervision.html", icon: "bi-eye", label: "Supervision visits", gate: true },
   ]},
 ];
-const PDF_LINK = { href: "pages/pdf-downloads.html", icon: "bi-file-earmark-pdf", label: "PDF Downloads" };
+const PDF_LINK = { href: "pages/download-micro-plan.html", icon: "bi-file-earmark-pdf", label: "Download Micro Plan", gate: true };
 const NAV_LINKS = [{ href: "dashboard.html", label: "Dashboard" }].concat(NAV_GROUPS.flatMap(g => g.links), [PDF_LINK]);
 
 function navHref(h) {
@@ -81,7 +81,7 @@ function renderSidebar(activeHref) {
   mount.innerHTML = `
     <div class="brand"><a href="${navHref("dashboard.html")}"><i class="bi bi-shield-plus"></i><span>Polio Dashboard<small>Layyah district — UC Fateh Pur Urban</small></span></a></div>
     <button class="nav-burger" id="navBurger" type="button" aria-label="Menu"><i class="bi bi-list"></i></button>
-    <nav class="nav-groups">${groups}<a class="nav-gbtn nav-pdf ${here === "pdf-downloads.html" ? "on" : ""}" href="${navHref(PDF_LINK.href)}"><i class="bi ${PDF_LINK.icon}"></i> ${PDF_LINK.label}</a></nav>
+    <nav class="nav-groups">${groups}<a class="nav-gbtn nav-pdf ${here === "download-micro-plan.html" ? "on" : ""}" ${PDF_LINK.gate ? 'data-gate="1"' : ""} href="${navHref(PDF_LINK.href)}"><i class="bi ${PDF_LINK.icon}"></i> ${PDF_LINK.label}</a></nav>
     <div class="signout"><button id="signOutBtn"><i class="bi bi-box-arrow-right"></i> Sign out</button></div>`;
   document.getElementById("signOutBtn").addEventListener("click", signOut);
   document.getElementById("navBurger").addEventListener("click", () => mount.classList.toggle("nav-open"));

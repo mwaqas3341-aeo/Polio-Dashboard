@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard — Polio Campaign Dashboard</title>
-<link rel="stylesheet" href="assets/css/style.css?v=20261014f">
+<link rel="stylesheet" href="assets/css/style.css?v=20261014g">
 </head>
 <body>
   <div class="app-shell">
@@ -39,18 +39,19 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/config.js?v=20261014f"></script>
-  <script src="assets/js/supabaseClient.js?v=20261014f"></script>
-  <script src="assets/js/nav.js?v=20261014f"></script>
+  <script src="assets/js/config.js?v=20261014g"></script>
+  <script src="assets/js/supabaseClient.js?v=20261014g"></script>
+  <script src="assets/js/nav.js?v=20261014g"></script>
   <script>
     (async () => {
       const session = await requireAuth();
       if (!session) return;
       renderSidebar("dashboard.html");
-      const DESC = { campaign: "Campaign details, dates, days and daily operations", staff: "UCMOs, Area Incharges, teams, drivers, CNICs and staff documents", plan: "Microplans, operational plans, maps, school lists, supervision and the complete AIC / UC package" };
+      const DESC = { campaign: "Campaign details, dates, days and daily operations", staff: "UCMOs, Area Incharges, teams, drivers, CNICs and staff documents", plan: "Microplans, operational plans, maps, school lists, targets and supervision" };
       document.getElementById("modGrid").innerHTML = NAV_GROUPS.map(g => `<div class="module-card m-${g.key}"><i class="bi ${g.icon} mc-icon"></i><div class="mc-title">${g.label}</div><div class="mc-desc">${DESC[g.key]}</div>
         <div class="mc-links">${g.links.map(l => `<a href="${l.href}" ${l.gate ? 'data-gate="1"' : ""}><i class="bi ${l.icon}"></i>${l.label}</a>`).join("")}</div></div>`).join("") +
-        `<div class="module-card m-pdf" style="grid-column:1/-1;border-top-color:var(--bad)"><div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><i class="bi bi-file-earmark-pdf mc-icon" style="color:var(--bad)"></i><div style="flex:1;min-width:200px"><div class="mc-title">PDF Downloads</div><div class="mc-desc">Area Incharges: one PDF with their 2A forms and team lists. UCMO: all AIC CNICs, AIC-wise team files, or all AICs with their teams.</div></div><a class="btn" href="pages/pdf-downloads.html"><i class="bi bi-download"></i> Open</a></div></div>`;
+        `<div class="module-card m-micro"><i class="bi bi-file-earmark-pdf mc-icon"></i><div class="mc-title">Download Micro Plan</div><div class="mc-desc">AIC summaries, area maps, team micro plans and route maps (full-page landscape) — all AICs in one PDF, or one AIC at a time</div>
+          <div class="mc-links"><a href="pages/download-micro-plan.html" data-gate="1"><i class="bi bi-download"></i>Download Micro Plan</a></div></div>`;
       applyPlanGate(document.getElementById("modGrid")).then(g => { if (g && !g.open) document.getElementById("modGrid").insertAdjacentHTML("beforebegin", `<div class="card" style="border-left:5px solid var(--warn)"><b>Plan Management is locked until the plan questionnaire is answered.</b> <span class="muted">${g.capsOk ? "Capsule question done." : "Capsule question not answered."} Teams answered: ${g.done} of ${g.total}.</span> <a class="btn small" href="pages/plan-setup.html">Open the questionnaire</a></div>`); });
 
       const profile = await loadCurrentProfile();
