@@ -16,6 +16,11 @@
   .aic-row b { display:block; } .aic-row small { color:var(--t3); }
   .st { font-size:.78rem; font-weight:700; padding:3px 9px; border-radius:12px; white-space:nowrap; } .st.ok { background:#dff3e4; color:#17692e; } .st.no { background:#fde7e7; color:#a12a2a; }
   .aic-row .btn[disabled] { opacity:.45; cursor:not-allowed; }
+  .pv { position:fixed; inset:0; background:rgba(20,28,36,.6); z-index:9999; display:none; } .pv.on { display:block; }
+  .pv-in { position:absolute; inset:2vh 2vw; background:#eef1f4; border-radius:10px; display:flex; flex-direction:column; overflow:hidden; }
+  .pv-top { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 14px; background:#fff; border-bottom:1px solid #cfd6dd; }
+  .pv-body { overflow:auto; padding:14px; flex:1; } .pv-pg { background:#fff; border:1px solid #cfd6dd; border-radius:6px; padding:8px; margin:0 auto 14px; max-width:1300px; overflow:auto; }
+  .pv-pg img { display:block; max-width:100%; margin:6px auto 0; } .pv-cap { font-weight:700; font-size:.9rem; } .pv-miss { text-align:center; padding:60px 10px; color:#a12a2a; font-weight:700; }
   .dlbtn { margin-top:14px; width:100%; font-size:1.02rem; padding:.8rem 1rem; }
 </style>
 </head>
@@ -32,6 +37,7 @@
       <div class="prog" id="prog"><div id="progBar"></div></div>
       <div id="msg" class="muted" role="status" aria-live="polite">Loading…</div>
     </div>
+    <div class="pv" id="pv"><div class="pv-in"><div class="pv-top"><b id="pvTitle">Plan preview</b><div style="display:flex;gap:8px"><button class="btn" id="pvDl"><i class="bi bi-download"></i> Download PDF</button><button class="btn" id="pvClose">Close</button></div></div><div class="pv-body" id="pvBody"></div></div></div>
     <iframe id="hiddenFrame" style="position:absolute;left:-99999px;width:1200px;height:800px;border:0" aria-hidden="true"></iframe>
   </main>
 </div>
@@ -64,8 +70,10 @@ async function loadCampaign() {
   B.aics = aics;
   $("aicList").innerHTML = aics.map(a => `<div class="aic-row"><div><b>AIC ${E(a.aic_no)} — ${E(a.full_name)}</b><small>${a.nTeams} team(s) · questionnaire answered for ${a.nDone} of ${a.nTeams}</small></div>
     <div style="display:flex;gap:10px;align-items:center"><span class="st ${a.done ? "ok" : "no"}">${a.done ? "Plan completed" : "Plan not completed"}</span>
+    <button class="btn" data-view="${a.id}" ${a.done ? "" : "disabled"}><i class="bi bi-eye"></i> View plan</button>
     <button class="btn" data-aic="${a.id}" ${a.done ? "" : "disabled"} title="${a.done ? "Download this AIC's micro plan" : "Available once the plan is completed"}"><i class="bi bi-download"></i> Download</button></div></div>`).join("");
   $("aicList").querySelectorAll("button[data-aic]").forEach(b => b.onclick = () => download(aics.filter(a => a.id === b.dataset.aic), false));
+  $("aicList").querySelectorAll("button[data-view]").forEach(b => b.onclick = () => view(aics.find(a => a.id === b.dataset.view)));
   const nd = aics.filter(a => a.done).length; $("dlAll").style.display = (!isAic() && nd > 1) ? "" : "none";
   const nt = aics.reduce((n, a) => n + a.nTeams, 0);
   say(aics.length ? `${aics.length} Area Incharge(s) and ${nt} team(s) in ${E(B.geo.uc || "this union council")} — ${nd} plan(s) completed.` : "No Area Incharge is available for this campaign.", aics.length ? "muted" : "err");
@@ -112,6 +120,17 @@ async function buildParts(aics, stats) {
   }
   return parts;
 }
+async function view(a) {
+  if (busy || !a) return; busy = true; $("pv").classList.add("on"); $("pvTitle").textContent = `AIC ${a.aic_no} — ${a.full_name}: full plan preview`; $("pvBody").innerHTML = '<div class="pv-miss" style="color:inherit">Preparing the preview…</div>';
+  $("pvDl").onclick = () => { $("pv").classList.remove("on"); download([a], false); }; $("pvClose").onclick = () => $("pv").classList.remove("on");
+  try {
+    const parts = await buildParts([a], { aics: 0, teams: 0, maps: 0, missing: [] });
+    $("pvBody").innerHTML = parts.map(p => p.html ? `<div class="pv-pg">${p.html.join("")}</div>`
+      : `<div class="pv-pg"><div class="pv-cap">${E(p.caption)}</div>${p.image ? `<img src="${p.image}" alt="">` : '<div class="pv-miss">Picture not uploaded yet</div>'}</div>`).join("");
+    say(`Preview ready — ${parts.length} page(s).`, "ok");
+  } catch (e) { $("pvBody").innerHTML = `<div class="pv-miss">Could not prepare the preview: ${E(e.message || e)}</div>`; }
+  finally { busy = false; }
+}
 const safe = (s) => String(s || "").replace(/[^\w\-]+/g, "_").replace(/^_+|_+$/g, "");
 async function download(aics, all) {
   if (busy || !B || !aics.length) return; const one = !all;
@@ -122,7 +141,7 @@ async function download(aics, all) {
     await PDFX.download({ filename, say: (t, err) => { if (err) throw new Error(t); }, makeBytes: async () => { const b = await PDFX.assemble(parts, { onProgress: (d, n) => { tick(d, n); say(`Assembling the PDF… ${d} of ${n} parts`); } }); pages = parts.length; return b; } });
     say(`Downloaded <b>${E(filename)}</b> — ${stats.aics} Area Incharge(s), ${stats.teams} team(s), ${stats.maps} map page(s).` + (stats.missing.length ? `<br><span class="err">Not uploaded yet (shown as marked placeholder pages): ${E(stats.missing.join("; "))}</span>` : ""), stats.missing.length ? "muted" : "ok");
   } catch (e) { say("The download did not complete: " + E(e.message || e) + " Please try again.", "err"); }
-  finally { busy = false; document.querySelectorAll("#aicList button[data-aic]").forEach(x => x.disabled = !B.aics.find(a => a.id === x.dataset.aic).done); $("dlAll").disabled = false; tick(1, 1); setTimeout(() => $("prog").style.display = "none", 800); }
+  finally { busy = false; document.querySelectorAll("#aicList button[data-aic], #aicList button[data-view]").forEach(x => x.disabled = !B.aics.find(a => a.id === (x.dataset.aic || x.dataset.view)).done); $("dlAll").disabled = false; tick(1, 1); setTimeout(() => $("prog").style.display = "none", 800); }
 }
 </script>
 </body>
