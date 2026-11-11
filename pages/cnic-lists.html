@@ -64,13 +64,13 @@ const typeLabel = (t) => ({ fixed: "Fixed", transit: "Transit", mobile: "Mobile"
   ucs = u || []; camps = c || [];
   $("ucSel").innerHTML = ucs.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join(""); $("campSel").innerHTML = camps.map(x => `<option>${esc(x.name)}</option>`).join("") || "<option></option>";
   $("kind").onchange = () => { $("teamFilters").style.display = $("kind").value === "team" ? "block" : "none"; refresh(); };
-  $("ucSel").onchange = loadAics; $("inactiveChk").onchange = refresh; ["teamNos", "teamType"].forEach(i => $(i).addEventListener("change", refresh));
+  $("ucSel").onchange = loadAics; $("inactiveChk").onchange = loadAics; ["teamNos", "teamType"].forEach(i => $(i).addEventListener("change", refresh));
   $("prevBtn").onclick = () => run(false); $("dlBtn").onclick = () => run(true);
   await loadAics();
 })();
 
 async function loadAics() {
-  const { data } = await supabaseClient.from("staff").select("id, aic_no, full_name").eq("uc_id", $("ucSel").value).eq("designation", "aic").order("aic_no"); aics = data || [];
+  const { data } = await supabaseClient.from("staff").select("id, aic_no, full_name, status").eq("uc_id", $("ucSel").value).eq("designation", "aic").order("aic_no").then(r => ($("inactiveChk").checked ? r : { ...r, data: (r.data || []).filter(a => a.status !== "inactive") })); aics = data || [];
   $("aicChecks").innerHTML = aics.map(a => `<label><input type="checkbox" class="aicChk" value="${a.id}" checked> AIC ${a.aic_no} — ${esc(a.full_name)}</label>`).join("") || `<span class="muted">No Area Incharge in this union council.</span>`;
   document.querySelectorAll(".aicChk").forEach(c => c.onchange = refresh); await refresh();
 }

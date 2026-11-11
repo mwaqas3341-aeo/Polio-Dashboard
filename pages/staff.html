@@ -156,7 +156,7 @@ async function loadBoard() {
     supabaseClient.from("staff").select("id, uc_id, full_name, father_name, cnic, phone, designation, status, aic_no, aic_staff_id, can_have_driver, area_map_path, official_designation, department, place_of_posting, cnic_pic_front_path, cnic_pic_back_path, cnic_expiry, cnic_lifetime").eq("uc_id", uc).in("designation", ["ucmo", "aic", "driver"]).order("aic_no"),
     supabaseClient.from("teams").select("id, team_no, team_type, aic_staff_id, team_members(id, active, member_no, staff(id, full_name, phone, status, cnic_pic_front_path, cnic_pic_back_path, cnic_expiry, cnic_lifetime))").eq("uc_id", uc).order("team_no")]);
   const ucmo = (people || []).find(p => p.designation === "ucmo" && p.status === "active") || null;
-  const aics = (people || []).filter(p => p.designation === "aic");
+  const aics = (people || []).filter(p => p.designation === "aic" && p.status !== "inactive");
   const drivers = (people || []).filter(p => p.designation === "driver" && p.status !== "inactive");
   B = { uc, plan, ucmo, aics, drivers, teams: (teams || []).map(t => ({ ...t, active: (t.team_members || []).filter(m => m.active).sort((a, b) => a.member_no - b.member_no) })) };
   renderBoard();
