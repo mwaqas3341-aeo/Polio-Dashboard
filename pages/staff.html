@@ -179,12 +179,19 @@ async function deleteStaff(id, kind) {
   const err = await removeStaffRow(who, label); if (err) return alert(err);
   await loadBoard();
 }
+/* Remove stored files only when no other staff record still points at the same path (pictures can be shared by mistake). */
+async function removeFilesIfUnused(files) {
+  files = [...new Set((files || []).filter(Boolean))]; if (!files.length) return;
+  const list = files.map(f => `"${f}"`).join(",");
+  const { data } = await supabaseClient.from("staff").select("cnic_pic_front_path, cnic_pic_back_path, area_map_path").or(`cnic_pic_front_path.in.(${list}),cnic_pic_back_path.in.(${list}),area_map_path.in.(${list})`);
+  const used = new Set((data || []).flatMap(r => [r.cnic_pic_front_path, r.cnic_pic_back_path, r.area_map_path]));
+  const del = files.filter(f => !used.has(f)); if (del.length) await supabaseClient.storage.from("staff-documents").remove(del).catch(() => {});
+}
 async function removeStaffRow(who, label) {
   const { data, error } = await supabaseClient.from("staff").delete().eq("id", who.id).select("id");
-  if (error) { if (error.code === "23503") return `${who.full_name} is linked to other records (for example campaign maps, DDM cards or staff-change history), so the ${label} cannot be deleted.\n\nOpen Edit and set the Status to Inactive instead — the records are kept and the person no longer appears as active.`; return "Could not delete: " + (error.message || error); }
+  if (error) { if (error.code === "23503" && who.status && who.status !== "active") return `${who.full_name} is linked to other records (campaign history, payments, staff-change history), so the record cannot be deleted and is kept for history.\n\nYou can still delete just the CNIC pictures: press View CNIC, then Delete picture.`; if (error.code === "23503") return `${who.full_name} is linked to other records (for example campaign maps, DDM cards or staff-change history), so the ${label} cannot be deleted.\n\nOpen Edit and set the Status to Inactive instead — the records are kept and the person no longer appears as active.`; return "Could not delete: " + (error.message || error); }
   if (!data || !data.length) return `You are not allowed to delete this ${label}. Only the UCMO, a district coordinator or an administrator can.`;
-  const files = [who.cnic_pic_front_path, who.cnic_pic_back_path, who.area_map_path].filter(Boolean);   // clean up pictures only after the record is gone
-  if (files.length) await supabaseClient.storage.from("staff-documents").remove(files).catch(() => {});
+  await removeFilesIfUnused([who.cnic_pic_front_path, who.cnic_pic_back_path, who.area_map_path]);   // clean up pictures only after the record is gone
   return null;
 }
 
@@ -478,10 +485,20 @@ async function viewCnic(id) {
   const { data } = ps.length ? await supabaseClient.storage.from("staff-documents").createSignedUrls(ps, 900) : { data: [] };
   const u = new Map((data || []).map(d => [d.path, d.signedUrl]));
   let box = document.getElementById("cnicBox"); if (!box) { box = document.createElement("div"); box.id = "cnicBox"; document.body.appendChild(box); box.addEventListener("click", (e) => { if (e.target === box || e.target.dataset.close) box.style.display = "none"; }); document.addEventListener("keydown", (e) => { if (e.key === "Escape") box.style.display = "none"; }); }
-  const img = (l, q) => q && u.get(q) ? `<div><div class="muted" style="margin-bottom:3px"><b>${l}</b> · <a href="${u.get(q)}" target="_blank" rel="noopener">open in new tab</a> <button class="btn small ghost" type="button" data-rotp="${esc(q)}">&#10227; Rotate</button></div><img src="${u.get(q)}" alt="CNIC ${l}" data-kind="cnic"></div>` : `<div><div class="muted"><b>${l}</b></div><p style="color:#9b1c1c"><b>Picture not uploaded yet</b></p></div>`;
+  const img = (l, q) => q && u.get(q) ? `<div><div class="muted" style="margin-bottom:3px"><b>${l}</b> · <a href="${u.get(q)}" target="_blank" rel="noopener">open in new tab</a> <button class="btn small ghost" type="button" data-rotp="${esc(q)}">&#10227; Rotate</button> <button class="btn small ghost" type="button" style="color:#9b1c1c;" data-delp="${esc(q)}" data-col="${l === "Front" ? "cnic_pic_front_path" : "cnic_pic_back_path"}">&#128465; Delete picture</button></div><img src="${u.get(q)}" alt="CNIC ${l}" data-kind="cnic"></div>` : `<div><div class="muted"><b>${l}</b></div><p style="color:#9b1c1c"><b>Picture not uploaded yet</b></p></div>`;
   box.innerHTML = `<div class="inner"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px"><div><b>${esc(r.full_name)}</b> <span class="muted">· CNIC ${esc(r.cnic)}</span></div><button class="btn small" type="button" data-close="1">Close ✕</button></div><div class="pair">${img("Front", r.cnic_pic_front_path)}${img("Back", r.cnic_pic_back_path)}</div></div>`;
   box.style.display = "flex";
   box.querySelectorAll("img[data-kind]").forEach(im => ImgTools.previewBox(im, "cnic"));          // shown the way it prints in the PDF
+  box.querySelectorAll("[data-delp]").forEach(b => b.onclick = async () => {
+    if (!confirm(`Delete the CNIC ${b.dataset.col.includes("front") ? "FRONT" : "BACK"} picture of ${r.full_name}?\n\nThe picture is removed permanently. The person's record is kept and can get a new picture later.`)) return;
+    b.disabled = true;
+    try {
+      const { data: done, error: e1 } = await supabaseClient.from("staff").update({ [b.dataset.col]: null }).eq("id", id).select("id"); if (e1) throw e1;
+      if (!done || !done.length) throw new Error("You are not allowed to change this person.");
+      await removeFilesIfUnused([b.dataset.delp]);
+    } catch (e) { alert("Could not delete the picture: " + (e.message || e)); b.disabled = false; return; }
+    await viewCnic(id); loadBoard(); loadRows();
+  });
   box.querySelectorAll("[data-rotp]").forEach(b => b.onclick = async () => { b.disabled = true;
     try { if (!confirm("Rotate this stored CNIC picture 90° clockwise? It is saved immediately.")) { b.disabled = false; return; }
       await ImgTools.rotateStored(supabaseClient, "staff-documents", b.dataset.rotp, 90); const u2 = await ImgTools.signed(supabaseClient, "staff-documents", b.dataset.rotp);
@@ -693,7 +710,7 @@ $("waitBox").addEventListener("toggle", async () => {
   if (!$("waitBox").open) return; $("waitList").textContent = "Loading…";
   const { data } = await supabaseClient.from("staff").select("id, full_name, cnic, phone, status, planned_team_no, planned_member_no, team_members(active)").eq("uc_id", ucId()).eq("designation", "team_member").order("full_name").limit(300);
   const idle = (data || []).filter(s => !(s.team_members || []).some(m => m.active));
-  $("waitList").innerHTML = idle.length ? `<div class="table-wrap"><table><tbody>${idle.map(s => `<tr><td>${esc(s.full_name)}</td><td>${esc(s.cnic)}</td><td>${badge(s.status)}</td><td>${s.planned_team_no ? `<span class="muted">Expected: Team ${s.planned_team_no}</span>` : ""}</td><td><button class="btn small ghost" onclick="openPerson({kind:'member',staff:'${s.id}'})">Edit / CNIC</button> ${s.planned_team_no ? `<button class="btn small" onclick="placePlanned('${s.id}', ${s.planned_team_no})">Put on Team ${s.planned_team_no}</button>` : `<button class="btn small" onclick="openAdjust('${s.id}')">Put on a team</button>`} <button class="btn small ghost" onclick="openAdjust('${s.id}')">Other…</button></td></tr>`).join("")}</tbody></table></div>` : "Everyone is on a team.";
+  $("waitList").innerHTML = idle.length ? `<div class="table-wrap"><table><tbody>${idle.map(s => `<tr><td>${esc(s.full_name)}</td><td>${esc(s.cnic)}</td><td>${badge(s.status)}</td><td>${s.planned_team_no ? `<span class="muted">Expected: Team ${s.planned_team_no}</span>` : ""}</td><td><button class="btn small ghost" onclick="openPerson({kind:'member',staff:'${s.id}'})">Edit / CNIC</button> ${s.status !== "active" ? `<button class="btn small ghost" style="color:#9b1c1c;" onclick="deleteListed('${s.id}')">Delete</button> ` : ""}${s.planned_team_no ? `<button class="btn small" onclick="placePlanned('${s.id}', ${s.planned_team_no})">Put on Team ${s.planned_team_no}</button>` : `<button class="btn small" onclick="openAdjust('${s.id}')">Put on a team</button>`} <button class="btn small ghost" onclick="openAdjust('${s.id}')">Other…</button></td></tr>`).join("")}</tbody></table></div>` : "Everyone is on a team.";
 });
 async function placePlanned(id, teamNo) {
   const t = B.teams.find(x => x.team_no === teamNo);
@@ -711,7 +728,22 @@ async function loadRows() {
   $("rows").innerHTML = (data || []).map(r => { const tm = (r.team_members || []).find(m => m.active);
     const kind = { ucmo: "ucmo", aic: "aic", driver: "driver", team_member: "member" }[r.designation];
     return `<tr><td>${esc(r.full_name)}</td><td>${DESIGNATIONS[r.designation]}${r.aic_no ? " " + r.aic_no : ""}</td><td>${esc(r.cnic)}</td><td>${esc(r.phone)}</td><td>${tm ? "Team " + tm.teams.team_no : "—"}</td><td>${badge(r.status)}</td>
-      <td><button class="btn small ghost" onclick="viewCnic('${r.id}')">View CNIC</button> <button class="btn small ghost" onclick="findEdit('${r.id}')">Open</button></td></tr>`; }).join("") || `<tr><td colspan="7" class="muted">No staff found.</td></tr>`;
+      <td><button class="btn small ghost" onclick="viewCnic('${r.id}')">View CNIC</button> <button class="btn small ghost" onclick="findEdit('${r.id}')">Open</button>${r.status !== "active" && r.designation !== "ucmo" ? ` <button class="btn small ghost" style="color:#9b1c1c;" onclick="deleteListed('${r.id}')">Delete</button>` : ""}</td></tr>`; }).join("") || `<tr><td colspan="7" class="muted">No staff found.</td></tr>`;
+}
+async function deleteListed(id) {
+  const { data: s, error } = await supabaseClient.from("staff").select("id, full_name, cnic, designation, status, cnic_pic_front_path, cnic_pic_back_path, area_map_path, team_members(active)").eq("id", id).single();
+  if (error || !s) return alert("Could not load this person.");
+  if (s.designation === "ucmo") return alert("A UCMO cannot be deleted from here.");
+  if (s.status === "active") return alert(`${s.full_name} is active. Only inactive, reserve, left or replaced people can be deleted here.\n\nOpen Edit and change the Status first if you really want to remove this person.`);
+  if ((s.team_members || []).some(m => m.active)) return alert(`${s.full_name} is still an active member of a team. Remove them from the team first.`);
+  if (s.designation === "aic") {
+    const [{ count: nt }, { count: nd }] = await Promise.all([supabaseClient.from("teams").select("id", { count: "exact", head: true }).eq("aic_staff_id", id), supabaseClient.from("staff").select("id", { count: "exact", head: true }).eq("aic_staff_id", id)]);
+    if (nt) return alert(`${s.full_name} still has ${nt} team(s). Move the teams to another Area Incharge first.`);
+    if (nd) return alert(`${s.full_name} still has a driver linked. Delete or move the driver first.`);
+  }
+  if (!confirm(`Delete ${s.full_name} (CNIC ${s.cnic}) permanently?\n\nThis cannot be undone. The deletion is written to the audit log.`)) return;
+  const err = await removeStaffRow(s, "person"); if (err) return alert(err);
+  await loadBoard(); loadRows(); if ($("waitBox").open) { $("waitBox").open = false; $("waitBox").open = true; }
 }
 async function findEdit(id) {
   const { data: s } = await supabaseClient.from("staff").select("id, designation, aic_no, aic_staff_id, team_members(active, team_id)").eq("id", id).single();
